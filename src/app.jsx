@@ -33,6 +33,12 @@ async function dbSave(data) {
   });
 }
 
+// Add schedule column to Supabase if needed (run once)
+async function ensureScheduleColumn() {
+  // The schedule is stored as JSONB in dynasty_state
+  // No migration needed - Supabase JSONB handles new keys automatically
+}
+
 const CONF_STAND_PTS = [50,43,36,30,24,18,14,10,7,5,3,1];
 const RECRUITING_PTS = [15,10,7,5,3,0,0,0,0,0,0,0];
 const START_YEAR = 2025;
@@ -46,8 +52,11 @@ const INITIAL_ENTRY = (userName, teamName) => ({
   gamePts:0, rankedBonusPts:0, confStandPts:0,
   confChampPts:0, bowlPts:0, recruitingPts:0,
   prestigePts:0, heismanPts:0, weekLog:[],
-  h2h:{}, // {opponentName: {wins, losses}}
+  h2h:{},
 });
+
+// schedule shape: { week: { teamName: "Opponent" | "CPU" | "BYE" } }
+// e.g. { 1: { Troy: "Georgia Southern", "Georgia Southern": "Troy", Toledo: "CPU", UNLV: "BYE" } }
 
 function calcTotal(t) {
   return (t.gamePts||0)+(t.rankedBonusPts||0)+(t.confStandPts||0)+(t.confChampPts||0)+(t.bowlPts||0)+(t.recruitingPts||0)+(t.prestigePts||0)+(t.heismanPts||0);
@@ -249,8 +258,9 @@ function SetupPanel({entries,setup,postSeasonInputs,setPSI,handleStart,setCommis
 }
 
 // ── EnterResultsPanel ─────────────────────────────────────────────────────
-function EnterResultsPanel({entries,weekResults,setWeekResults,week,imageFile,imagePreview,processingImage,imageResult,parsedFromImage,handleImageUpload,processImage,applyImageResults,setParsedFromImage,applyWeekResults,postSeasonInputs,setPSI,applyPostSeason,finalizeSeason,season,teamNames}) {
+function EnterResultsPanel({entries,weekResults,setWeekResults,week,imageFile,imagePreview,processingImage,imageResult,parsedFromImage,handleImageUpload,processImage,applyImageResults,setParsedFromImage,applyWeekResults,postSeasonInputs,setPSI,applyPostSeason,finalizeSeason,season,teamNames,schedule}) {
   const setWR=(i,f,v)=>setWeekResults(prev=>prev.map((r,idx)=>idx===i?{...r,[f]:v}:r));
+  const thisWeekSchedule = schedule?.[week]||{};
   return (
     <div style={{display:"flex",flexDirection:"column",gap:16}}>
       <Card><div style={{padding:16}}>
@@ -268,6 +278,7 @@ function EnterResultsPanel({entries,weekResults,setWeekResults,week,imageFile,im
       </div></Card>
       {week<=12&&<Card><div style={{padding:16}}>
         <SL>Manual Entry — Week {week}</SL>
+        {Object.keys(thisWeekSchedule).length>0&&<div style={{background:"#f0f8f0",border:"1px solid #cce5cc",borderRadius:2,padding:"8px 12px",fontSize:12,color:"#555",marginBottom:12}}>✓ Schedule loaded — entering one team's result automatically updates their opponent's record.</div>}
         {weekResults.map((wr,i)=>(
           <div key={wr.teamName} style={{display:"flex",alignItems:"center",gap:8,flexWrap:"wrap",padding:"9px 0",borderBottom:"1px solid #f0f0f0"}}>
             <div style={{width:130}}><div style={{fontSize:13,color:"#111",fontWeight:700}}>{wr.userName}</div><div style={{fontSize:10,color:"#888",textTransform:"uppercase",letterSpacing:0.5}}>{wr.teamName}</div></div>
@@ -295,44 +306,169 @@ function EnterResultsPanel({entries,weekResults,setWeekResults,week,imageFile,im
   );
 }
 
+// ── Reporters ─────────────────────────────────────────────────────────────
+const REPORTERS = [
+  {
+    name: "Marcus Webb",
+    title: "Senior Dynasty Analyst",
+    avatar: "MW",
+    color: "#1a3a6b",
+    style: "analytical and data-driven. You reference statistics, point differentials, and trends constantly. You use phrases like 'the numbers tell a story' and 'analytically speaking'. You're respected but sometimes accused of being too nerdy. You love efficiency ratings and hate sloppy play.",
+    bio: "15-year dynasty veteran. Former math teacher. Believes spreadsheets tell better stories than highlights.",
+  },
+  {
+    name: "Tanya Rivers",
+    title: "Dynasty Insider",
+    avatar: "TR",
+    color: "#8b1a1a",
+    style: "fiery, controversial and opinionated. You make bold predictions, call out underperformers by name, and are not afraid to say a team is in crisis. You use dramatic language and love a good narrative arc. You're the reporter teams love to hate.",
+    bio: "Known for her hot takes. Has been blocked by 3 dynasty commissioners. Never wrong (according to her).",
+  },
+  {
+    name: "Derek Okonkwo",
+    title: "College Football Correspondent",
+    avatar: "DO",
+    color: "#1a6b3a",
+    style: "enthusiastic, hype-driven and fan-friendly. You celebrate big wins, hype up underdogs, and always find a positive angle. You use exclamation points, ALL CAPS for emphasis, and get genuinely excited about upsets. You write like you're commentating live.",
+    bio: "Brings the energy. Favorite word is 'unbelievable'. Has never written a boring article in his life.",
+  },
+  {
+    name: "Sandra Cho",
+    title: "Dynasty History & Strategy Writer",
+    avatar: "SC",
+    color: "#5a3a8b",
+    style: "thoughtful, historical and strategic. You compare current events to dynasty history, analyze coaching decisions, and discuss long-term implications. You reference past seasons frequently and think about legacy. You write like a professor who actually loves football.",
+    bio: "Obsessed with dynasty lore. Can cite stats from 3 seasons ago without checking notes. Writes the articles people save.",
+  },
+];
+
 // ── Content Hub Tab ───────────────────────────────────────────────────────
 function ContentHub({sorted,entries,week,season,leagueName,history,leader,articles,setArticles,setActiveArticle}) {
   const [generating,setGenerating] = useState(null);
+  const [selectedReporter,setSelectedReporter] = useState(0);
   const [contentType,setContentType] = useState("powerrankings");
 
-  const standingsText = sorted.map((t,i)=>{const tot=calcTotal(t);return `${i+1}. ${t.userName} (${t.teamName}) — ${t.wins}W ${t.losses}L — ${tot} pts${i===0?" [LEADER]":` (-${leader-tot})`}`;}).join("\n");
+  const standingsText = sorted.map((t,i)=>{const tot=calcTotal(t);return `${i+1}. ${t.teamName} — ${t.wins}W ${t.losses}L — ${tot} pts${i===0?" [LEADER]":` (-${leader-tot})`}`;}).join("\n");
+
+  // Build schedule context for AI
+  const thisWeekMatchups = schedule[week] ? (() => {
+    const seen = new Set(); const games = [];
+    Object.entries(schedule[week]).forEach(([team,opp])=>{
+      const key = [team,opp].sort().join("vs");
+      if(!seen.has(key)){seen.add(key);games.push(opp==="BYE"?`${team}: BYE`:opp==="CPU"?`${team} vs CPU (non-conf)`:`${team} vs ${opp}`);}
+    });
+    return games.join("\n");
+  })() : "Schedule not yet set";
+
+  const lastWeekMatchups = schedule[week-1] ? (() => {
+    const seen = new Set(); const games = [];
+    Object.entries(schedule[week-1]).forEach(([team,opp])=>{
+      const key = [team,opp].sort().join("vs");
+      if(!seen.has(key)){seen.add(key);games.push(opp==="BYE"?`${team}: BYE`:opp==="CPU"?`${team} vs CPU`:` ${team} vs ${opp}`);}
+    });
+    return games.join("\n");
+  })() : "Schedule not available";
+
+  const upcomingSchedule = [week,week+1,week+2].map(w=>{
+    if(!schedule[w])return null;
+    const seen=new Set();const games=[];
+    Object.entries(schedule[w]).forEach(([team,opp])=>{const key=[team,opp].sort().join("vs");if(!seen.has(key)){seen.add(key);games.push(opp==="BYE"?`${team}:BYE`:opp==="CPU"?`${team} vs CPU`:`${team} vs ${opp}`);}});
+    return `Week ${w}: ${games.join(", ")}`;
+  }).filter(Boolean).join("\n");
+
+  const reporter = REPORTERS[selectedReporter];
 
   async function generate(type) {
     setGenerating(type);
+    const r = reporter;
+    const byline = `You are ${r.name}, ${r.title} for Dynasty Central covering the "${leagueName}" dynasty. Your writing style is ${r.style}\n\nAlways sign your articles with your name and title at the end.\n\n`;
+
+    const scheduleContext = upcomingSchedule ? `\n\nUPCOMING SCHEDULE:\n${upcomingSchedule}` : "";
     const prompts = {
-      powerrankings: `You are a college football analyst for the "${leagueName}" online dynasty. Write weekly power rankings after Season ${season} Week ${week-1}.\n\nCurrent points standings:\n${standingsText}\n\nRank all ${entries.length} teams 1-${entries.length} with a punchy 2-sentence blurb each. Rankings can differ from points based on recent form and momentum. Be opinionated, use the user names and team names. Format as:\n1. [Name] ([Team]) — [blurb]\n2. etc.`,
-      preview: `You are a college football beat writer covering the "${leagueName}" online dynasty. Write a game preview article for Season ${season} Week ${week}.\n\nCurrent standings heading into this week:\n${standingsText}\n\nWrite a 350-word article previewing the biggest matchups this week based on the standings. Who needs a win? Who is on a streak? What are the key storylines? Write like ESPN.\n\nMake up 3 specific matchups between teams in the standings to preview.`,
-      recap: `You are an ESPN college football writer covering the "${leagueName}" dynasty. Write a 400-word dramatic weekly recap for Season ${season} Week ${week-1}.\n\nFinal standings after this week:\n${standingsText}\n\nMake up exciting game details and storylines. Highlight the biggest wins, upsets, and dynasty implications. Write like SportsCenter.`,
-      seasonpreview: `You are an ESPN college football analyst covering the "${leagueName}" dynasty heading into Season ${season} (${START_YEAR+season-1}).\n\nTeams in the dynasty:\n${entries.map(e=>`${e.userName} (${e.teamName})`).join("\n")}\n${history.length>0?`\nLast season champion: ${history[history.length-1].champion}`:"This is the first season."}\n\nWrite a 400-word season preview article. Preview each team's outlook, predict a champion, identify dark horses and sleepers. Build excitement. Write like ESPN College GameDay.`,
+      powerrankings: `${byline}Write weekly power rankings after Season ${season} Week ${week-1}.\n\nCurrent points standings:\n${standingsText}\n\nLast week's matchups:\n${lastWeekMatchups}${scheduleContext}\n\nRank all ${entries.length} teams 1-${entries.length} with a punchy 2-3 sentence blurb each. Reference actual matchups and upcoming schedules. Rankings can differ from points based on momentum and schedule difficulty. Be opinionated. Format as:\n1. [Team] — [blurb]\n2. etc.`,
+
+      preview: `${byline}Write a Week ${week} game preview article for the "${leagueName}" dynasty, Season ${season}.\n\nCurrent standings:\n${standingsText}\n\nTHIS WEEK'S ACTUAL MATCHUPS:\n${thisWeekMatchups}\n\nWrite 400 words previewing the actual scheduled matchups above. Discuss storylines, what's at stake for each team, who has the edge. Reference the real games — do not make up different matchups. Write in your distinct voice.`,
+
+      recap: `${byline}Write a dramatic weekly recap for Season ${season} Week ${week-1} of the "${leagueName}" dynasty.\n\nStandings after this week:\n${standingsText}\n\nLast week's matchups:\n${lastWeekMatchups}\n\nWrite 400 words recapping last week's actual games. Make up exciting scores and game details for the real matchups listed above. Highlight upsets, dominant performances, and dynasty implications. Write in your distinct voice.`,
+
+      seasonpreview: `${byline}Write a Season ${season} (${START_YEAR+season-1}) preview for the "${leagueName}" dynasty.\n\nTeams:\n${entries.map(e=>e.teamName).join("\n")}\n${history.length>0?`\nDefending champion: ${history[history.length-1].champion}`:"This is the inaugural season."}\n${upcomingSchedule?`\nEarly schedule:\n${upcomingSchedule}`:""}\n\nWrite 450 words previewing the season. Give each team a one-line outlook, predict a champion, name dark horses and sleepers, and build excitement. Write in your distinct voice.`,
+
+      hotakes: `${byline}Write a spicy hot takes column for Season ${season} Week ${week-1} of the "${leagueName}" dynasty.\n\nStandings:\n${standingsText}\n\nLast week's matchups:\n${lastWeekMatchups}\n\nWrite 5 bold, controversial hot takes. Reference real matchups and team names. Each take 2-3 sentences, provocative and specific. Number 1-5. Write in your distinct voice.`,
     };
+
     try {
       const text = await callClaude(prompts[type]);
-      const label = type==="powerrankings"?"📊 Power Rankings":type==="preview"?"🔭 Week Preview":type==="recap"?"📰 Weekly Recap":"🏈 Season Preview";
-      const newArticles = [{id:Date.now(),type,label,week,season,text},...articles].slice(0,20);
+      const labels = {powerrankings:"📊 Power Rankings",preview:"🔭 Week Preview",recap:"📰 Weekly Recap",seasonpreview:"🏈 Season Preview",hotakes:"🔥 Hot Takes"};
+      const label = labels[type]||"📰 Article";
+      const newArticles = [{id:Date.now(),type,label,week,season,text,reporter:r.name,reporterColor:r.color,reporterAvatar:r.avatar},...articles].slice(0,30);
       setArticles(newArticles);
-      dbSave({articles: newArticles});
+      dbSave({articles:newArticles});
     } catch(e) {
-      alert("Error: " + e.message);
+      alert("Error: "+e.message);
     }
     setGenerating(null);
   }
 
   return (
-    <div style={{display:"flex",flexDirection:"column",gap:14}}>
-      <Card style={{padding:16}}>
-        <SL>Generate Dynasty Content</SL>
-        <div style={{display:"flex",gap:8,marginBottom:14,flexWrap:"wrap"}}>
-          {[["powerrankings","📊 Power Rankings"],["preview","🔭 Week Preview"],["recap","📰 Weekly Recap"],["seasonpreview","🏈 Season Preview"]].map(([val,label])=><button key={val} onClick={()=>setContentType(val)} style={{padding:"8px 14px",borderRadius:2,border:"1px solid",borderColor:contentType===val?RED:"#ddd",background:contentType===val?RED:"#fff",color:contentType===val?"#fff":"#555",cursor:"pointer",fontSize:12,fontFamily:ff,fontWeight:700,textTransform:"uppercase"}}>{label}</button>)}
+    <div style={{display:"flex",flexDirection:"column",gap:16}}>
+
+      {/* Reporter selector */}
+      <Card style={{overflow:"hidden"}}>
+        <CardHead bg="#111">Select Reporter</CardHead>
+        <div style={{padding:14,display:"grid",gridTemplateColumns:"repeat(auto-fill,minmax(200px,1fr))",gap:10}}>
+          {REPORTERS.map((r,i)=>(
+            <div key={r.name} onClick={()=>setSelectedReporter(i)} style={{border:`2px solid ${selectedReporter===i?r.color:"#ddd"}`,borderRadius:4,padding:12,cursor:"pointer",background:selectedReporter===i?`${r.color}08`:"#fff",transition:"all 0.15s"}}>
+              <div style={{display:"flex",alignItems:"center",gap:10,marginBottom:6}}>
+                <div style={{width:38,height:38,borderRadius:"50%",background:r.color,display:"flex",alignItems:"center",justifyContent:"center",fontSize:13,fontWeight:800,color:"#fff",flexShrink:0}}>{r.avatar}</div>
+                <div>
+                  <div style={{fontSize:13,fontWeight:800,color:"#111"}}>{r.name}</div>
+                  <div style={{fontSize:10,color:"#888",textTransform:"uppercase",letterSpacing:0.5}}>{r.title}</div>
+                </div>
+              </div>
+              <div style={{fontSize:11,color:"#666",lineHeight:1.4,fontStyle:"italic"}}>"{r.bio}"</div>
+            </div>
+          ))}
         </div>
-        <button onClick={()=>generate(contentType)} disabled={!!generating} style={{background:generating?"#ccc":RED,color:"#fff",border:"none",borderRadius:2,padding:"11px 22px",cursor:generating?"not-allowed":"pointer",fontFamily:ff,fontSize:13,fontWeight:800,textTransform:"uppercase"}}>{generating?"Generating...":"Generate Now"}</button>
+        {/* Selected reporter style preview */}
+        <div style={{borderTop:"1px solid #eee",padding:"10px 14px",background:"#f9f9f9",display:"flex",alignItems:"center",gap:10}}>
+          <div style={{width:28,height:28,borderRadius:"50%",background:reporter.color,display:"flex",alignItems:"center",justifyContent:"center",fontSize:10,fontWeight:800,color:"#fff",flexShrink:0}}>{reporter.avatar}</div>
+          <div style={{fontSize:11,color:"#555"}}><strong style={{color:"#111"}}>{reporter.name}</strong> is writing — {reporter.style.split(".")[0]}.</div>
+        </div>
       </Card>
-      {articles.map(a=><Card key={a.id} style={{borderTop:`3px solid ${RED}`,cursor:"pointer"}} onClick={()=>setActiveArticle&&setActiveArticle(a)}><div style={{padding:"10px 16px",background:"#f7f7f7",display:"flex",justifyContent:"space-between",alignItems:"center",borderBottom:"1px solid #eee"}}><div><div style={{fontSize:13,fontWeight:800,color:"#111"}}>{a.label}</div><div style={{fontSize:11,color:"#888"}}>Season {a.season} · Week {a.week}</div></div><div style={{display:"flex",gap:8,alignItems:"center"}}><span style={{fontSize:11,color:RED,fontWeight:700}}>READ →</span><button onClick={e=>{e.stopPropagation();setArticles(prev=>prev.filter(x=>x.id!==a.id));}} style={{background:"transparent",border:"none",color:"#ccc",cursor:"pointer",fontSize:18,padding:"0 4px"}}>×</button></div></div><div style={{padding:"12px 18px",fontSize:13,color:"#888",lineHeight:1.5}}>{a.text.slice(0,150)}...</div></Card>)}
-      {articles.length===0&&<Card style={{padding:"32px 20px",textAlign:"center"}}><div style={{fontSize:24,marginBottom:10}}>📰</div><div style={{fontSize:14,color:"#888"}}>No content generated yet. Select a type above and click Generate Now.</div></Card>}
+
+      {/* Article type selector */}
+      <Card style={{padding:16}}>
+        <SL>Generate Article</SL>
+        <div style={{display:"flex",gap:8,marginBottom:14,flexWrap:"wrap"}}>
+          {[["powerrankings","📊 Power Rankings"],["preview","🔭 Week Preview"],["recap","📰 Weekly Recap"],["seasonpreview","🏈 Season Preview"],["hotakes","🔥 Hot Takes"]].map(([val,label])=>(
+            <button key={val} onClick={()=>setContentType(val)} style={{padding:"8px 14px",borderRadius:2,border:"1px solid",borderColor:contentType===val?reporter.color:"#ddd",background:contentType===val?reporter.color:"#fff",color:contentType===val?"#fff":"#555",cursor:"pointer",fontSize:12,fontFamily:ff,fontWeight:700,textTransform:"uppercase"}}>{label}</button>
+          ))}
+        </div>
+        <button onClick={()=>generate(contentType)} disabled={!!generating} style={{background:generating?"#ccc":reporter.color,color:"#fff",border:"none",borderRadius:2,padding:"11px 22px",cursor:generating?"not-allowed":"pointer",fontFamily:ff,fontSize:13,fontWeight:800,textTransform:"uppercase",display:"flex",alignItems:"center",gap:8}}>
+          {generating?<>Generating...</>:<><span style={{background:"rgba(255,255,255,0.2)",borderRadius:"50%",width:22,height:22,display:"flex",alignItems:"center",justifyContent:"center",fontSize:10,fontWeight:800}}>{reporter.avatar}</span> Generate as {reporter.name.split(" ")[0]}</>}
+        </button>
+      </Card>
+
+      {/* Articles */}
+      {articles.length===0&&<Card style={{padding:"32px 20px",textAlign:"center"}}><div style={{fontSize:28,marginBottom:10}}>📰</div><div style={{fontSize:14,color:"#888"}}>No articles yet. Select a reporter and article type above.</div></Card>}
+      {articles.map(a=>(
+        <Card key={a.id} style={{overflow:"hidden",cursor:"pointer"}} onClick={()=>setActiveArticle&&setActiveArticle(a)}>
+          <div style={{background:a.reporterColor||"#111",padding:"10px 16px",display:"flex",justifyContent:"space-between",alignItems:"center"}}>
+            <div style={{display:"flex",alignItems:"center",gap:10}}>
+              <div style={{width:30,height:30,borderRadius:"50%",background:"rgba(255,255,255,0.2)",display:"flex",alignItems:"center",justifyContent:"center",fontSize:11,fontWeight:800,color:"#fff"}}>{a.reporterAvatar||"DC"}</div>
+              <div>
+                <div style={{fontSize:12,fontWeight:800,color:"#fff"}}>{a.reporter||"Dynasty Central"}</div>
+                <div style={{fontSize:10,color:"rgba(255,255,255,0.7)"}}>{a.label} · S{a.season} Wk{a.week}</div>
+              </div>
+            </div>
+            <div style={{display:"flex",gap:8,alignItems:"center"}}>
+              <span style={{fontSize:11,color:"rgba(255,255,255,0.8)",fontWeight:700}}>READ →</span>
+              <button onClick={e=>{e.stopPropagation();const na=articles.filter(x=>x.id!==a.id);setArticles(na);dbSave({articles:na});}} style={{background:"transparent",border:"none",color:"rgba(255,255,255,0.5)",cursor:"pointer",fontSize:16,padding:"0 4px"}}>×</button>
+            </div>
+          </div>
+          <div style={{padding:"12px 16px",fontSize:13,color:"#555",lineHeight:1.6}}>{a.text.slice(0,180)}...</div>
+        </Card>
+      ))}
     </div>
   );
 }
@@ -358,6 +494,7 @@ export default function App() {
   const [pwErr,setPwErr] = useState(false);
   const [clicks,setClicks] = useState(0);
   const [commTab,setCommTab] = useState("Enter Results");
+  const [schedule,setSchedule] = useState({}); // {week: {teamName: opponent}}
   const isMobile = useIsMobile();
   const [articles,setArticles] = useState([]);
   const [activeArticle,setActiveArticle] = useState(null);
@@ -376,6 +513,7 @@ export default function App() {
         if (row.history && row.history.length) setHistory(row.history);
         if (row.post_season_inputs) setPSI(row.post_season_inputs);
         if (row.articles && row.articles.length) setArticles(row.articles);
+        if (row.schedule) setSchedule(row.schedule);
         if (row.entries && row.entries.length) {
           setWeekResults(row.entries.map(e => ({teamName:e.teamName,userName:e.userName,result:"none",ranked25:false,ranked10:false})));
         }
@@ -398,6 +536,7 @@ export default function App() {
         history: overrides.history !== undefined ? overrides.history : history,
         post_season_inputs: overrides.post_season_inputs !== undefined ? overrides.post_season_inputs : postSeasonInputs,
         articles: overrides.articles !== undefined ? overrides.articles : articles,
+        schedule: overrides.schedule !== undefined ? overrides.schedule : schedule,
       });
       setLastSaved(new Date());
     } catch(e) {
@@ -421,19 +560,42 @@ export default function App() {
   const leagueName=setup?.leagueName||"Dynasty Central";
 
   function applyWeekResults() {
-    setEntries(prev=>prev.map(entry=>{
-      const r=weekResults.find(w=>w.teamName===entry.teamName);
-      if(!r||r.result==="none")return entry;
-      let pts=0,bonus=0;
-      if(r.result==="win"){pts=15;bonus=r.ranked10?10:r.ranked25?5:0;}
-      const log={week,result:r.result,ranked25:r.ranked25,ranked10:r.ranked10,pts:pts+bonus};
-      return{...entry,wins:r.result==="win"?entry.wins+1:entry.wins,losses:r.result==="loss"?entry.losses+1:entry.losses,gamePts:entry.gamePts+pts,rankedBonusPts:entry.rankedBonusPts+bonus,weekLog:[...(entry.weekLog||[]),log]};
-    }));
+    const thisWeekSchedule = schedule[week] || {};
+    setEntries(prev=>{
+      // Build a map of results entered this week
+      const resultsMap = {};
+      weekResults.forEach(r=>{ if(r.result!=="none") resultsMap[r.teamName]=r; });
+      return prev.map(entry=>{
+        const r = resultsMap[entry.teamName];
+        const opp = thisWeekSchedule[entry.teamName];
+        // If this team has a scheduled opponent who entered a result, mirror it
+        let effectiveResult = r?.result;
+        let effectiveR25 = r?.ranked25||false;
+        let effectiveR10 = r?.ranked10||false;
+        if (!effectiveResult && opp && opp!=="CPU" && opp!=="BYE" && resultsMap[opp]) {
+          // Mirror opponent result
+          const oppResult = resultsMap[opp].result;
+          effectiveResult = oppResult==="win"?"loss":oppResult==="loss"?"win":undefined;
+          effectiveR25 = false; effectiveR10 = false;
+        }
+        if(!effectiveResult)return entry;
+        let pts=0,bonus=0;
+        if(effectiveResult==="win"){pts=15;bonus=effectiveR10?10:effectiveR25?5:0;}
+        const log={week,result:effectiveResult,ranked25:effectiveR25,ranked10:effectiveR10,pts:pts+bonus,opponent:opp||"Unknown"};
+        // Update H2H if opponent is a dynasty member
+        const h2h={...entry.h2h||{}};
+        if(opp&&opp!=="CPU"&&opp!=="BYE"){
+          if(!h2h[opp])h2h[opp]={wins:0,losses:0};
+          if(effectiveResult==="win")h2h[opp].wins++;
+          else if(effectiveResult==="loss")h2h[opp].losses++;
+        }
+        return{...entry,wins:effectiveResult==="win"?entry.wins+1:entry.wins,losses:effectiveResult==="loss"?entry.losses+1:entry.losses,gamePts:entry.gamePts+pts,rankedBonusPts:entry.rankedBonusPts+bonus,weekLog:[...(entry.weekLog||[]),log],h2h};
+      });
+    });
     setWeekResults(prev=>prev.map(r=>({...r,result:"none",ranked25:false,ranked10:false})));
-    const newWeek = week+1;
+    const newWeek=week+1;
     setWeek(newWeek);
-    // Save after state updates
-    setTimeout(() => saveToDb({week: newWeek}), 100);
+    setTimeout(()=>saveToDb({week:newWeek}),100);
   }
 
   function applyImageResults() {
@@ -540,7 +702,7 @@ export default function App() {
       {/* Red section bar */}
       <div style={{background:RED,padding:"0 8px",height:36,display:"flex",alignItems:"center",gap:0,overflowX:"auto"}}>
         {!isMobile&&<span style={{fontSize:12,fontWeight:800,color:"#fff",marginRight:8,flexShrink:0}}>🏈</span>}
-        {["Standings","History","Profiles","Content","Rules"].map(t=><button key={t} onClick={()=>setTab(t)} style={{padding:"0 10px",height:36,background:tab===t?"rgba(255,255,255,0.15)":"transparent",border:"none",borderBottom:tab===t?"3px solid #fff":"3px solid transparent",color:"#fff",cursor:"pointer",fontSize:isMobile?10:11,fontWeight:tab===t?800:400,fontFamily:ff,textTransform:"uppercase",letterSpacing:0.3,whiteSpace:"nowrap",flexShrink:0}}>{t}</button>)}
+        {["Standings","History","Profiles","Rules"].map(t=><button key={t} onClick={()=>setTab(t)} style={{padding:"0 10px",height:36,background:tab===t?"rgba(255,255,255,0.15)":"transparent",border:"none",borderBottom:tab===t?"3px solid #fff":"3px solid transparent",color:"#fff",cursor:"pointer",fontSize:isMobile?10:11,fontWeight:tab===t?800:400,fontFamily:ff,textTransform:"uppercase",letterSpacing:0.3,whiteSpace:"nowrap",flexShrink:0}}>{t}</button>)}
       </div>
       {/* Ticker */}
       <div style={{background:"#222",borderBottom:"1px solid #333",padding:"5px 10px",display:"flex",gap:0,overflowX:"auto",alignItems:"center"}}>
@@ -559,11 +721,24 @@ export default function App() {
         {/* Center */}
         <div style={{display:"flex",flexDirection:"column",gap:14}}>
           <Card style={{padding:"14px 16px",borderLeft:`4px solid ${RED}`}}>
-            <div style={{fontSize:18,fontWeight:900,color:"#111",textTransform:"uppercase"}}>{tab==="Standings"?"Dynasty Standings":tab==="History"?"Season History":tab==="Profiles"?"Player Profiles":tab==="Content"?"Content Hub":"Points System Rules"}</div>
+            <div style={{fontSize:18,fontWeight:900,color:"#111",textTransform:"uppercase"}}>{tab==="Standings"?"Dynasty Standings":tab==="History"?"Season History":tab==="Profiles"?"Player Profiles":"Points System Rules"}</div>
             <div style={{fontSize:11,color:"#888",marginTop:3}}>{leagueName} · Season {season} · {START_YEAR+season-1} · {week>12?"Post-Season":`Week ${week}`}</div>
           </Card>
 
-          {tab==="Standings"&&<Card style={{overflow:"hidden"}}>
+          {tab==="Standings"&&<>
+          {schedule[week]&&Object.keys(schedule[week]).length>0&&<Card style={{overflow:"hidden"}}>
+            <CardHead bg="#1a3a6b">This Week's Matchups — Week {week}</CardHead>
+            <div style={{padding:"8px 14px",display:"flex",flexDirection:"column",gap:0}}>
+              {(()=>{const seen=new Set();const games=[];Object.entries(schedule[week]).forEach(([team,opp])=>{const key=[team,opp].sort().join("|");if(!seen.has(key)){seen.add(key);games.push({team,opp});}});return games.map(({team,opp},i)=>(
+                <div key={i} style={{display:"flex",alignItems:"center",padding:"8px 0",borderBottom:"1px solid #f0f0f0"}}>
+                  {opp==="BYE"?<><span style={{fontSize:13,fontWeight:700,color:"#111",flex:1}}>{team}</span><span style={{fontSize:11,color:"#aaa",background:"#f5f5f5",borderRadius:2,padding:"2px 8px"}}>BYE WEEK</span></>:
+                   opp==="CPU"?<><span style={{fontSize:13,fontWeight:700,color:"#111",flex:1}}>{team}</span><span style={{fontSize:11,color:"#888"}}>vs</span><span style={{fontSize:13,fontWeight:600,color:"#888",flex:1,textAlign:"right"}}>CPU (non-conf)</span></>:
+                   <><span style={{fontSize:13,fontWeight:700,color:"#111",flex:1}}>{team}</span><span style={{fontSize:11,color:"#aaa",padding:"0 10px",fontWeight:700}}>VS</span><span style={{fontSize:13,fontWeight:700,color:"#111",flex:1,textAlign:"right"}}>{opp}</span></>}
+                </div>
+              ));})()}
+            </div>
+          </Card>}
+          <Card style={{overflow:"hidden"}}>
             <CardHead>Current Standings</CardHead>
             {!entries.length?<div style={{padding:"40px 20px",textAlign:"center"}}><div style={{fontSize:36,marginBottom:12}}>🏈</div><div style={{fontSize:16,fontWeight:900,color:"#111",marginBottom:6}}>Season Starting Soon</div><div style={{fontSize:12,color:"#888"}}>The commissioner is setting up the dynasty.</div></div>:
             <div style={{overflowX:"auto"}}><table style={{width:"100%",borderCollapse:"collapse",fontSize:13}}>
@@ -587,11 +762,10 @@ export default function App() {
               </tr>);})}</tbody>
             </table></div>}
           </Card>}
+          </> }
 
           {tab==="History"&&<HistoryTab history={history}/>}
           {tab==="Profiles"&&<ProfileTab history={history} setupRows={setup?.rows||[]} currentEntries={entries} season={season}/>}
-          {tab==="Content"&&<ContentHub sorted={sorted} entries={entries} week={week} season={season} leagueName={leagueName} history={history} leader={leader} articles={articles} setArticles={setArticles} setActiveArticle={setActiveArticle}/>}
-
           {tab==="Rules"&&<div style={{display:"grid",gridTemplateColumns:"repeat(auto-fill,minmax(250px,1fr))",gap:12}}>
             {[["🏈 Regular Season",[["Win","15 pts"],["Win vs Top 25","+5 bonus"],["Win vs Top 10","+10 bonus"],["Loss","0 pts"]]],["📊 Conference Standings",[["1st","50"],["2nd","43"],["3rd","36"],["4th","30"],["5th","24"],["6th","18"],["7th","14"],["8th","10"],["9th","7"],["10th","5"],["11th","3"],["12th","1"]]],["🏆 Conference Championship",[["Make the Game","10 pts"],["Win the Game","15 pts"]]],["🥣 Bowl & Playoff",[["Make a Bowl","5 pts"],["Win a Bowl","10 pts"],["Make the CFP","15 pts"],["Win National Championship","25 pts"]]],["🎓 Recruiting (Top 5)",[["#1","15 pts"],["#2","10 pts"],["#3","7 pts"],["#4","5 pts"],["#5","3 pts"]]],["⭐ Prestige & Awards",[["Gain a Prestige Star","10 pts"],["Reach Max Prestige","10 pts"],["Heisman Winner","15 pts"]]]].map(([title,rows])=><Card key={title} style={{overflow:"hidden"}}><CardHead bg={RED}>{title}</CardHead><table style={{width:"100%",borderCollapse:"collapse"}}><tbody>{rows.map(([l,p])=><tr key={l} style={{borderBottom:"1px solid #f0f0f0"}}><td style={{padding:"7px 12px",color:"#333",fontSize:13}}>{l}</td><td style={{padding:"7px 12px",textAlign:"right",color:RED,fontWeight:800,fontSize:13}}>{p}</td></tr>)}</tbody></table></Card>)}
           </div>}
@@ -601,8 +775,11 @@ export default function App() {
           <Card><CardHead>Top Headlines</CardHead><div style={{padding:"4px 0"}}>
             {sorted.length===0&&<div style={{padding:"12px",fontSize:12,color:"#888",fontStyle:"italic"}}>No standings yet.</div>}
             {articles.slice(0,4).map(a=>(
-              <div key={a.id} onClick={()=>setActiveArticle(a)} style={{padding:"10px 12px",borderBottom:"1px solid #f0f0f0",cursor:"pointer",transition:"background 0.15s"}} onMouseEnter={e=>e.currentTarget.style.background="#f7f7f7"} onMouseLeave={e=>e.currentTarget.style.background="transparent"}>
-                <div style={{fontSize:11,color:RED,fontWeight:700,letterSpacing:0.5,textTransform:"uppercase",marginBottom:3}}>{a.label} · S{a.season} Wk{a.week}</div>
+              <div key={a.id} onClick={()=>setActiveArticle(a)} style={{padding:"10px 12px",borderBottom:"1px solid #f0f0f0",cursor:"pointer"}} onMouseEnter={e=>e.currentTarget.style.background="#f7f7f7"} onMouseLeave={e=>e.currentTarget.style.background="transparent"}>
+                <div style={{display:"flex",alignItems:"center",gap:6,marginBottom:4}}>
+                  {a.reporterAvatar&&<div style={{width:18,height:18,borderRadius:"50%",background:a.reporterColor||RED,display:"flex",alignItems:"center",justifyContent:"center",fontSize:7,fontWeight:800,color:"#fff",flexShrink:0}}>{a.reporterAvatar}</div>}
+                  <div style={{fontSize:10,color:a.reporterColor||RED,fontWeight:700,letterSpacing:0.5,textTransform:"uppercase"}}>{a.reporter||"Dynasty Central"} · {a.label}</div>
+                </div>
                 <div style={{fontSize:13,fontWeight:700,color:"#111",lineHeight:1.4}}>{a.text.slice(0,80).trim()}...</div>
               </div>
             ))}
@@ -635,9 +812,12 @@ export default function App() {
             </div>
             <button onClick={()=>setActiveArticle(null)} style={{background:"transparent",border:"1px solid #444",color:"#aaa",borderRadius:2,padding:"5px 12px",cursor:"pointer",fontSize:13,fontFamily:ff}}>✕ Close</button>
           </div>
-          <div style={{background:RED,padding:"8px 18px",display:"flex",gap:16,alignItems:"center"}}>
-            <div style={{fontSize:11,fontWeight:800,color:"#fff",letterSpacing:1,textTransform:"uppercase"}}>{activeArticle.label}</div>
-            <div style={{fontSize:11,color:"rgba(255,255,255,0.7)"}}>Season {activeArticle.season} · Week {activeArticle.week}</div>
+          <div style={{background:activeArticle.reporterColor||RED,padding:"10px 18px",display:"flex",gap:14,alignItems:"center"}}>
+            {activeArticle.reporterAvatar&&<div style={{width:36,height:36,borderRadius:"50%",background:"rgba(255,255,255,0.2)",display:"flex",alignItems:"center",justifyContent:"center",fontSize:12,fontWeight:800,color:"#fff",flexShrink:0}}>{activeArticle.reporterAvatar}</div>}
+            <div>
+              <div style={{fontSize:13,fontWeight:800,color:"#fff"}}>{activeArticle.reporter||"Dynasty Central"}</div>
+              <div style={{fontSize:11,color:"rgba(255,255,255,0.7)"}}>{activeArticle.label} · Season {activeArticle.season} · Week {activeArticle.week}</div>
+            </div>
           </div>
           <div style={{padding:"24px 24px 32px"}}>
             <div style={{fontSize:15,lineHeight:1.9,color:"#222",whiteSpace:"pre-wrap",fontFamily:"Georgia, serif"}}>{activeArticle.text}</div>
@@ -673,10 +853,12 @@ export default function App() {
           </div>
         </div>
         <div style={{background:"#1a1a1a",borderBottom:"1px solid #333",display:"flex",overflowX:"auto"}}>
-          {["Enter Results","League Setup"].map(t=><button key={t} onClick={()=>setCommTab(t)} style={{padding:"11px 18px",background:"transparent",border:"none",borderBottom:commTab===t?`3px solid ${RED}`:"3px solid transparent",color:commTab===t?"#fff":"#888",cursor:"pointer",fontSize:12,fontWeight:700,fontFamily:ff,textTransform:"uppercase",letterSpacing:0.5,whiteSpace:"nowrap"}}>{t}</button>)}
+          {["Enter Results","Schedule","Content","League Setup"].map(t=><button key={t} onClick={()=>setCommTab(t)} style={{padding:"11px 18px",background:"transparent",border:"none",borderBottom:commTab===t?`3px solid ${RED}`:"3px solid transparent",color:commTab===t?"#fff":"#888",cursor:"pointer",fontSize:12,fontWeight:700,fontFamily:ff,textTransform:"uppercase",letterSpacing:0.5,whiteSpace:"nowrap"}}>{t}</button>)}
         </div>
         <div style={{maxWidth:800,margin:"0 auto",padding:"20px 14px"}}>
-          {commTab==="Enter Results"&&<EnterResultsPanel entries={entries} weekResults={weekResults} setWeekResults={setWeekResults} week={week} imageFile={imageFile} imagePreview={imagePreview} processingImage={processingImage} imageResult={imageResult} parsedFromImage={parsedFromImage} handleImageUpload={handleImageUpload} processImage={processImage} applyImageResults={applyImageResults} setParsedFromImage={setParsedFromImage} applyWeekResults={applyWeekResults} postSeasonInputs={postSeasonInputs} setPSI={setPSI} applyPostSeason={applyPostSeason} finalizeSeason={finalizeSeason} season={season} teamNames={teamNames}/>}
+          {commTab==="Enter Results"&&<EnterResultsPanel entries={entries} weekResults={weekResults} setWeekResults={setWeekResults} week={week} imageFile={imageFile} imagePreview={imagePreview} processingImage={processingImage} imageResult={imageResult} parsedFromImage={parsedFromImage} handleImageUpload={handleImageUpload} processImage={processImage} applyImageResults={applyImageResults} setParsedFromImage={setParsedFromImage} applyWeekResults={applyWeekResults} postSeasonInputs={postSeasonInputs} setPSI={setPSI} applyPostSeason={applyPostSeason} finalizeSeason={finalizeSeason} season={season} teamNames={teamNames} schedule={schedule}/>}
+          {commTab==="Schedule"&&<SchedulePanel entries={entries} schedule={schedule} setSchedule={setSchedule} saveToDb={saveToDb}/>}
+          {commTab==="Content"&&<ContentHub sorted={sorted} entries={entries} week={week} season={season} leagueName={leagueName} history={history} leader={leader} articles={articles} setArticles={setArticles} setActiveArticle={setActiveArticle} schedule={schedule}/>}
           {commTab==="League Setup"&&<SetupPanel entries={entries} setup={setup} postSeasonInputs={postSeasonInputs} setPSI={setPSI} handleStart={handleStart} setCommissionerUnlocked={setCommUnlocked} season={season} setEntries={setEntries} setWeekResults={setWeekResults} setSetup={setSetup}/>}
         </div>
       </div>}
