@@ -89,6 +89,161 @@ function CardHead({children,bg="#111"}) {
   return <div style={{background:bg,padding:"8px 14px"}}><div style={{fontSize:11,fontWeight:800,color:"#fff",letterSpacing:1,textTransform:"uppercase"}}>{children}</div></div>;
 }
 
+// ── Week Matchups + Game of the Week Card ────────────────────────────────
+function WeekMatchupsCard({schedule,week,sorted,leagueName,season,setActiveArticle,articles,setArticles}) {
+  const [gotwArticle,setGotwArticle] = useState(null);
+  const [generating,setGenerating] = useState(false);
+  const [gotw,setGotw] = useState(null); // {team1, team2}
+
+  // Build deduplicated game list
+  const games = (() => {
+    const seen = new Set(); const list = [];
+    Object.entries(schedule[week]||{}).forEach(([team,opp])=>{
+      const key = [team,opp].sort().join("|");
+      if(!seen.has(key)){seen.add(key);list.push({team,opp});}
+    });
+    return list;
+  })();
+
+  const confGames = games.filter(g=>g.opp!=="BYE"&&g.opp!=="CPU");
+
+  // Determine Game of the Week based on standings proximity
+  const getGOTW = () => {
+    if(confGames.length===0) return null;
+    // Score each matchup: teams closer in standings = better game
+    const rankMap = {};
+    sorted.forEach((t,i)=>rankMap[t.teamName]=i+1);
+    let best = null, bestScore = 999;
+    confGames.forEach(({team,opp})=>{
+      const r1 = rankMap[team]||99, r2 = rankMap[opp]||99;
+      const diff = Math.abs(r1-r2);
+      const topness = Math.min(r1,r2); // lower rank = better
+      const score = diff + topness*0.5;
+      if(score < bestScore){bestScore=score;best={team1:team,team2:opp,rank1:r1,rank2:r2};}
+    });
+    return best;
+  };
+
+  const gameOfWeek = gotw || getGOTW();
+
+  async function generateGOTWPreview() {
+    if(!gameOfWeek) return;
+    setGenerating(true);
+    const t1 = sorted.find(t=>t.teamName===gameOfWeek.team1);
+    const t2 = sorted.find(t=>t.teamName===gameOfWeek.team2);
+    const standingsText = sorted.map((t,i)=>{const tot=calcTotal(t);return `${i+1}. ${t.teamName} — ${t.wins}W-${t.losses}L — ${tot}pts`;}).join("\n");
+    const prompt = `You are a college football analyst covering the "${leagueName}" online dynasty. Write a 350-word GAME OF THE WEEK preview for Season ${season} Week ${week}.
+
+GAME OF THE WEEK: ${gameOfWeek.team1} (#${gameOfWeek.rank1} in dynasty points, ${t1?.wins||0}W-${t1?.losses||0}L) vs ${gameOfWeek.team2} (#${gameOfWeek.rank2} in dynasty points, ${t2?.wins||0}W-${t2?.losses||0}L)
+
+Current dynasty standings:
+${standingsText}
+
+Write a compelling preview with:
+- A dramatic headline
+- Why this game matters for the dynasty standings
+- Each team's strengths and recent form
+- A score prediction
+- A "Key to the Game" section
+
+Write like ESPN College GameDay. Make it feel like must-watch television.`;
+
+    try {
+      const text = await callClaude(prompt);
+      const article = {
+        id: Date.now(),
+        type: "gotw",
+        label: "🏆 Game of the Week",
+        week, season, text,
+        reporter: "Dynasty Central",
+        reporterColor: "#1a3a6b",
+        reporterAvatar: "GW",
+        gotw: gameOfWeek,
+      };
+      setGotwArticle(article);
+      setActiveArticle(article);
+      const newArticles = [article,...(articles||[])].slice(0,30);
+      setArticles(newArticles);
+      // Save to Supabase
+      const SU = "https://uyaqmdljwwslskoqxvpn.supabase.co";
+      const SK = "sb_publishable_GNVG6TW43VXjW7IhWcBtmA_L_mMok1C";
+      fetch(`${SU}/rest/v1/dynasty_state?id=eq.main`,{method:"PATCH",headers:{"Content-Type":"application/json","apikey":SK,"Authorization":`Bearer ${SK}`,"Prefer":"return=minimal"},body:JSON.stringify({articles:newArticles,updated_at:new Date().toISOString()})});
+    } catch(e) {
+      alert("Error generating preview: "+e.message);
+    }
+    setGenerating(false);
+  }
+
+  // Find existing GOTW article for this week
+  const existingGOTW = articles?.find(a=>a.type==="gotw"&&a.week===week&&a.season===season);
+
+  return (
+    <div style={{display:"flex",flexDirection:"column",gap:12}}>
+
+      {/* Game of the Week */}
+      {gameOfWeek&&(
+        <Card style={{overflow:"hidden",border:`2px solid #1a3a6b`}}>
+          <div style={{background:"#1a3a6b",padding:"10px 16px",display:"flex",justifyContent:"space-between",alignItems:"center"}}>
+            <div style={{display:"flex",alignItems:"center",gap:10}}>
+              <div style={{fontSize:16}}>🏆</div>
+              <div>
+                <div style={{fontSize:11,fontWeight:800,color:"rgba(255,255,255,0.7)",letterSpacing:2,textTransform:"uppercase"}}>Game of the Week</div>
+                <div style={{fontSize:10,color:"rgba(255,255,255,0.5)"}}>Season {season} · Week {week}</div>
+              </div>
+            </div>
+            {existingGOTW
+              ? <button onClick={()=>setActiveArticle(existingGOTW)} style={{background:"rgba(255,255,255,0.15)",border:"1px solid rgba(255,255,255,0.3)",color:"#fff",borderRadius:2,padding:"5px 12px",cursor:"pointer",fontSize:11,fontWeight:700,fontFamily:"'Helvetica Neue',Arial,sans-serif",textTransform:"uppercase"}}>Read Preview →</button>
+              : <button onClick={generateGOTWPreview} disabled={generating} style={{background:generating?"rgba(255,255,255,0.1)":"rgba(255,255,255,0.2)",border:"1px solid rgba(255,255,255,0.4)",color:"#fff",borderRadius:2,padding:"5px 12px",cursor:generating?"not-allowed":"pointer",fontSize:11,fontWeight:700,fontFamily:"'Helvetica Neue',Arial,sans-serif",textTransform:"uppercase"}}>{generating?"Writing...":"Generate Preview"}</button>
+            }
+          </div>
+          <div style={{padding:"16px 18px"}}>
+            <div style={{display:"flex",alignItems:"center",gap:0}}>
+              <div style={{flex:1,textAlign:"center"}}>
+                <div style={{fontSize:22,fontWeight:900,color:"#111"}}>{gameOfWeek.team1}</div>
+                <div style={{fontSize:11,color:"#888",marginTop:3}}>#{gameOfWeek.rank1} in Dynasty</div>
+                <div style={{fontSize:12,color:"#555",marginTop:2}}>{sorted.find(t=>t.teamName===gameOfWeek.team1)?.wins||0}W – {sorted.find(t=>t.teamName===gameOfWeek.team1)?.losses||0}L</div>
+              </div>
+              <div style={{padding:"0 16px",textAlign:"center"}}>
+                <div style={{fontSize:13,fontWeight:900,color:"#1a3a6b",letterSpacing:2}}>VS</div>
+                <div style={{fontSize:10,color:"#aaa",marginTop:4,fontWeight:600}}>Conference</div>
+              </div>
+              <div style={{flex:1,textAlign:"center"}}>
+                <div style={{fontSize:22,fontWeight:900,color:"#111"}}>{gameOfWeek.team2}</div>
+                <div style={{fontSize:11,color:"#888",marginTop:3}}>#{gameOfWeek.rank2} in Dynasty</div>
+                <div style={{fontSize:12,color:"#555",marginTop:2}}>{sorted.find(t=>t.teamName===gameOfWeek.team2)?.wins||0}W – {sorted.find(t=>t.teamName===gameOfWeek.team2)?.losses||0}L</div>
+              </div>
+            </div>
+            {existingGOTW&&<div style={{marginTop:12,padding:"10px 14px",background:"#f0f4ff",borderRadius:2,border:"1px solid #c5d0e8",fontSize:13,color:"#333",lineHeight:1.5,cursor:"pointer"}} onClick={()=>setActiveArticle(existingGOTW)}>
+              <strong style={{color:"#1a3a6b"}}>Preview:</strong> {existingGOTW.text.slice(0,160)}... <span style={{color:"#1a3a6b",fontWeight:700}}>Read more →</span>
+            </div>}
+          </div>
+        </Card>
+      )}
+
+      {/* All matchups */}
+      <Card style={{overflow:"hidden"}}>
+        <CardHead bg="#333">Week {week} Matchups</CardHead>
+        <div style={{padding:"4px 14px 8px"}}>
+          {games.map(({team,opp},i)=>{
+            const isGOTW = gameOfWeek&&((team===gameOfWeek.team1&&opp===gameOfWeek.team2)||(team===gameOfWeek.team2&&opp===gameOfWeek.team1));
+            return(
+              <div key={i} style={{display:"flex",alignItems:"center",padding:"9px 0",borderBottom:"1px solid #f0f0f0",background:isGOTW?"#f8f9ff":"transparent"}}>
+                {isGOTW&&<span style={{fontSize:10,marginRight:8,flexShrink:0}}>🏆</span>}
+                {opp==="BYE"
+                  ?<><span style={{fontSize:13,fontWeight:600,color:"#888",flex:1}}>{team}</span><span style={{fontSize:11,color:"#aaa",background:"#f5f5f5",borderRadius:2,padding:"2px 8px",flexShrink:0}}>BYE WEEK</span></>
+                  :opp==="CPU"
+                  ?<><span style={{fontSize:13,fontWeight:700,color:"#111",flex:1}}>{team}</span><span style={{fontSize:11,color:"#888",padding:"0 8px"}}>vs</span><span style={{fontSize:13,fontWeight:600,color:"#888",flex:1,textAlign:"right"}}>CPU (non-conf)</span></>
+                  :<><span style={{fontSize:13,fontWeight:isGOTW?800:700,color:"#111",flex:1}}>{team}</span><div style={{padding:"0 12px",textAlign:"center",flexShrink:0}}><span style={{fontSize:10,fontWeight:900,color:isGOTW?"#1a3a6b":"#bbb",letterSpacing:1}}>VS</span></div><span style={{fontSize:13,fontWeight:isGOTW?800:700,color:"#111",flex:1,textAlign:"right"}}>{opp}</span></>
+                }
+              </div>
+            );
+          })}
+        </div>
+      </Card>
+    </div>
+  );
+}
+
 // ── Schedule Panel ────────────────────────────────────────────────────────
 function SchedulePanel({entries,schedule,setSchedule}) {
   const [editWeek,setEditWeek] = useState(1);
@@ -845,18 +1000,7 @@ export default function App() {
           </Card>
 
           {tab==="Standings"&&(<>
-          {schedule&&schedule[week]&&Object.keys(schedule[week]).length>0&&<Card style={{overflow:"hidden"}}>
-            <CardHead bg="#1a3a6b">This Week's Matchups — Week {week}</CardHead>
-            <div style={{padding:"8px 14px",display:"flex",flexDirection:"column",gap:0}}>
-              {(()=>{const seen=new Set();const games=[];Object.entries(schedule[week]).forEach(([team,opp])=>{const key=[team,opp].sort().join("|");if(!seen.has(key)){seen.add(key);games.push({team,opp});}});return games.map(({team,opp},i)=>(
-                <div key={i} style={{display:"flex",alignItems:"center",padding:"8px 0",borderBottom:"1px solid #f0f0f0"}}>
-                  {opp==="BYE"?<><span style={{fontSize:13,fontWeight:700,color:"#111",flex:1}}>{team}</span><span style={{fontSize:11,color:"#aaa",background:"#f5f5f5",borderRadius:2,padding:"2px 8px"}}>BYE WEEK</span></>:
-                   opp==="CPU"?<><span style={{fontSize:13,fontWeight:700,color:"#111",flex:1}}>{team}</span><span style={{fontSize:11,color:"#888"}}>vs</span><span style={{fontSize:13,fontWeight:600,color:"#888",flex:1,textAlign:"right"}}>CPU (non-conf)</span></>:
-                   <><span style={{fontSize:13,fontWeight:700,color:"#111",flex:1}}>{team}</span><span style={{fontSize:11,color:"#aaa",padding:"0 10px",fontWeight:700}}>VS</span><span style={{fontSize:13,fontWeight:700,color:"#111",flex:1,textAlign:"right"}}>{opp}</span></>}
-                </div>
-              ));})()}
-            </div>
-          </Card>}
+          {schedule&&schedule[week]&&Object.keys(schedule[week]).length>0&&<WeekMatchupsCard schedule={schedule} week={week} sorted={sorted} leagueName={leagueName} season={season} setActiveArticle={setActiveArticle} articles={articles} setArticles={setArticles}/>}
           <Card style={{overflow:"hidden"}}>
             <CardHead>Current Standings</CardHead>
             {!entries.length?<div style={{padding:"40px 20px",textAlign:"center"}}><div style={{fontSize:36,marginBottom:12}}>🏈</div><div style={{fontSize:16,fontWeight:900,color:"#111",marginBottom:6}}>Season Starting Soon</div><div style={{fontSize:12,color:"#888"}}>The commissioner is setting up the dynasty.</div></div>:
