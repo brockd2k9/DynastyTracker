@@ -1,5 +1,15 @@
 import { useState, useEffect, useCallback } from "react";
 
+function useIsMobile() {
+  const [isMobile, setIsMobile] = useState(window.innerWidth < 768);
+  useEffect(() => {
+    const handler = () => setIsMobile(window.innerWidth < 768);
+    window.addEventListener('resize', handler);
+    return () => window.removeEventListener('resize', handler);
+  }, []);
+  return isMobile;
+}
+
 // ── Supabase config ───────────────────────────────────────────────────────
 const SUPA_URL = "https://uyaqmdljwwslskoqxvpn.supabase.co";
 const SUPA_KEY = "sb_publishable_GNVG6TW43VXjW7IhWcBtmA_L_mMok1C";
@@ -85,7 +95,7 @@ function HistoryTab({history}) {
         <div style={{padding:"12px 14px",display:"flex",gap:8,flexWrap:"wrap"}}>
           {history.map((s,i)=><button key={i} onClick={()=>setSel(sel===i?null:i)} style={{padding:"5px 12px",borderRadius:2,border:"1px solid",borderColor:sel===i?RED:"#ddd",background:sel===i?RED:"#fff",color:sel===i?"#fff":"#555",cursor:"pointer",fontSize:12,fontWeight:700,fontFamily:ff,textTransform:"uppercase"}}>{s.year} · S{s.seasonNum}</button>)}
         </div>
-        {sel!==null&&(()=>{const s=history[sel];const srt=[...s.finalStandings].sort((a,b)=>calcTotal(b)-calcTotal(a));const top=calcTotal(srt[0]);return(<div style={{padding:"0 14px 14px"}}><div style={{display:"flex",gap:8,marginBottom:12,flexWrap:"wrap"}}>{s.champion&&<div style={{background:RED,borderRadius:2,padding:"3px 10px",fontSize:11,color:"#fff",fontWeight:700}}>🏆 {s.champion}</div>}{s.confChampion&&<div style={{background:"#f5f5f5",border:"1px solid #ddd",borderRadius:2,padding:"3px 10px",fontSize:11,color:"#111",fontWeight:700}}>🏅 {s.confChampion}</div>}{s.heisman&&<div style={{background:"#fff8e8",border:"1px solid #ddd",borderRadius:2,padding:"3px 10px",fontSize:11,color:"#cc7700",fontWeight:700}}>🏈 {s.heisman}</div>}</div><table style={{width:"100%",borderCollapse:"collapse",fontSize:13}}><thead><tr style={{borderBottom:`2px solid ${RED}`,background:"#f7f7f7"}}>{["#","User","Team","W","L","PTS","Behind"].map(h=><th key={h} style={{padding:"7px 6px",textAlign:h==="User"||h==="Team"?"left":"center",color:"#555",fontSize:9,letterSpacing:1,textTransform:"uppercase",fontWeight:800}}>{h}</th>)}</tr></thead><tbody>{srt.map((t,i)=>{const tot=calcTotal(t);return(<tr key={t.userName} style={{borderBottom:"1px solid #eee",background:i===0?"#fff8f8":"transparent"}}><td style={{padding:"8px 6px",textAlign:"center",color:i===0?RED:"#bbb",fontWeight:800,fontSize:13}}>{i+1}</td><td style={{padding:"8px 6px",color:"#111",fontWeight:i===0?800:400}}>{t.userName}</td><td style={{padding:"8px 6px",color:"#888",fontSize:12}}>{t.teamName}</td><td style={{padding:"8px 6px",textAlign:"center",color:"#007a00",fontWeight:700}}>{t.wins}</td><td style={{padding:"8px 6px",textAlign:"center",color:RED,fontWeight:700}}>{t.losses}</td><td style={{padding:"8px 6px",textAlign:"center",fontWeight:800,color:i===0?RED:"#111",fontSize:14}}>{tot}</td><td style={{padding:"8px 6px",textAlign:"center",color:i===0?"#007a00":RED,fontSize:12}}>{i===0?"LEAD":`-${top-tot}`}</td></tr>);})}</tbody></table></div>);})()}
+        {sel!==null&&(()=>{const s=history[sel];const srt=[...s.finalStandings].sort((a,b)=>calcTotal(b)-calcTotal(a));const top=calcTotal(srt[0]);return(<div style={{padding:"0 14px 14px"}}><div style={{display:"flex",gap:8,marginBottom:12,flexWrap:"wrap"}}>{s.champion&&<div style={{background:RED,borderRadius:2,padding:"3px 10px",fontSize:11,color:"#fff",fontWeight:700}}>🏆 {s.champion}</div>}{s.confChampion&&<div style={{background:"#f5f5f5",border:"1px solid #ddd",borderRadius:2,padding:"3px 10px",fontSize:11,color:"#111",fontWeight:700}}>🏅 {s.confChampion}</div>}{s.heisman&&<div style={{background:"#fff8e8",border:"1px solid #ddd",borderRadius:2,padding:"3px 10px",fontSize:11,color:"#cc7700",fontWeight:700}}>🏈 {s.heisman}</div>}</div><table style={{width:"100%",borderCollapse:"collapse",fontSize:isMobile?11:13}}><thead><tr style={{borderBottom:`2px solid ${RED}`,background:"#f7f7f7"}}>{["#","User","Team","W","L","PTS","Behind"].map(h=><th key={h} style={{padding:"7px 6px",textAlign:h==="User"||h==="Team"?"left":"center",color:"#555",fontSize:9,letterSpacing:1,textTransform:"uppercase",fontWeight:800}}>{h}</th>)}</tr></thead><tbody>{srt.map((t,i)=>{const tot=calcTotal(t);return(<tr key={t.userName} style={{borderBottom:"1px solid #eee",background:i===0?"#fff8f8":"transparent"}}><td style={{padding:"8px 6px",textAlign:"center",color:i===0?RED:"#bbb",fontWeight:800,fontSize:13}}>{i+1}</td><td style={{padding:"8px 6px",color:"#111",fontWeight:i===0?800:400}}>{t.userName}</td><td style={{padding:"8px 6px",color:"#888",fontSize:12}}>{t.teamName}</td><td style={{padding:"8px 6px",textAlign:"center",color:"#007a00",fontWeight:700}}>{t.wins}</td><td style={{padding:"8px 6px",textAlign:"center",color:RED,fontWeight:700}}>{t.losses}</td><td style={{padding:"8px 6px",textAlign:"center",fontWeight:800,color:i===0?RED:"#111",fontSize:14}}>{tot}</td><td style={{padding:"8px 6px",textAlign:"center",color:i===0?"#007a00":RED,fontSize:12}}>{i===0?"LEAD":`-${top-tot}`}</td></tr>);})}</tbody></table></div>);})()}
       </Card>
     </div>
   );
@@ -340,6 +350,7 @@ export default function App() {
   const [pwErr,setPwErr] = useState(false);
   const [clicks,setClicks] = useState(0);
   const [commTab,setCommTab] = useState("Enter Results");
+  const isMobile = useIsMobile();
   const [articles,setArticles] = useState([]);
   const [activeArticle,setActiveArticle] = useState(null);
   const [dbLoading,setDbLoading] = useState(true);
@@ -510,29 +521,29 @@ export default function App() {
   return (
     <div style={{minHeight:"100vh",background:"#f0f0f0",color:"#111",fontFamily:ff}}>
       {/* Top black bar */}
-      <div style={{background:"#111",padding:"0 16px",height:44,display:"flex",alignItems:"center",gap:16,position:"sticky",top:0,zIndex:200}}>
-        <div style={{fontSize:24,fontWeight:900,color:"#fff",fontStyle:"italic",letterSpacing:-1}}>ESPN</div>
-        <div style={{width:1,height:20,background:"#444"}}/>
-        <div style={{fontSize:12,color:"#aaa",fontWeight:600,textTransform:"uppercase",letterSpacing:1,flex:1}}>{leagueName}</div>
-        <div style={{display:"flex",gap:14,alignItems:"center"}}>
-          {[["S",season],["Yr",START_YEAR+season-1],["Wk",week>12?"Post":week]].map(([l,v])=><div key={l} style={{textAlign:"center"}}><div style={{fontSize:8,color:"#888",letterSpacing:1,textTransform:"uppercase"}}>{l}</div><div style={{fontSize:15,fontWeight:900,color:"#fff",lineHeight:1}}>{v}</div></div>)}
+      <div style={{background:"#111",padding:"0 12px",height:44,display:"flex",alignItems:"center",gap:10,position:"sticky",top:0,zIndex:200}}>
+        <div style={{fontSize:22,fontWeight:900,color:"#fff",fontStyle:"italic",letterSpacing:-1,flexShrink:0}}>ESPN</div>
+        <div style={{width:1,height:20,background:"#444",flexShrink:0}}/>
+        <div style={{fontSize:isMobile?10:12,color:"#aaa",fontWeight:600,textTransform:"uppercase",letterSpacing:0.5,flex:1,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{leagueName}</div>
+        <div style={{display:"flex",gap:10,alignItems:"center",flexShrink:0}}>
+          {[["S",season],["Yr",START_YEAR+season-1],["Wk",week>12?"Post":week]].map(([l,v])=><div key={l} style={{textAlign:"center"}}><div style={{fontSize:7,color:"#888",letterSpacing:1,textTransform:"uppercase"}}>{l}</div><div style={{fontSize:14,fontWeight:900,color:"#fff",lineHeight:1}}>{v}</div></div>)}
         </div>
       </div>
       {/* Red section bar */}
-      <div style={{background:RED,padding:"0 16px",height:36,display:"flex",alignItems:"center",gap:4}}>
-        <span style={{fontSize:13,fontWeight:800,color:"#fff",marginRight:12}}>🏈 DYNASTY</span>
-        {["Standings","History","Profiles","Content","Rules"].map(t=><button key={t} onClick={()=>setTab(t)} style={{padding:"0 12px",height:36,background:tab===t?"rgba(255,255,255,0.15)":"transparent",border:"none",borderBottom:tab===t?"3px solid #fff":"3px solid transparent",color:"#fff",cursor:"pointer",fontSize:11,fontWeight:tab===t?800:400,fontFamily:ff,textTransform:"uppercase",letterSpacing:0.5,whiteSpace:"nowrap"}}>{t}</button>)}
+      <div style={{background:RED,padding:"0 8px",height:36,display:"flex",alignItems:"center",gap:0,overflowX:"auto"}}>
+        {!isMobile&&<span style={{fontSize:12,fontWeight:800,color:"#fff",marginRight:8,flexShrink:0}}>🏈</span>}
+        {["Standings","History","Profiles","Content","Rules"].map(t=><button key={t} onClick={()=>setTab(t)} style={{padding:"0 10px",height:36,background:tab===t?"rgba(255,255,255,0.15)":"transparent",border:"none",borderBottom:tab===t?"3px solid #fff":"3px solid transparent",color:"#fff",cursor:"pointer",fontSize:isMobile?10:11,fontWeight:tab===t?800:400,fontFamily:ff,textTransform:"uppercase",letterSpacing:0.3,whiteSpace:"nowrap",flexShrink:0}}>{t}</button>)}
       </div>
       {/* Ticker */}
-      <div style={{background:"#222",borderBottom:"1px solid #333",padding:"6px 16px",display:"flex",gap:0,overflowX:"auto",alignItems:"center"}}>
+      <div style={{background:"#222",borderBottom:"1px solid #333",padding:"5px 10px",display:"flex",gap:0,overflowX:"auto",alignItems:"center"}}>
         <span style={{fontSize:9,color:RED,fontWeight:800,textTransform:"uppercase",letterSpacing:1,marginRight:12,flexShrink:0}}>DYNASTY SCORES</span>
         {sorted.length===0&&<span style={{fontSize:11,color:"#888",fontStyle:"italic"}}>Season not yet started</span>}
         {sorted.map((t,i)=><div key={t.teamName} style={{display:"flex",alignItems:"center",gap:6,padding:"0 14px",borderRight:"1px solid #444",flexShrink:0}}><span style={{fontSize:10,fontWeight:800,color:i===0?RED:"#666",width:12}}>{i+1}</span><div><div style={{fontSize:11,fontWeight:700,color:"#fff",whiteSpace:"nowrap"}}>{t.teamName}</div></div><span style={{fontSize:12,fontWeight:900,color:i===0?"#e8c84a":"#ccc",marginLeft:4}}>{calcTotal(t)}</span></div>)}
       </div>
       {/* 3-col layout */}
-      <div style={{maxWidth:1180,margin:"0 auto",padding:"16px 12px",display:"grid",gridTemplateColumns:"200px 1fr 260px",gap:16,alignItems:"start"}}>
+      <div style={{maxWidth:1180,margin:"0 auto",padding:"12px 10px",display:"grid",gridTemplateColumns:isMobile?"1fr":"200px 1fr 260px",gap:12,alignItems:"start"}}>
         {/* Left sidebar */}
-        <div style={{display:"flex",flexDirection:"column",gap:12}}>
+        <div style={{display:isMobile?"none":"flex",flexDirection:"column",gap:12}}>
           <Card><CardHead>Dynasty Info</CardHead><div style={{padding:"8px 0"}}>{[["Season",season],["Year",START_YEAR+season-1],["Week",week>12?"Post":week],["Teams",entries.length]].map(([l,v])=><div key={l} style={{display:"flex",justifyContent:"space-between",padding:"6px 12px",borderBottom:"1px solid #f5f5f5"}}><span style={{fontSize:12,color:"#888"}}>{l}</span><span style={{fontSize:12,fontWeight:700,color:"#111"}}>{v}</span></div>)}</div></Card>
           <Card><CardHead>Quick Links</CardHead><div style={{padding:"4px 0"}}>{["Standings","History","Profiles","Content","Rules"].map(l=><div key={l} onClick={()=>setTab(l)} style={{padding:"8px 12px",fontSize:12,color:RED,cursor:"pointer",borderBottom:"1px solid #f5f5f5",fontWeight:500}}>🏈 {l}</div>)}</div></Card>
           <Card><CardHead bg={RED}>Points Leader</CardHead>{sorted.length===0?<div style={{padding:"14px 12px",textAlign:"center",color:"#bbb",fontSize:12}}>Not started</div>:sorted.slice(0,1).map(t=><div key={t.teamName} style={{padding:"14px 12px",textAlign:"center"}}><div style={{fontSize:26,fontWeight:900,color:RED}}>{calcTotal(t)}</div><div style={{fontSize:14,fontWeight:700,color:"#111",marginTop:2}}>{t.teamName}</div><div style={{fontSize:11,color:"#555",marginTop:4}}>{t.wins}W–{t.losses}L</div></div>)}</Card>
@@ -578,7 +589,7 @@ export default function App() {
           </div>}
         </div>
         {/* Right rail */}
-        <div style={{display:"flex",flexDirection:"column",gap:12}}>
+        <div style={{display:isMobile?"none":"flex",flexDirection:"column",gap:12}}>
           <Card><CardHead>Top Headlines</CardHead><div style={{padding:"4px 0"}}>
             {sorted.length===0&&<div style={{padding:"12px",fontSize:12,color:"#888",fontStyle:"italic"}}>No standings yet.</div>}
             {articles.slice(0,4).map(a=>(
