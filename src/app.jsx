@@ -89,6 +89,128 @@ function CardHead({children,bg="#111"}) {
   return <div style={{background:bg,padding:"8px 14px"}}><div style={{fontSize:11,fontWeight:800,color:"#fff",letterSpacing:1,textTransform:"uppercase"}}>{children}</div></div>;
 }
 
+// ── Schedule Panel ────────────────────────────────────────────────────────
+function SchedulePanel({entries,schedule,setSchedule}) {
+  const [editWeek,setEditWeek] = useState(1);
+  const [saved,setSaved] = useState(false);
+  const teamNames = (entries||[]).map(e=>e.teamName);
+  const WEEKS = Array.from({length:12},(_,i)=>i+1);
+  const OPPONENTS = ["BYE","CPU",...teamNames];
+
+  function setMatchup(wk,team,opp) {
+    setSchedule(prev=>{
+      const ns = {...prev,[wk]:{...(prev[wk]||{}),[team]:opp}};
+      if(opp!=="BYE"&&opp!=="CPU"&&teamNames.includes(opp)) ns[wk][opp]=team;
+      return ns;
+    });
+    setSaved(false);
+  }
+
+  function saveSchedule() {
+    setSchedule(curr=>{
+      fetch(`https://uyaqmdljwwslskoqxvpn.supabase.co/rest/v1/dynasty_state?id=eq.main`,{
+        method:"PATCH",
+        headers:{"Content-Type":"application/json","apikey":"sb_publishable_GNVG6TW43VXjW7IhWcBtmA_L_mMok1C","Authorization":"Bearer sb_publishable_GNVG6TW43VXjW7IhWcBtmA_L_mMok1C","Prefer":"return=minimal"},
+        body:JSON.stringify({schedule:curr,updated_at:new Date().toISOString()}),
+      }).then(()=>{setSaved(true);setTimeout(()=>setSaved(false),2500);}).catch(console.error);
+      return curr;
+    });
+  }
+
+  const getOpp=(wk,team)=>schedule[wk]?.[team]||"";
+  const countGames=team=>WEEKS.filter(w=>schedule[w]?.[team]&&schedule[w][team]!=="").length;
+  const confCount=team=>WEEKS.filter(w=>schedule[w]?.[team]&&schedule[w][team]!=="BYE"&&schedule[w][team]!=="CPU").length;
+  const cpuCount=team=>WEEKS.filter(w=>schedule[w]?.[team]&&schedule[w][team]==="CPU").length;
+
+  if(!teamNames.length) return (
+    <Card style={padding:20}><div style={color:"#888",fontSize:14,textAlign:"center"}>No teams found. Set up your league first in League Setup.</div></Card>
+  );
+
+  return (
+    <div style={display:"flex",flexDirection:"column",gap:16}>
+      <Card style={padding:16}>
+        <SL>Season Schedule Setup</SL>
+        <p style={fontSize:13,color:"#888",marginBottom:14,lineHeight:1.5}>Set each team's opponent for every week. Picking a dynasty team auto-fills both sides. Each team needs 10 conference + 2 CPU games.</p>
+
+        <div style={marginBottom:16}>
+          <div style={fontSize:11,fontWeight:700,color:"#555",letterSpacing:1,textTransform:"uppercase",marginBottom:8}>Schedule Progress</div>
+          <div style={display:"grid",gridTemplateColumns:"repeat(auto-fill,minmax(140px,1fr))",gap:6}>
+            {teamNames.map(t=>{
+              const g=countGames(t),c=confCount(t),cpu=cpuCount(t),done=g===12;
+              return(<div key={t} style={background:done?"#f0f8f0":"#f9f9f9",border:`1px solid ${done?"#cce5cc":"#eee"}`,borderRadius:3,padding:"7px 10px"}>
+                <div style={fontSize:12,fontWeight:700,color:"#111",overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}>{t}</div>
+                <div style={fontSize:10,color:done?"#007a00":"#888",marginTop:2}>{}/12 · {c} conf · {cpu} CPU</div>
+                <div style={background:"#eee",borderRadius:2,height:4,marginTop:4,overflow:"hidden"}><div style={width:`${(g/12)*100}%`,height:"100%",background:done?RED:"#ccc",borderRadius:2}/></div>
+              </div>);
+            })}
+          </div>
+        </div>
+
+        <div style={display:"flex",gap:6,flexWrap:"wrap",marginBottom:14}>
+          {WEEKS.map(w=>{
+            const set=teamNames.filter(t=>schedule[w]?.[t]).length;
+            const done=set===teamNames.length&&teamNames.length>0;
+            return(<button key={w} onClick={()=>setEditWeek(w)} style={padding:"5px 12px",borderRadius:2,border:"1px solid",borderColor:editWeek===w?RED:done?"#cce5cc":"#ddd",background:editWeek===w?RED:done?"#f0f8f0":"#fff",color:editWeek===w?"#fff":done?"#007a00":"#555",cursor:"pointer",fontSize:12,fontWeight:700,fontFamily:ff}>Wk {w}</button>);
+          })}
+        </div>
+
+        <div style={background:"#f9f9f9",border:"1px solid #eee",borderRadius:3,padding:14,marginBottom:14}>
+          <div style={fontSize:12,fontWeight:800,color:"#111",marginBottom:10,textTransform:"uppercase",letterSpacing:0.5}>Week {editWeek} Matchups</div>
+          <div style={display:"flex",flexDirection:"column",gap:6}>
+            {teamNames.map(team=>{
+              const opp=getOpp(editWeek,team);
+              const autoSet=opp&&opp!=="BYE"&&opp!=="CPU"&&teamNames.includes(opp)&&getOpp(editWeek,opp)===team;
+              return(
+                <div key={team} style={display:"flex",alignItems:"center",gap:10,padding:"8px 12px",background:"#fff",border:"1px solid #eee",borderRadius:2}>
+                  <div style={width:130,fontSize:13,fontWeight:600,color:"#111",flexShrink:0}>{team}</div>
+                  <div style={fontSize:11,color:"#aaa",flexShrink:0}>vs</div>
+                  <select value={opp} onChange={e=>setMatchup(editWeek,team,e.target.value)} disabled={autoSet&&opp!=="BYE"&&opp!=="CPU"} style={flex:1,background:autoSet?"#f0f8f0":"#fff",border:"1px solid #ddd",borderRadius:2,padding:"5px 8px",fontFamily:ff,fontSize:12,color:opp?"#111":"#aaa"}>
+                    <option value="">-- Not set --</option>
+                    {OPPONENTS.filter(o=>o!==team).map(o=><option key={o} value={o}>{o==="BYE"?"🏖️ BYE WEEK":o==="CPU"?"💻 CPU (non-conf)":o}</option>)}
+                  </select>
+                  {autoSet&&<span style={fontSize:10,color:"#007a00",flexShrink:0,fontWeight:600}>✓ Auto</span>}
+                </div>
+              );
+            })}
+          </div>
+        </div>
+
+        <div style={display:"flex",gap:10,alignItems:"center"}>
+          <button onClick={saveSchedule} style={background:RED,color:"#fff",border:"none",borderRadius:2,padding:"11px 22px",cursor:"pointer",fontFamily:ff,fontSize:13,fontWeight:800,textTransform:"uppercase"}>💾 Save Schedule</button>
+          {saved&&<div style={fontSize:12,color:"#007a00",fontWeight:700}>✓ Saved!</div>}
+        </div>
+      </Card>
+
+      {teamNames.length>0&&Object.keys(schedule).length>0&&(
+        <Card style={overflow:"hidden"}>
+          <CardHead>Full Schedule Grid</CardHead>
+          <div style={overflowX:"auto",padding:14}>
+            <table style={borderCollapse:"collapse",fontSize:11,width:"100%"}>
+              <thead><tr style={borderBottom:`2px solid ${RED}`}>
+                <th style={padding:"6px 10px",textAlign:"left",color:"#555",fontWeight:800,textTransform:"uppercase",letterSpacing:1,whiteSpace:"nowrap"}>Team</th>
+                {WEEKS.map(w=><th key={w} style={padding:"6px 8px",textAlign:"center",color:"#555",fontWeight:800,textTransform:"uppercase",letterSpacing:1,whiteSpace:"nowrap"}>W{w}</th>)}
+              </tr></thead>
+              <tbody>
+                {teamNames.map((team,i)=>(
+                  <tr key={team} style={borderBottom:"1px solid #eee",background:i%2===0?"#fafafa":"#fff"}>
+                    <td style={padding:"7px 10px",fontWeight:700,color:"#111",whiteSpace:"nowrap"}>{team}</td>
+                    {WEEKS.map(w=>{
+                      const o=schedule[w]?.[team]||"";
+                      return(<td key={w} style={padding:"7px 8px",textAlign:"center",whiteSpace:"nowrap"}>
+                        {o==="BYE"?<span style={fontSize:10,color:"#aaa"}>BYE</span>:o==="CPU"?<span style={fontSize:10,color:"#888",fontWeight:600}>CPU</span>:o?<span style={fontSize:10,color:"#111",fontWeight:500}>{o.split(" ")[0]}</span>:<span style={color:"#ddd"}>—</span>}
+                      </td>);
+                    })}
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        </Card>
+      )}
+    </div>
+  );
+}
+
 // ── History Tab ───────────────────────────────────────────────────────────
 function HistoryTab({history}) {
   const [sel,setSel] = useState(null);
