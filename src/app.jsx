@@ -343,7 +343,7 @@ const REPORTERS = [
 ];
 
 // ── Content Hub Tab ───────────────────────────────────────────────────────
-function ContentHub({sorted,entries,week,season,leagueName,history,leader,articles,setArticles,setActiveArticle}) {
+function ContentHub({sorted,entries,week,season,leagueName,history,leader,articles,setArticles,setActiveArticle,schedule}) {
   const [generating,setGenerating] = useState(null);
   const [selectedReporter,setSelectedReporter] = useState(0);
   const [contentType,setContentType] = useState("powerrankings");
@@ -725,8 +725,8 @@ export default function App() {
             <div style={{fontSize:11,color:"#888",marginTop:3}}>{leagueName} · Season {season} · {START_YEAR+season-1} · {week>12?"Post-Season":`Week ${week}`}</div>
           </Card>
 
-          {tab==="Standings"&&<>
-          {schedule[week]&&Object.keys(schedule[week]).length>0&&<Card style={{overflow:"hidden"}}>
+          {tab==="Standings"&&(<>
+          {schedule&&schedule[week]&&Object.keys(schedule[week]).length>0&&<Card style={{overflow:"hidden"}}>
             <CardHead bg="#1a3a6b">This Week's Matchups — Week {week}</CardHead>
             <div style={{padding:"8px 14px",display:"flex",flexDirection:"column",gap:0}}>
               {(()=>{const seen=new Set();const games=[];Object.entries(schedule[week]).forEach(([team,opp])=>{const key=[team,opp].sort().join("|");if(!seen.has(key)){seen.add(key);games.push({team,opp});}});return games.map(({team,opp},i)=>(
@@ -762,7 +762,8 @@ export default function App() {
               </tr>);})}</tbody>
             </table></div>}
           </Card>}
-          </> }
+          </>)
+          }
 
           {tab==="History"&&<HistoryTab history={history}/>}
           {tab==="Profiles"&&<ProfileTab history={history} setupRows={setup?.rows||[]} currentEntries={entries} season={season}/>}
@@ -857,7 +858,7 @@ export default function App() {
         </div>
         <div style={{maxWidth:800,margin:"0 auto",padding:"20px 14px"}}>
           {commTab==="Enter Results"&&<EnterResultsPanel entries={entries} weekResults={weekResults} setWeekResults={setWeekResults} week={week} imageFile={imageFile} imagePreview={imagePreview} processingImage={processingImage} imageResult={imageResult} parsedFromImage={parsedFromImage} handleImageUpload={handleImageUpload} processImage={processImage} applyImageResults={applyImageResults} setParsedFromImage={setParsedFromImage} applyWeekResults={applyWeekResults} postSeasonInputs={postSeasonInputs} setPSI={setPSI} applyPostSeason={applyPostSeason} finalizeSeason={finalizeSeason} season={season} teamNames={teamNames} schedule={schedule}/>}
-          {commTab==="Schedule"&&<SchedulePanel entries={entries} schedule={schedule} setSchedule={setSchedule} saveToDb={saveToDb}/>}
+          {commTab==="Schedule"&&<SchedulePanel entries={entries} schedule={schedule} setSchedule={setSchedule}/>}
           {commTab==="Content"&&<ContentHub sorted={sorted} entries={entries} week={week} season={season} leagueName={leagueName} history={history} leader={leader} articles={articles} setArticles={setArticles} setActiveArticle={setActiveArticle} schedule={schedule}/>}
           {commTab==="League Setup"&&<SetupPanel entries={entries} setup={setup} postSeasonInputs={postSeasonInputs} setPSI={setPSI} handleStart={handleStart} setCommissionerUnlocked={setCommUnlocked} season={season} setEntries={setEntries} setWeekResults={setWeekResults} setSetup={setSetup}/>}
         </div>
