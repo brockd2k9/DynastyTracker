@@ -201,7 +201,7 @@ Write like ESPN College GameDay. Make it feel like must-watch television.`;
               <div style={{flex:1,textAlign:"center"}}>
                 <div style={{fontSize:22,fontWeight:900,color:"#111"}}>{gameOfWeek.team1}</div>
                 <div style={{fontSize:11,color:"#888",marginTop:3}}>#{gameOfWeek.rank1} in Dynasty</div>
-                <div style={{fontSize:12,color:"#555",marginTop:2}}>{sorted.find(t=>t.teamName===gameOfWeek.team1)?.wins||0}W – {sorted.find(t=>t.teamName===gameOfWeek.team1)?.losses||0}L</div>
+                <div style={{fontSize:12,color:"#555",marginTop:2}}>{sorted.find(t=>t.teamName===gameOfWeek.team1)?.wins||0}W-{sorted.find(t=>t.teamName===gameOfWeek.team1)?.losses||0}L</div>
               </div>
               <div style={{padding:"0 16px",textAlign:"center"}}>
                 <div style={{fontSize:13,fontWeight:900,color:"#1a3a6b",letterSpacing:2}}>VS</div>
@@ -210,7 +210,7 @@ Write like ESPN College GameDay. Make it feel like must-watch television.`;
               <div style={{flex:1,textAlign:"center"}}>
                 <div style={{fontSize:22,fontWeight:900,color:"#111"}}>{gameOfWeek.team2}</div>
                 <div style={{fontSize:11,color:"#888",marginTop:3}}>#{gameOfWeek.rank2} in Dynasty</div>
-                <div style={{fontSize:12,color:"#555",marginTop:2}}>{sorted.find(t=>t.teamName===gameOfWeek.team2)?.wins||0}W – {sorted.find(t=>t.teamName===gameOfWeek.team2)?.losses||0}L</div>
+                <div style={{fontSize:12,color:"#555",marginTop:2}}>{sorted.find(t=>t.teamName===gameOfWeek.team2)?.wins||0}W-{sorted.find(t=>t.teamName===gameOfWeek.team2)?.losses||0}L</div>
               </div>
             </div>
             {existingGOTW&&<div style={{marginTop:12,padding:"10px 14px",background:"#f0f4ff",borderRadius:2,border:"1px solid #c5d0e8",fontSize:13,color:"#333",lineHeight:1.5,cursor:"pointer"}} onClick={()=>setActiveArticle(existingGOTW)}>
@@ -455,7 +455,7 @@ function ProfileTab({history,setupRows,currentEntries,season}) {
       </div>
       {profile&&user&&<Card style={{borderTop:`3px solid ${RED}`,overflow:"hidden"}}>
         <div style={{background:"#f7f7f7",padding:"14px 18px",display:"flex",justifyContent:"space-between",alignItems:"flex-start",flexWrap:"wrap",gap:10}}>
-          <div><div style={{fontSize:22,fontWeight:900,color:"#111"}}>{user.userName.toUpperCase()}</div><div style={{fontSize:12,color:"#888",marginTop:2}}>{user.teamName} · {profile.totalWins}W–{profile.totalLosses}L · {profile.winPct}%</div><div style={{display:"flex",gap:6,marginTop:8,flexWrap:"wrap"}}>{profile.championships>0&&<div style={{background:RED,borderRadius:2,padding:"2px 8px",fontSize:10,color:"#fff",fontWeight:700}}>🏆 {profile.championships}×</div>}{profile.confTitles>0&&<div style={{background:"#333",borderRadius:2,padding:"2px 8px",fontSize:10,color:"#fff",fontWeight:700}}>🏅 {profile.confTitles}×</div>}{profile.curStreak>1&&<div style={{background:profile.curStreakType==="win"?"#e8f5e8":"#fff0f0",border:`1px solid ${profile.curStreakType==="win"?"#007a00":RED}`,borderRadius:2,padding:"2px 8px",fontSize:10,color:profile.curStreakType==="win"?"#007a00":RED,fontWeight:700}}>{profile.curStreakType==="win"?"🔥":"❄️"} {profile.curStreak} STREAK</div>}</div></div>
+          <div><div style={{fontSize:22,fontWeight:900,color:"#111"}}>{user.userName.toUpperCase()}</div><div style={{fontSize:12,color:"#888",marginTop:2}}>{user.teamName} · {profile.totalWins}W-{profile.totalLosses}L · {profile.winPct}%</div><div style={{display:"flex",gap:6,marginTop:8,flexWrap:"wrap"}}>{profile.championships>0&&<div style={{background:RED,borderRadius:2,padding:"2px 8px",fontSize:10,color:"#fff",fontWeight:700}}>🏆 {profile.championships}×</div>}{profile.confTitles>0&&<div style={{background:"#333",borderRadius:2,padding:"2px 8px",fontSize:10,color:"#fff",fontWeight:700}}>🏅 {profile.confTitles}×</div>}{profile.curStreak>1&&<div style={{background:profile.curStreakType==="win"?"#e8f5e8":"#fff0f0",border:`1px solid ${profile.curStreakType==="win"?"#007a00":RED}`,borderRadius:2,padding:"2px 8px",fontSize:10,color:profile.curStreakType==="win"?"#007a00":RED,fontWeight:700}}>{profile.curStreakType==="win"?"🔥":"❄️"} {profile.curStreak} STREAK</div>}</div></div>
         </div>
         <div style={{display:"flex",borderBottom:"1px solid #eee",background:"#fff",overflowX:"auto"}}>
           {["overview","seasons","h2h","streaks","points"].map(t=><button key={t} onClick={()=>setPTab(t)} style={{padding:"10px 14px",background:"transparent",border:"none",borderBottom:pTab===t?`3px solid ${RED}`:"3px solid transparent",color:pTab===t?"#111":"#888",cursor:"pointer",fontSize:11,fontWeight:700,fontFamily:ff,textTransform:"uppercase",letterSpacing:0.5,whiteSpace:"nowrap"}}>{t==="h2h"?"H2H Records":t}</button>)}
@@ -1014,7 +1014,7 @@ export default function App() {
         {!isMobile&&<div style={{display:"flex",flexDirection:"column",gap:12}}>
           <Card><CardHead>Dynasty Info</CardHead><div style={{padding:"8px 0"}}>{[["Season",season],["Year",START_YEAR+season-1],["Week",week>12?"Post":week],["Teams",entries.length]].map(([l,v])=><div key={l} style={{display:"flex",justifyContent:"space-between",padding:"6px 12px",borderBottom:"1px solid #f5f5f5"}}><span style={{fontSize:12,color:"#888"}}>{l}</span><span style={{fontSize:12,fontWeight:700,color:"#111"}}>{v}</span></div>)}</div></Card>
           <Card><CardHead>Quick Links</CardHead><div style={{padding:"4px 0"}}>{["Standings","History","Profiles","Rules"].map(l=><div key={l} onClick={()=>setTab(l)} style={{padding:"8px 12px",fontSize:12,color:RED,cursor:"pointer",borderBottom:"1px solid #f5f5f5",fontWeight:500}}>🏈 {l}</div>)}</div></Card>
-          <Card><CardHead bg={RED}>Points Leader</CardHead>{sorted.length===0?<div style={{padding:"14px 12px",textAlign:"center",color:"#bbb",fontSize:12}}>Not started</div>:sorted.slice(0,1).map(t=><div key={t.teamName} style={{padding:"14px 12px",textAlign:"center"}}><div style={{fontSize:26,fontWeight:900,color:RED}}>{calcTotal(t)}</div><div style={{fontSize:14,fontWeight:700,color:"#111",marginTop:2}}>{t.teamName}</div><div style={{fontSize:11,color:"#555",marginTop:4}}>{t.wins}W–{t.losses}L</div></div>)}</Card>
+          <Card><CardHead bg={RED}>Points Leader</CardHead>{sorted.length===0?<div style={{padding:"14px 12px",textAlign:"center",color:"#bbb",fontSize:12}}>Not started</div>:sorted.slice(0,1).map(t=><div key={t.teamName} style={{padding:"14px 12px",textAlign:"center"}}><div style={{fontSize:26,fontWeight:900,color:RED}}>{calcTotal(t)}</div><div style={{fontSize:14,fontWeight:700,color:"#111",marginTop:2}}>{t.teamName}</div><div style={{fontSize:11,color:"#555",marginTop:4}}>{t.wins}W-{t.losses}L</div></div>)}</Card>
         </div>}
 
         {/* Center content */}
@@ -1059,7 +1059,7 @@ export default function App() {
                         <td style={{padding:isMobile?"8px 6px":"10px 7px",textAlign:"center",fontWeight:900,fontSize:isMobile?13:14,color:i===0?RED:"#bbb",borderRight:"1px solid #eee"}}>{i+1}</td>
                         <td style={{padding:isMobile?"8px 6px":"10px 7px",fontWeight:i===0?800:600,color:"#111",whiteSpace:"nowrap",borderRight:"1px solid #eee",maxWidth:isMobile?90:140,overflow:"hidden",textOverflow:"ellipsis"}}>{t.teamName}</td>
                         <td style={{padding:isMobile?"8px 6px":"10px 7px",textAlign:"center",fontWeight:900,color:i===0?RED:"#111",fontSize:isMobile?14:16,background:i===0?"#fff0f0":"transparent",borderRight:"2px solid #ddd"}}>{tot}</td>
-                        <td style={{padding:isMobile?"8px 6px":"10px 7px",textAlign:"center",color:beh===0?"#007a00":RED,fontWeight:700,fontSize:isMobile?11:12,borderRight:isMobile?"none":"2px solid #ddd",whiteSpace:"nowrap"}}>{beh===0?"–":isMobile?`-${beh}`:`-${beh}`}</td>
+                        <td style={{padding:isMobile?"8px 6px":"10px 7px",textAlign:"center",color:beh===0?"#007a00":RED,fontWeight:700,fontSize:isMobile?11:12,borderRight:isMobile?"none":"2px solid #ddd",whiteSpace:"nowrap"}}>{beh===0?"-":isMobile?`-${beh}`:`-${beh}`}</td>
                         {!isMobile&&<><td style={{padding:"10px 7px",textAlign:"center",color:"#007a00",fontWeight:700,borderRight:"1px solid #eee"}}>{t.wins}</td>
                         <td style={{padding:"10px 7px",textAlign:"center",color:RED,fontWeight:700,borderRight:"1px solid #eee"}}>{t.losses}</td>
                         <td style={{padding:"10px 7px",textAlign:"center",borderRight:"1px solid #eee"}}>{t.gamePts}</td>
@@ -1120,7 +1120,7 @@ export default function App() {
               </div>
             ))}
             {articles.length===0&&<>
-              {sorted.slice(0,3).map((t,i)=><div key={t.teamName} style={{padding:"9px 12px",borderBottom:"1px solid #f0f0f0"}}><div style={{fontSize:12,fontWeight:700,color:"#111",lineHeight:1.4}}>{i===0?"🏆":i===1?"📈":"📊"} {t.teamName} leads with {calcTotal(t)} pts</div><div style={{fontSize:10,color:"#888",marginTop:2}}>{t.wins}W–{t.losses}L</div></div>)}
+              {sorted.slice(0,3).map((t,i)=><div key={t.teamName} style={{padding:"9px 12px",borderBottom:"1px solid #f0f0f0"}}><div style={{fontSize:12,fontWeight:700,color:"#111",lineHeight:1.4}}>{i===0?"🏆":i===1?"📈":"📊"} {t.teamName} leads with {calcTotal(t)} pts</div><div style={{fontSize:10,color:"#888",marginTop:2}}>{t.wins}W-{t.losses}L</div></div>)}
               <div style={{padding:"9px 12px",borderBottom:"1px solid #f0f0f0"}}><div style={{fontSize:11,color:"#888",fontStyle:"italic"}}>Generate content to see articles here</div></div>
             </>}
             <div style={{padding:"9px 12px"}}><div style={{fontSize:12,fontWeight:700,color:"#111"}}>📅 {week>12?"Post-Season":`Week ${week}`} · Season {season}</div><div style={{fontSize:10,color:"#888",marginTop:2}}>{entries.length} teams</div></div>
