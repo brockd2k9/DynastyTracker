@@ -39,7 +39,8 @@ const START_YEAR = 2025;
 const PASS = "RatedRKO99";
 const MODEL = "claude-sonnet-4-20250514";
 const API_URL = "https://api.anthropic.com/v1/messages";
-const HEADERS = {"Content-Type":"application/json","anthropic-dangerous-direct-browser-access":"true"};
+const ANTH_KEY = import.meta.env.VITE_ANTHROPIC_KEY || "";
+const HEADERS = {"Content-Type":"application/json","anthropic-dangerous-direct-browser-access":"true","x-api-key":ANTH_KEY,"anthropic-version":"2023-06-01"};
 
 const INITIAL_ENTRY = (userName, teamName) => ({
   userName, teamName, wins:0, losses:0,
@@ -54,9 +55,15 @@ function calcTotal(t) {
 }
 
 async function callClaude(prompt) {
+  if (!ANTH_KEY) throw new Error("No API key found. Add VITE_ANTHROPIC_KEY to Netlify environment variables.");
   const r = await fetch(API_URL,{method:"POST",headers:HEADERS,body:JSON.stringify({model:MODEL,max_tokens:1200,messages:[{role:"user",content:prompt}]})});
+  if (!r.ok) {
+    const err = await r.json().catch(()=>({}));
+    throw new Error(err?.error?.message || `API error ${r.status}`);
+  }
   const d = await r.json();
-  return d.content?.filter(b=>b.type==="text").map(b=>b.text).join("")||"Error generating content.";
+  if (d.error) throw new Error(d.error.message);
+  return d.content?.filter(b=>b.type==="text").map(b=>b.text).join("")||"No content returned.";
 }
 
 const ff = "'Helvetica Neue',Arial,sans-serif";
@@ -309,7 +316,7 @@ function ContentHub({sorted,entries,week,season,leagueName,history,leader,articl
       setArticles(newArticles);
       dbSave({articles: newArticles});
     } catch(e) {
-      alert("Error generating content. Check your API connection.");
+      alert("Error: " + e.message);
     }
     setGenerating(null);
   }
@@ -488,7 +495,8 @@ export default function App() {
       setImageResult("Reading image...");
       const base64=await new Promise((res,rej)=>{const r=new FileReader();r.onload=ev=>res(ev.target.result.split(",")[1]);r.onerror=()=>rej(new Error("Read failed"));r.readAsDataURL(imageFile);});
       setImageResult("Sending to Claude...");
-      const response=await fetch(API_URL,{method:"POST",headers:HEADERS,body:JSON.stringify({model:MODEL,max_tokens:1000,messages:[{role:"user",content:[{type:"image",source:{type:"base64",media_type:imageFile.type||"image/jpeg",data:base64}},{type:"text",text:`CF27 Scores screen. Dynasty teams: ${teamList}. For each visible team determine win/loss from score. Return ONLY raw JSON array:\n[{"teamName":"Troy","result":"win","ranked25":false,"ranked10":false}]\nOnly include dynasty teams you can see.`}]}]})});
+      const imgHeaders = {...HEADERS};
+      const response=await fetch(API_URL,{method:"POST",headers:imgHeaders,body:JSON.stringify({model:MODEL,max_tokens:1000,messages:[{role:"user",content:[{type:"image",source:{type:"base64",media_type:imageFile.type||"image/jpeg",data:base64}},{type:"text",text:`CF27 Scores screen. Dynasty teams: ${teamList}. For each visible team determine win/loss from score. Return ONLY raw JSON array:\n[{"teamName":"Troy","result":"win","ranked25":false,"ranked10":false}]\nOnly include dynasty teams you can see.`}]}]})});
       if(!response.ok){const t=await response.text();setImageResult(`❌ API error ${response.status}: ${t.slice(0,200)}`);setProcessingImage(false);return;}
       const data=await response.json();if(data.error){setImageResult(`❌ ${data.error.message}`);setProcessingImage(false);return;}
       const text=data.content?.filter(b=>b.type==="text").map(b=>b.text).join("")||"";
