@@ -975,14 +975,14 @@ export default function App() {
       </div>
 
       {/* Nav tabs */}
-      <div style={{background:RED,display:"flex",alignItems:"center",overflowX:"auto",WebkitOverflowScrolling:"touch"}}>
+      <div style={{background:RED,display:"flex",alignItems:"center",overflowX:"auto"}}>
         {["Standings","History","Profiles","Rules"].map(t=>(
           <button key={t} onClick={()=>setTab(t)} style={{flex:isMobile?"1 0 auto":"none",padding:isMobile?"0 12px":"0 14px",height:40,background:tab===t?"rgba(255,255,255,0.18)":"transparent",border:"none",borderBottom:tab===t?"3px solid #fff":"3px solid transparent",color:"#fff",cursor:"pointer",fontSize:isMobile?11:11,fontWeight:tab===t?800:500,fontFamily:ff,textTransform:"uppercase",letterSpacing:0.5,whiteSpace:"nowrap"}}>{t}</button>
         ))}
       </div>
 
       {/* Scores ticker */}
-      <div style={{background:"#1a1a1a",borderBottom:"2px solid #cc0000",padding:isMobile?"5px 10px":"6px 16px",display:"flex",gap:0,overflowX:"auto",alignItems:"center",WebkitOverflowScrolling:"touch"}}>
+      <div style={{background:"#1a1a1a",borderBottom:"2px solid #cc0000",padding:isMobile?"5px 10px":"6px 16px",display:"flex",gap:0,overflowX:"auto",alignItems:"center"}}>
         <span style={{fontSize:8,color:RED,fontWeight:800,textTransform:"uppercase",letterSpacing:1.5,marginRight:10,flexShrink:0}}>SCORES</span>
         {sorted.length===0&&<span style={{fontSize:11,color:"#666",fontStyle:"italic"}}>Season not started</span>}
         {sorted.map((t,i)=>(
@@ -996,7 +996,7 @@ export default function App() {
 
       {/* Mobile top strip - quick stats */}
       {isMobile&&sorted.length>0&&(
-        <div style={{background:"#fff",borderBottom:"1px solid #eee",padding:"10px 12px",display:"flex",gap:0,overflowX:"auto",WebkitOverflowScrolling:"touch"}}>
+        <div style={{background:"#fff",borderBottom:"1px solid #eee",padding:"10px 12px",display:"flex",gap:0,overflowX:"auto"}}>
           {sorted.slice(0,6).map((t,i)=>(
             <div key={t.teamName} style={{flexShrink:0,textAlign:"center",padding:"0 10px",borderRight:"1px solid #f0f0f0",minWidth:60}}>
               <div style={{fontSize:9,color:i===0?RED:"#aaa",fontWeight:800,textTransform:"uppercase"}}>{i===0?"LEAD":`#${i+1}`}</div>
@@ -1047,7 +1047,7 @@ export default function App() {
               <CardHead>Current Standings</CardHead>
               {!entries.length
                 ?<div style={{padding:"40px 20px",textAlign:"center"}}><div style={{fontSize:36,marginBottom:12}}>🏈</div><div style={{fontSize:16,fontWeight:900,color:"#111",marginBottom:6}}>Season Starting Soon</div><div style={{fontSize:12,color:"#888"}}>The commissioner is setting up the dynasty.</div></div>
-                :<div style={{overflowX:"auto",WebkitOverflowScrolling:"touch"}}>
+                :<div style={{overflowX:"auto"}}>
                   <table style={{width:"100%",borderCollapse:"collapse",fontSize:isMobile?12:13}}>
                     <thead><tr style={{background:"#f7f7f7",borderBottom:`2px solid ${RED}`}}>
                       {(isMobile?["RK","SCHOOL","PTS","BACK","W","L"]:["RK","SCHOOL","PTS","BACK","W","L","GAME","BONUS","CONF","CC","BOWL","REC","AWD"]).map(h=>(
