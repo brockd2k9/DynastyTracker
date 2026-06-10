@@ -519,7 +519,7 @@ export default function App() {
   );
 
   return (
-    <div style={{minHeight:"100vh",background:"#f0f0f0",color:"#111",fontFamily:ff}}>
+    <div style={{minHeight:"100vh",background:"#f0f0f0",color:"#111",fontFamily:ff,overflowX:"hidden",maxWidth:"100vw"}}>
       {/* Top black bar */}
       <div style={{background:"#111",padding:"0 12px",height:44,display:"flex",alignItems:"center",gap:10,position:"sticky",top:0,zIndex:200}}>
         <div style={{fontSize:22,fontWeight:900,color:"#fff",fontStyle:"italic",letterSpacing:-1,flexShrink:0}}>ESPN</div>
@@ -560,7 +560,7 @@ export default function App() {
             {!entries.length?<div style={{padding:"40px 20px",textAlign:"center"}}><div style={{fontSize:36,marginBottom:12}}>🏈</div><div style={{fontSize:16,fontWeight:900,color:"#111",marginBottom:6}}>Season Starting Soon</div><div style={{fontSize:12,color:"#888"}}>The commissioner is setting up the dynasty.</div></div>:
             <div style={{overflowX:"auto"}}><table style={{width:"100%",borderCollapse:"collapse",fontSize:13}}>
               <thead><tr style={{background:"#f7f7f7",borderBottom:`2px solid ${RED}`}}>
-                {["RK","School","PTS","BACK","W","L","Game","Bonus","Conf","CC","Bowl","Rec","Awards"].map(h=><th key={h} style={{padding:"9px 7px",textAlign:h==="School"?"left":"center",color:"#555",fontSize:9,letterSpacing:1.5,textTransform:"uppercase",fontWeight:800,whiteSpace:"nowrap",borderRight:"1px solid #eee"}}>{h}</th>)}
+                {(isMobile?["RK","School","PTS","BACK","W","L"]:["RK","School","PTS","BACK","W","L","Game","Bonus","Conf","CC","Bowl","Rec","Awards"]).map(h=><th key={h} style={{padding:"9px 7px",textAlign:h==="School"?"left":"center",color:"#555",fontSize:9,letterSpacing:1.5,textTransform:"uppercase",fontWeight:800,whiteSpace:"nowrap",borderRight:"1px solid #eee"}}>{h}</th>)}
               </tr></thead>
               <tbody>{sorted.map((t,i)=>{const tot=calcTotal(t);const beh=leader-tot;return(<tr key={t.teamName} style={{borderBottom:"1px solid #eee",background:i===0?"#fff8f8":i%2===0?"#fafafa":"#fff"}}>
                 <td style={{padding:"10px 7px",textAlign:"center",fontWeight:900,fontSize:14,color:i===0?RED:"#bbb",borderRight:"1px solid #eee"}}>{i+1}</td>
@@ -568,14 +568,14 @@ export default function App() {
                 <td style={{padding:"10px 7px",textAlign:"center",fontWeight:900,color:i===0?RED:"#111",fontSize:16,background:i===0?"#fff0f0":"transparent",borderRight:"2px solid #ddd"}}>{tot}</td>
                 <td style={{padding:"10px 7px",textAlign:"center",color:beh===0?"#007a00":RED,fontWeight:700,fontSize:12,borderRight:"2px solid #ddd"}}>{beh===0?"LEADER":`-${beh}`}</td>
                 <td style={{padding:"10px 7px",textAlign:"center",color:"#007a00",fontWeight:700,borderRight:"1px solid #eee"}}>{t.wins}</td>
-                <td style={{padding:"10px 7px",textAlign:"center",color:RED,fontWeight:700,borderRight:"1px solid #eee"}}>{t.losses}</td>
-                <td style={{padding:"10px 7px",textAlign:"center",borderRight:"1px solid #eee"}}>{t.gamePts}</td>
+                <td style={{padding:"10px 7px",textAlign:"center",color:RED,fontWeight:700,borderRight:isMobile?"none":"1px solid #eee"}}>{t.losses}</td>
+                {!isMobile&&<><td style={{padding:"10px 7px",textAlign:"center",borderRight:"1px solid #eee"}}>{t.gamePts}</td>
                 <td style={{padding:"10px 7px",textAlign:"center",color:"#cc7700",fontWeight:700,borderRight:"1px solid #eee"}}>{t.rankedBonusPts>0?`+${t.rankedBonusPts}`:"—"}</td>
                 <td style={{padding:"10px 7px",textAlign:"center",borderRight:"1px solid #eee"}}>{t.confStandPts}</td>
                 <td style={{padding:"10px 7px",textAlign:"center",borderRight:"1px solid #eee"}}>{t.confChampPts}</td>
                 <td style={{padding:"10px 7px",textAlign:"center",borderRight:"1px solid #eee"}}>{t.bowlPts}</td>
                 <td style={{padding:"10px 7px",textAlign:"center",borderRight:"1px solid #eee"}}>{t.recruitingPts}</td>
-                <td style={{padding:"10px 7px",textAlign:"center"}}>{t.prestigePts+t.heismanPts}</td>
+                <td style={{padding:"10px 7px",textAlign:"center"}}>{t.prestigePts+t.heismanPts}</td></>}
               </tr>);})}</tbody>
             </table></div>}
           </Card>}
