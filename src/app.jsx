@@ -212,19 +212,19 @@ function WeekMatchupsCard({schedule,week,sorted,leagueName,season,setActiveArtic
               : <button onClick={generateGOTWPreview} disabled={generating} style={{background:generating?"rgba(255,255,255,0.1)":"rgba(255,255,255,0.2)",border:"1px solid rgba(255,255,255,0.4)",color:"#fff",borderRadius:2,padding:"5px 12px",cursor:generating?"not-allowed":"pointer",fontSize:11,fontWeight:700,fontFamily:"'Helvetica Neue',Arial,sans-serif",textTransform:"uppercase"}}>{generating?"Writing...":"Generate Preview"}</button>
             }
           </div>
-          <div style={{padding:"16px 18px"}}>
-            <div style={{display:"flex",alignItems:"center",gap:0}}>
-              <div style={{flex:1,textAlign:"center"}}>
-                <div style={{fontSize:22,fontWeight:900,color:"#111"}}>{gameOfWeek.team1}</div>
+          <div style={{padding:"14px 16px"}}>
+            <div style={{display:"flex",alignItems:"center",gap:0,width:"100%",boxSizing:"border-box"}}>
+              <div style={{flex:1,textAlign:"center",minWidth:0,overflow:"hidden"}}>
+                <div style={{fontSize:18,fontWeight:900,color:"#111",wordBreak:"break-word",lineHeight:1.2}}>{gameOfWeek.team1}</div>
                 <div style={{fontSize:11,color:"#888",marginTop:3}}>#{gameOfWeek.rank1} in Dynasty</div>
                 <div style={{fontSize:12,color:"#555",marginTop:2}}>{sorted.find(t=>t.teamName===gameOfWeek.team1)?.wins||0}W-{sorted.find(t=>t.teamName===gameOfWeek.team1)?.losses||0}L</div>
               </div>
-              <div style={{padding:"0 16px",textAlign:"center"}}>
+              <div style={{padding:"0 12px",textAlign:"center",flexShrink:0}}>
                 <div style={{fontSize:13,fontWeight:900,color:"#1a3a6b",letterSpacing:2}}>VS</div>
-                <div style={{fontSize:10,color:"#aaa",marginTop:4,fontWeight:600}}>Conference</div>
+                <div style={{fontSize:10,color:"#aaa",marginTop:4,fontWeight:600}}>Conf</div>
               </div>
-              <div style={{flex:1,textAlign:"center"}}>
-                <div style={{fontSize:22,fontWeight:900,color:"#111"}}>{gameOfWeek.team2}</div>
+              <div style={{flex:1,textAlign:"center",minWidth:0,overflow:"hidden"}}>
+                <div style={{fontSize:18,fontWeight:900,color:"#111",wordBreak:"break-word",lineHeight:1.2}}>{gameOfWeek.team2}</div>
                 <div style={{fontSize:11,color:"#888",marginTop:3}}>#{gameOfWeek.rank2} in Dynasty</div>
                 <div style={{fontSize:12,color:"#555",marginTop:2}}>{sorted.find(t=>t.teamName===gameOfWeek.team2)?.wins||0}W-{sorted.find(t=>t.teamName===gameOfWeek.team2)?.losses||0}L</div>
               </div>
@@ -244,13 +244,13 @@ function WeekMatchupsCard({schedule,week,sorted,leagueName,season,setActiveArtic
           {games.map(({team,opp},i)=>{
             const isGOTW = gameOfWeek&&((team===gameOfWeek.team1&&opp===gameOfWeek.team2)||(team===gameOfWeek.team2&&opp===gameOfWeek.team1));
             return(
-              <div key={i} style={{display:"flex",alignItems:"center",padding:"9px 0",borderBottom:"1px solid #f0f0f0",background:isGOTW?"#f8f9ff":"transparent"}}>
-                {isGOTW&&<span style={{fontSize:10,marginRight:8,flexShrink:0}}>🏆</span>}
+              <div key={i} style={{display:"flex",alignItems:"center",padding:"9px 0",borderBottom:"1px solid #f0f0f0",background:isGOTW?"#f8f9ff":"transparent",gap:4}}>
+                {isGOTW&&<span style={{fontSize:10,flexShrink:0}}>🏆</span>}
                 {opp==="BYE"
-                  ?<><span style={{fontSize:13,fontWeight:600,color:"#888",flex:1}}>{team}</span><span style={{fontSize:11,color:"#aaa",background:"#f5f5f5",borderRadius:2,padding:"2px 8px",flexShrink:0}}>BYE WEEK</span></>
+                  ?<><span style={{fontSize:13,fontWeight:600,color:"#888",flex:1,minWidth:0,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{team}</span><span style={{fontSize:11,color:"#aaa",background:"#f5f5f5",borderRadius:2,padding:"2px 8px",flexShrink:0}}>BYE</span></>
                   :opp==="CPU"
-                  ?<><span style={{fontSize:13,fontWeight:700,color:"#111",flex:1}}>{team}</span><span style={{fontSize:11,color:"#888",padding:"0 8px"}}>vs</span><span style={{fontSize:13,fontWeight:600,color:"#888",flex:1,textAlign:"right"}}>CPU (non-conf)</span></>
-                  :<><span style={{fontSize:13,fontWeight:isGOTW?800:700,color:"#111",flex:1}}>{team}</span><div style={{padding:"0 12px",textAlign:"center",flexShrink:0}}><span style={{fontSize:10,fontWeight:900,color:isGOTW?"#1a3a6b":"#bbb",letterSpacing:1}}>VS</span></div><span style={{fontSize:13,fontWeight:isGOTW?800:700,color:"#111",flex:1,textAlign:"right"}}>{opp}</span></>
+                  ?<><span style={{fontSize:13,fontWeight:700,color:"#111",flex:1,minWidth:0,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{team}</span><span style={{fontSize:10,fontWeight:800,color:"#bbb",padding:"0 8px",flexShrink:0}}>VS</span><span style={{fontSize:13,fontWeight:600,color:"#888",flex:1,minWidth:0,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>CPU</span></>
+                  :<><span style={{fontSize:13,fontWeight:isGOTW?800:700,color:"#111",flex:1,minWidth:0,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap",textAlign:"right"}}>{team}</span><div style={{padding:"0 10px",textAlign:"center",flexShrink:0}}><span style={{fontSize:10,fontWeight:900,color:isGOTW?"#1a3a6b":"#bbb",letterSpacing:1}}>VS</span></div><span style={{fontSize:13,fontWeight:isGOTW?800:700,color:"#111",flex:1,minWidth:0,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{opp}</span></>
                 }
               </div>
             );
@@ -582,38 +582,34 @@ function ScheduleTab({schedule,entries,week,season}) {
       <div style={{borderBottom:"1px solid #f0f0f0"}}>
         <div
           onClick={played ? ()=>setExpanded(p=>({...p,[key]:!p[key]})) : undefined}
-          style={{display:"flex",alignItems:"center",padding:"10px 14px",gap:8,cursor:played?"pointer":"default",background:isOpen?"#fafafa":"transparent"}}
+          style={{display:"flex",alignItems:"center",padding:"10px 12px",gap:6,cursor:played?"pointer":"default",background:isOpen?"#fafafa":"transparent"}}
           onMouseEnter={played?e=>e.currentTarget.style.background="#fafafa":undefined}
           onMouseLeave={played?e=>e.currentTarget.style.background=isOpen?"#fafafa":"transparent":undefined}
         >
           {/* Home side */}
-          <div style={{flex:1,display:"flex",alignItems:"center",justifyContent:"flex-end",gap:6}}>
-            <span style={{fontSize:13,fontWeight:played?(winHome?800:500):700,color:played?(winHome?"#111":"#999"):"#111",textAlign:"right"}}>{home}</span>
+          <div style={{flex:1,display:"flex",alignItems:"center",justifyContent:"flex-end",gap:5,minWidth:0}}>
+            <span style={{fontSize:13,fontWeight:played?(winHome?800:500):700,color:played?(winHome?"#111":"#999"):"#111",textAlign:"right",overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{home}</span>
             {played&&<span style={{fontSize:10,fontWeight:800,padding:"1px 5px",borderRadius:2,background:winHome?"#e8f5e9":"#fff0f0",color:winHome?"#007a00":RED,flexShrink:0}}>{winHome?"W":"L"}</span>}
           </div>
 
           {/* Score / VS center */}
-          <div style={{textAlign:"center",minWidth:70,flexShrink:0}}>
+          <div style={{textAlign:"center",minWidth:60,flexShrink:0}}>
             {played ? (
-              <div style={{display:"flex",alignItems:"center",justifyContent:"center",gap:4}}>
-                {result.scoreA!=null
-                  ? <span style={{fontSize:15,fontWeight:900,color:winHome?"#111":"#999"}}>{result.scoreA}</span>
-                  : null}
+              <div style={{display:"flex",alignItems:"center",justifyContent:"center",gap:3}}>
+                {result.scoreA!=null&&<span style={{fontSize:14,fontWeight:900,color:winHome?"#111":"#999"}}>{result.scoreA}</span>}
                 <span style={{fontSize:10,fontWeight:800,color:"#ccc"}}>–</span>
-                {result.scoreB!=null
-                  ? <span style={{fontSize:15,fontWeight:900,color:winAway?"#111":"#999"}}>{result.scoreB}</span>
-                  : null}
-                {result.scoreA==null&&result.scoreB==null&&<span style={{fontSize:9,fontWeight:800,color:"#007a00",textTransform:"uppercase",letterSpacing:0.5,padding:"1px 5px",background:"#f0f8f0",borderRadius:2}}>FINAL</span>}
+                {result.scoreB!=null&&<span style={{fontSize:14,fontWeight:900,color:winAway?"#111":"#999"}}>{result.scoreB}</span>}
+                {result.scoreA==null&&result.scoreB==null&&<span style={{fontSize:9,fontWeight:800,color:"#007a00",textTransform:"uppercase",padding:"1px 5px",background:"#f0f8f0",borderRadius:2}}>FINAL</span>}
               </div>
             ) : (
-              <span style={{fontSize:10,fontWeight:800,color:"#bbb",padding:"2px 8px",border:"1px solid #eee",borderRadius:2}}>{isCPU?"":"VS"}</span>
+              <span style={{fontSize:10,fontWeight:800,color:"#bbb",padding:"2px 6px",border:"1px solid #eee",borderRadius:2}}>{isCPU?"":"VS"}</span>
             )}
           </div>
 
           {/* Away side */}
-          <div style={{flex:1,display:"flex",alignItems:"center",gap:6}}>
+          <div style={{flex:1,display:"flex",alignItems:"center",gap:5,minWidth:0}}>
             {played&&<span style={{fontSize:10,fontWeight:800,padding:"1px 5px",borderRadius:2,background:winAway?"#e8f5e9":"#fff0f0",color:winAway?"#007a00":RED,flexShrink:0}}>{winAway?"W":"L"}</span>}
-            <span style={{fontSize:13,fontWeight:played?(winAway?800:500):700,color:isCPU?"#aaa":played?(winAway?"#111":"#999"):"#111"}}>{away}</span>
+            <span style={{fontSize:13,fontWeight:played?(winAway?800:500):700,color:isCPU?"#aaa":played?(winAway?"#111":"#999"):"#111",overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{away}</span>
           </div>
 
           {played&&<span style={{fontSize:11,color:"#ccc",flexShrink:0}}>{isOpen?"▲":"▼"}</span>}
@@ -1550,52 +1546,53 @@ export default function App() {
   );
 
   return (
-    <div style={{minHeight:"100vh",background:"#f0f0f0",color:"#111",fontFamily:ff,overflowX:"hidden",maxWidth:"100vw"}}>
+    <div style={{minHeight:"100vh",background:"#f0f0f0",color:"#111",fontFamily:ff,overflowX:"hidden",maxWidth:"100%",boxSizing:"border-box"}}>
       {/* Top black bar */}
       <div style={{background:"#111",padding:"0 12px",height:44,display:"flex",alignItems:"center",gap:10,position:"sticky",top:0,zIndex:200}}>
         <div style={{fontSize:22,fontWeight:900,color:"#fff",fontStyle:"italic",letterSpacing:-1,flexShrink:0}}>ESPN</div>
         <div style={{width:1,height:20,background:"#444",flexShrink:0}}/>
-        <div style={{fontSize:isMobile?9:12,color:"#aaa",fontWeight:600,textTransform:"uppercase",letterSpacing:0.5,flex:1,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{leagueName}</div>
-        <div style={{display:"flex",gap:isMobile?8:14,alignItems:"center",flexShrink:0}}>
-          {[["S",season],["YR",START_YEAR+season-1],["WK",week>12?"PS":week]].map(([l,v])=><div key={l} style={{textAlign:"center"}}><div style={{fontSize:7,color:"#666",letterSpacing:1,textTransform:"uppercase"}}>{l}</div><div style={{fontSize:isMobile?13:15,fontWeight:900,color:"#fff",lineHeight:1}}>{v}</div></div>)}
-        </div>
+        <div style={{fontSize:isMobile?10:12,color:"#aaa",fontWeight:600,textTransform:"uppercase",letterSpacing:0.5,flex:1,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{leagueName}</div>
+        {!isMobile&&<div style={{display:"flex",gap:14,alignItems:"center",flexShrink:0}}>
+          {[["S",season],["YR",START_YEAR+season-1],["WK",week>12?"PS":week]].map(([l,v])=><div key={l} style={{textAlign:"center"}}><div style={{fontSize:7,color:"#666",letterSpacing:1,textTransform:"uppercase"}}>{l}</div><div style={{fontSize:15,fontWeight:900,color:"#fff",lineHeight:1}}>{v}</div></div>)}
+        </div>}
+        {isMobile&&<div style={{flexShrink:0,textAlign:"right"}}><div style={{fontSize:9,color:"#666",letterSpacing:1,textTransform:"uppercase"}}>WK</div><div style={{fontSize:14,fontWeight:900,color:"#fff",lineHeight:1}}>{week>12?"PS":week}</div></div>}
       </div>
 
       {/* Nav tabs */}
-      <div style={{background:RED,display:"flex",alignItems:"center",overflowX:"auto"}}>
+      <div style={{background:RED,display:"flex",alignItems:"center",overflowX:"auto",WebkitOverflowScrolling:"touch"}}>
         {["Home","Standings","Schedule","History","Profiles","Rules"].map(t=>(
-          <button key={t} onClick={()=>setTab(t)} style={{flex:isMobile?"1 0 auto":"none",padding:isMobile?"0 10px":"0 14px",height:40,background:tab===t?"rgba(255,255,255,0.18)":"transparent",border:"none",borderBottom:tab===t?"3px solid #fff":"3px solid transparent",color:"#fff",cursor:"pointer",fontSize:isMobile?10:11,fontWeight:tab===t?800:500,fontFamily:ff,textTransform:"uppercase",letterSpacing:0.5,whiteSpace:"nowrap"}}>{t}</button>
+          <button key={t} onClick={()=>setTab(t)} style={{flex:"0 0 auto",padding:isMobile?"0 11px":"0 14px",height:isMobile?38:40,background:tab===t?"rgba(255,255,255,0.18)":"transparent",border:"none",borderBottom:tab===t?"3px solid #fff":"3px solid transparent",color:"#fff",cursor:"pointer",fontSize:isMobile?11:11,fontWeight:tab===t?800:500,fontFamily:ff,textTransform:"uppercase",letterSpacing:0.3,whiteSpace:"nowrap"}}>{t}</button>
         ))}
       </div>
 
       {/* Scores ticker */}
-      <div style={{background:"#1a1a1a",borderBottom:"2px solid #cc0000",padding:isMobile?"5px 10px":"6px 16px",display:"flex",gap:0,overflowX:"auto",alignItems:"center"}}>
+      <div style={{background:"#1a1a1a",borderBottom:"2px solid #cc0000",padding:"5px 10px",display:"flex",gap:0,overflowX:"auto",WebkitOverflowScrolling:"touch",alignItems:"center",scrollbarWidth:"none"}}>
         <span style={{fontSize:8,color:RED,fontWeight:800,textTransform:"uppercase",letterSpacing:1.5,marginRight:10,flexShrink:0}}>SCORES</span>
         {sorted.length===0&&<span style={{fontSize:11,color:"#666",fontStyle:"italic"}}>Season not started</span>}
         {sorted.map((t,i)=>(
-          <div key={t.teamName} style={{display:"flex",alignItems:"center",gap:5,padding:"0 10px",borderRight:"1px solid #333",flexShrink:0}}>
+          <div key={t.teamName} style={{display:"flex",alignItems:"center",gap:5,padding:"0 10px",borderRight:"1px solid #333",flexShrink:0,minWidth:isMobile?80:0}}>
             <span style={{fontSize:9,fontWeight:800,color:i===0?RED:"#555",width:10}}>{i+1}</span>
-            <span style={{fontSize:isMobile?10:11,fontWeight:700,color:"#fff",whiteSpace:"nowrap"}}>{t.teamName}</span>
-            <span style={{fontSize:isMobile?11:13,fontWeight:900,color:i===0?"#e8c84a":"#999",marginLeft:3}}>{calcTotal(t)}</span>
+            <span style={{fontSize:11,fontWeight:700,color:"#fff",whiteSpace:"nowrap"}}>{t.teamName}</span>
+            <span style={{fontSize:12,fontWeight:900,color:i===0?"#e8c84a":"#999",marginLeft:3}}>{calcTotal(t)}</span>
           </div>
         ))}
       </div>
 
-      {/* Mobile top strip - quick stats */}
+      {/* Mobile top strip - top 3 leaders, scrollable */}
       {isMobile&&sorted.length>0&&(
-        <div style={{background:"#fff",borderBottom:"1px solid #eee",padding:"10px 12px",display:"flex",gap:0,overflowX:"auto"}}>
-          {sorted.slice(0,6).map((t,i)=>(
-            <div key={t.teamName} style={{flexShrink:0,textAlign:"center",padding:"0 10px",borderRight:"1px solid #f0f0f0",minWidth:60}}>
-              <div style={{fontSize:9,color:i===0?RED:"#aaa",fontWeight:800,textTransform:"uppercase"}}>{i===0?"LEAD":`#${i+1}`}</div>
-              <div style={{fontSize:11,fontWeight:700,color:"#111",marginTop:1,whiteSpace:"nowrap",maxWidth:60,overflow:"hidden",textOverflow:"ellipsis"}}>{t.teamName.split(" ")[0]}</div>
-              <div style={{fontSize:13,fontWeight:900,color:i===0?RED:"#333"}}>{calcTotal(t)}</div>
+        <div style={{background:"#fff",borderBottom:"1px solid #eee",padding:"8px 0",display:"flex",gap:0,overflowX:"auto",WebkitOverflowScrolling:"touch"}}>
+          {sorted.slice(0,3).map((t,i)=>(
+            <div key={t.teamName} style={{flexShrink:0,textAlign:"center",padding:"4px 14px",borderRight:"1px solid #f0f0f0",minWidth:90}}>
+              <div style={{fontSize:9,color:i===0?RED:"#aaa",fontWeight:800,textTransform:"uppercase"}}>{i===0?"LEADER":`#${i+1}`}</div>
+              <div style={{fontSize:12,fontWeight:700,color:"#111",marginTop:2,whiteSpace:"nowrap",overflow:"hidden",textOverflow:"ellipsis",maxWidth:80}}>{t.teamName}</div>
+              <div style={{fontSize:15,fontWeight:900,color:i===0?RED:"#333",marginTop:1}}>{calcTotal(t)}</div>
             </div>
           ))}
         </div>
       )}
 
       {/* Main layout */}
-      <div style={{maxWidth:1180,margin:"0 auto",padding:isMobile?"8px 8px":"16px 12px",display:"grid",gridTemplateColumns:isMobile?"1fr":"200px 1fr 260px",gap:isMobile?10:16,alignItems:"start"}}>
+      <div style={{maxWidth:1180,margin:"0 auto",padding:isMobile?"12px 16px":"16px 12px",display:"grid",gridTemplateColumns:isMobile?"1fr":"200px 1fr 260px",gap:isMobile?12:16,alignItems:"start",boxSizing:"border-box"}}>
 
         {/* Left sidebar - desktop only */}
         {isMobile?null:<div style={{display:"flex",flexDirection:"column",gap:12}}>
