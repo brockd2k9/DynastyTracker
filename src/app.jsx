@@ -63,6 +63,25 @@ function calcTotal(t) {
   return (t.gamePts||0)+(t.rankedBonusPts||0)+(t.confStandPts||0)+(t.confChampPts||0)+(t.bowlPts||0)+(t.recruitingPts||0)+(t.prestigePts||0)+(t.heismanPts||0);
 }
 
+function cleanArticle(text, maxChars=1000) {
+  return text
+    .replace(/#{1,6}\s*/g, "")        // remove # headings
+    .replace(/\*\*([^*]+)\*\*/g, "$1") // remove **bold**
+    .replace(/\*([^*]+)\*/g, "$1")     // remove *italic*
+    .replace(/_{1,2}([^_]+)_{1,2}/g, "$1") // remove __underline__
+    .replace(/^\s*[-•]\s+/gm, "")     // remove bullet dashes
+    .replace(/^\s*\d+\.\s+/gm, "")    // remove numbered lists
+    .replace(/\[([^\]]+)\]\([^)]+\)/g, "$1") // remove [links](url)
+    .replace(/`[^`]+`/g, (m)=>m.slice(1,-1)) // remove backtick code
+    .replace(/\n{3,}/g, "\n\n")        // collapse excess blank lines
+    .replace(/—/g, "-")                // em dash to hyphen
+    .replace(/–/g, "-")                // en dash to hyphen
+    .replace(/[""]/g, '"')             // smart quotes to straight
+    .replace(/['']/g, "'")             // smart apostrophes to straight
+    .trim()
+    .slice(0, maxChars);
+}
+
 async function callClaude(prompt) {
   const r = await fetch("/.netlify/functions/claude", {
     method: "POST",
@@ -132,7 +151,7 @@ function WeekMatchupsCard({schedule,week,sorted,leagueName,season,setActiveArtic
       "Write like ESPN College GameDay. Make it feel like must-watch television.";
 
     try {
-      const text = await callClaude(prompt);
+      const text = cleanArticle(await callClaude(prompt));
       const article = {
         id: Date.now(),
         type: "gotw",
@@ -802,7 +821,7 @@ function ContentHub({sorted,entries,week,season,leagueName,history,leader,articl
     };
 
     try {
-      const text = await callClaude(prompts[type]);
+      const text = cleanArticle(await callClaude(prompts[type]));
       const labels = {powerrankings:"📊 Power Rankings",preview:"🔭 Week Preview",recap:"📰 Weekly Recap",seasonpreview:"🏈 Season Preview",hotakes:"🔥 Hot Takes"};
       const label = labels[type]||"📰 Article";
       const newArticles = [{id:Date.now(),type,label,week,season,text,reporter:r.name,reporterColor:r.color,reporterAvatar:r.avatar},...articles].slice(0,30);
