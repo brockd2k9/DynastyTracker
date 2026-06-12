@@ -82,6 +82,10 @@ function cleanArticle(text, maxChars=1000) {
     .slice(0, maxChars);
 }
 
+function articleHeadline(text) {
+  return (text||"").split("\n").map(l=>l.trim()).find(l=>l.length>0) || text?.slice(0,80) || "";
+}
+
 async function callClaude(prompt) {
   const apiKey = import.meta.env.VITE_ANTHROPIC_KEY;
   if (!apiKey) throw new Error("VITE_ANTHROPIC_KEY not set in Cloudflare build variables.");
@@ -225,8 +229,9 @@ function WeekMatchupsCard({schedule,week,sorted,leagueName,season,setActiveArtic
                 <div style={{fontSize:12,color:"#555",marginTop:2}}>{sorted.find(t=>t.teamName===gameOfWeek.team2)?.wins||0}W-{sorted.find(t=>t.teamName===gameOfWeek.team2)?.losses||0}L</div>
               </div>
             </div>
-            {existingGOTW&&<div style={{marginTop:12,padding:"10px 14px",background:"#f0f4ff",borderRadius:2,border:"1px solid #c5d0e8",fontSize:13,color:"#333",lineHeight:1.5,cursor:"pointer"}} onClick={()=>setActiveArticle(existingGOTW)}>
-              <strong style={{color:"#1a3a6b"}}>Preview:</strong> {existingGOTW.text.slice(0,160)}... <span style={{color:"#1a3a6b",fontWeight:700}}>Read more →</span>
+            {existingGOTW&&<div style={{marginTop:12,padding:"10px 14px",background:"#f0f4ff",borderRadius:2,border:"1px solid #c5d0e8",cursor:"pointer",display:"flex",justifyContent:"space-between",alignItems:"center",gap:10}} onClick={()=>setActiveArticle(existingGOTW)}>
+              <span style={{fontSize:13,fontWeight:700,color:"#1a3a6b"}}>{articleHeadline(existingGOTW.text)}</span>
+              <span style={{fontSize:12,color:"#1a3a6b",fontWeight:700,flexShrink:0}}>Read →</span>
             </div>}
           </div>
         </Card>
@@ -1162,7 +1167,7 @@ function ContentHub({sorted,entries,week,season,leagueName,history,leader,articl
               <button onClick={e=>{e.stopPropagation();const na=articles.filter(x=>x.id!==a.id);setArticles(na);dbSave({articles:na});}} style={{background:"transparent",border:"none",color:"rgba(255,255,255,0.5)",cursor:"pointer",fontSize:16,padding:"0 4px"}}>×</button>
             </div>
           </div>
-          <div style={{padding:"12px 16px",fontSize:13,color:"#555",lineHeight:1.6}}>{a.text.slice(0,180)}...</div>
+          <div style={{padding:"12px 16px",fontSize:14,fontWeight:700,color:"#111",lineHeight:1.5}}>{articleHeadline(a.text)}</div>
         </Card>
       ))}
     </div>
@@ -1186,7 +1191,7 @@ function RightRail({sorted,articles,entries,week,season,leader,setActiveArticle}
                   {a.reporterAvatar&&<div style={{width:18,height:18,borderRadius:"50%",background:a.reporterColor||RED,display:"flex",alignItems:"center",justifyContent:"center",fontSize:7,fontWeight:800,color:"#fff",flexShrink:0}}>{a.reporterAvatar}</div>}
                   <div style={{fontSize:10,color:a.reporterColor||RED,fontWeight:700,letterSpacing:0.5,textTransform:"uppercase"}}>{a.reporter||"Dynasty Central"} · {a.label}</div>
                 </div>
-                <div style={{fontSize:13,fontWeight:700,color:"#111",lineHeight:1.4}}>{a.text.slice(0,80).trim()}...</div>
+                <div style={{fontSize:13,fontWeight:700,color:"#111",lineHeight:1.4}}>{articleHeadline(a.text)}</div>
               </div>
             ))}
             {articles.length===0&&<>
@@ -1495,7 +1500,7 @@ export default function App() {
                     <div style={{width:32,height:32,borderRadius:"50%",background:a.reporterColor||RED,display:"flex",alignItems:"center",justifyContent:"center",fontSize:10,fontWeight:800,color:"#fff",flexShrink:0}}>{a.reporterAvatar||"DC"}</div>
                     <div style={{flex:1,minWidth:0}}>
                       <div style={{fontSize:10,color:a.reporterColor||RED,fontWeight:700,textTransform:"uppercase",letterSpacing:0.5}}>{a.label} · S{a.season} Wk{a.week}</div>
-                      <div style={{fontSize:12,fontWeight:700,color:"#111",overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap",marginTop:1}}>{a.text.slice(0,70)}...</div>
+                      <div style={{fontSize:12,fontWeight:700,color:"#111",overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap",marginTop:1}}>{articleHeadline(a.text)}</div>
                     </div>
                     <div style={{color:"#ccc",fontSize:16,flexShrink:0}}>›</div>
                   </div>
@@ -1515,7 +1520,7 @@ export default function App() {
                     {articles[0].reporterAvatar&&<div style={{width:20,height:20,borderRadius:"50%",background:articles[0].reporterColor||RED,display:"flex",alignItems:"center",justifyContent:"center",fontSize:8,fontWeight:800,color:"#fff",flexShrink:0}}>{articles[0].reporterAvatar}</div>}
                     <div style={{fontSize:9,color:articles[0].reporterColor||RED,fontWeight:700,letterSpacing:1,textTransform:"uppercase"}}>{articles[0].reporter} · {articles[0].label}</div>
                   </div>
-                  <div style={{fontSize:13,fontWeight:700,color:"#fff",lineHeight:1.4,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{articles[0].text.slice(0,70)}...</div>
+                  <div style={{fontSize:13,fontWeight:700,color:"#fff",lineHeight:1.4,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{articleHeadline(articles[0].text)}</div>
                 </div>
                 <div style={{color:RED,fontWeight:800,fontSize:12,flexShrink:0}}>READ →</div>
               </div>
@@ -1567,7 +1572,7 @@ export default function App() {
                       <div style={{width:32,height:32,borderRadius:"50%",background:a.reporterColor||RED,display:"flex",alignItems:"center",justifyContent:"center",fontSize:10,fontWeight:800,color:"#fff",flexShrink:0}}>{a.reporterAvatar||"DC"}</div>
                       <div style={{flex:1,minWidth:0}}>
                         <div style={{fontSize:10,color:a.reporterColor||RED,fontWeight:700,textTransform:"uppercase",letterSpacing:0.5}}>{a.label} · S{a.season} Wk{a.week}</div>
-                        <div style={{fontSize:12,fontWeight:700,color:"#111",overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap",marginTop:1}}>{a.text.slice(0,60)}...</div>
+                        <div style={{fontSize:12,fontWeight:700,color:"#111",overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap",marginTop:1}}>{articleHeadline(a.text)}</div>
                       </div>
                       <div style={{color:"#ccc",fontSize:16,flexShrink:0}}>›</div>
                     </div>
