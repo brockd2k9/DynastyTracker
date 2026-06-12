@@ -662,6 +662,7 @@ function SetupPanel({entries,setup,postSeasonInputs,setPSI,handleStart,setCommis
   const removeRow=(i)=>{if(setupRows.length<=2)return alert("Minimum 2 teams.");setSetupRows(p=>p.filter((_,idx)=>idx!==i));};
   function applySetup(){const valid=setupRows.filter(r=>r.userName.trim()&&r.teamName.trim());if(valid.length<2)return alert("Enter at least 2 users.");if(entries.length>0&&!window.confirm("This resets all standings. Continue?"))return;handleStart(setupLeague||"Dynasty League",valid);setCommissionerUnlocked(false);}
   function addMidSeason(){const last=setupRows[setupRows.length-1];if(!last?.userName?.trim()||!last?.teamName?.trim())return alert("Fill in the last row first.");if(entries.find(e=>e.teamName===last.teamName))return alert("That team is already in the dynasty.");const newE=INITIAL_ENTRY(last.userName.trim(),last.teamName.trim());setEntries(prev=>[...prev,newE]);setWeekResults(prev=>[...prev,{teamName:newE.teamName,userName:newE.userName,result:"none",ranked25:false,ranked10:false}]);if(postSeasonInputs)setPSI(prev=>({...prev,confStandings:[...prev.confStandings,{teamName:newE.teamName,rank:prev.confStandings.length+1}],bowls:[...prev.bowls,{teamName:newE.teamName,bowl:"none"}],recruiting:[...prev.recruiting,{teamName:newE.teamName,rank:prev.recruiting.length+1}]}));setSetup(prev=>({...prev,rows:[...(prev?.rows||[]),{userName:newE.userName,teamName:newE.teamName}]}));alert(`${newE.userName} (${newE.teamName}) added!`);}
+  function toggleActive(teamName){setSetup(prev=>{const rows=(prev?.rows||[]).map(r=>r.teamName===teamName?{...r,active:r.active===false?true:false}:r);return{...prev,rows};});}
   const isLive=entries.length>0;
   return (
     <div style={{display:"flex",flexDirection:"column",gap:14}}>
@@ -684,6 +685,20 @@ function SetupPanel({entries,setup,postSeasonInputs,setPSI,handleStart,setCommis
           <div style={{padding:"10px 14px"}}><button onClick={addRow} style={{background:"transparent",border:"1px dashed #ccc",borderRadius:2,padding:"7px 14px",color:"#888",cursor:"pointer",fontSize:12,fontFamily:ff,fontWeight:600,width:"100%"}}>+ Add Player</button></div>
         </div>
       </Card>
+      {isLive&&setup?.rows?.length>0&&<Card><CardHead bg="#333">Active Teams</CardHead>
+        <div style={{padding:"8px 0"}}>
+          <div style={{padding:"4px 14px 8px",fontSize:11,color:"#888",lineHeight:1.5}}>Deactivated teams are hidden from current season standings, schedule, and results. They still appear in past season history and player profiles.</div>
+          {setup.rows.map(r=>{const isActive=r.active!==false;return(
+            <div key={r.teamName} style={{display:"flex",alignItems:"center",gap:10,padding:"8px 14px",borderBottom:"1px solid #f5f5f5"}}>
+              <div style={{flex:1}}>
+                <div style={{fontSize:13,fontWeight:700,color:isActive?"#111":"#aaa"}}>{r.teamName}</div>
+                <div style={{fontSize:11,color:isActive?"#888":"#bbb"}}>{r.userName}</div>
+              </div>
+              <button onClick={()=>toggleActive(r.teamName)} style={{padding:"5px 12px",borderRadius:2,border:"1px solid",borderColor:isActive?"#007a00":RED,background:isActive?"#f0f8f0":"#fff8f8",color:isActive?"#007a00":RED,cursor:"pointer",fontSize:11,fontFamily:ff,fontWeight:800,textTransform:"uppercase",minWidth:80}}>{isActive?"Active":"Inactive"}</button>
+            </div>
+          );})}
+        </div>
+      </Card>}
       <div style={{display:"flex",gap:10,flexWrap:"wrap"}}>
         <button onClick={applySetup} style={{flex:1,background:RED,color:"#fff",border:"none",borderRadius:2,padding:"13px",cursor:"pointer",fontFamily:ff,fontSize:13,fontWeight:800,textTransform:"uppercase",minWidth:140}}>{isLive?"↺ Reset & Relaunch":"Launch Dynasty →"}</button>
         {isLive&&<button onClick={addMidSeason} style={{flex:1,background:"#007a00",color:"#fff",border:"none",borderRadius:2,padding:"13px",cursor:"pointer",fontFamily:ff,fontSize:13,fontWeight:800,textTransform:"uppercase",minWidth:140}}>+ Add Team Mid-Season</button>}
@@ -1024,9 +1039,11 @@ export default function App() {
     dbSave({setup:newSetup,season:1,week:1,entries:initial,history:[],post_season_inputs:newPSI,articles:[]});
   }
 
-  const sorted=[...entries].sort((a,b)=>calcTotal(b)-calcTotal(a));
+  const inactiveTeamNames=new Set((setup?.rows||[]).filter(r=>r.active===false).map(r=>r.teamName));
+  const activeEntries=inactiveTeamNames.size>0?entries.filter(e=>!inactiveTeamNames.has(e.teamName)):entries;
+  const sorted=[...activeEntries].sort((a,b)=>calcTotal(b)-calcTotal(a));
   const leader=sorted[0]?calcTotal(sorted[0]):0;
-  const teamNames=entries.map(e=>e.teamName);
+  const teamNames=activeEntries.map(e=>e.teamName);
   const leagueName=setup?.leagueName||"Dynasty Central";
 
   function applyWeekResults() {
@@ -1343,14 +1360,14 @@ export default function App() {
 
           {tab==="History"&&<HistoryTab history={history}/>}
           {tab==="Profiles"&&<ProfileTab history={history} setupRows={setup?.rows||[]} currentEntries={entries} season={season}/>}
-          {tab==="Schedule"&&<ScheduleTab schedule={schedule} entries={entries} week={week} season={season}/>}
+          {tab==="Schedule"&&<ScheduleTab schedule={schedule} entries={activeEntries} week={week} season={season}/>}
           {tab==="Rules"&&<div style={{display:"grid",gridTemplateColumns:isMobile?"1fr":"repeat(auto-fill,minmax(250px,1fr))",gap:10}}>
             {[["🏈 Regular Season",[["Win","15 pts"],["Win vs Top 25","+5 bonus"],["Win vs Top 10","+10 bonus"],["Loss","0 pts"]]],["📊 Conference Standings",[["1st","50"],["2nd","43"],["3rd","36"],["4th","30"],["5th","24"],["6th","18"],["7th","14"],["8th","10"],["9th","7"],["10th","5"],["11th","3"],["12th","1"]]],["🏆 Conference Championship",[["Make the Game","10 pts"],["Win the Game","15 pts"]]],["🥣 Bowl & Playoff",[["Make a Bowl","5 pts"],["Win a Bowl","10 pts"],["Make the CFP","15 pts"],["Win National Championship","25 pts"]]],["🎓 Recruiting (Top 5)",[["#1","15 pts"],["#2","10 pts"],["#3","7 pts"],["#4","5 pts"],["#5","3 pts"]]],["⭐ Prestige & Awards",[["Gain a Prestige Star","10 pts"],["Reach Max Prestige","10 pts"],["Heisman Winner","15 pts"]]]].map(([title,rows])=><Card key={title} style={{overflow:"hidden"}}><CardHead bg={RED}>{title}</CardHead><table style={{width:"100%",borderCollapse:"collapse"}}><tbody>{rows.map(([l,p])=><tr key={l} style={{borderBottom:"1px solid #f0f0f0"}}><td style={{padding:"8px 12px",color:"#333",fontSize:13}}>{l}</td><td style={{padding:"8px 12px",textAlign:"right",color:RED,fontWeight:800,fontSize:13}}>{p}</td></tr>)}</tbody></table></Card>)}
           </div>}
         </div>
 
         {/* Right rail - desktop only */}
-        {!isMobile&&<RightRail sorted={sorted} articles={articles} entries={entries} week={week} season={season} leader={leader} setActiveArticle={setActiveArticle}/>}
+        {!isMobile&&<RightRail sorted={sorted} articles={articles} entries={activeEntries} week={week} season={season} leader={leader} setActiveArticle={setActiveArticle}/>}
       </div>
 
       {/* Hidden footer */}
@@ -1413,9 +1430,9 @@ export default function App() {
           {["Enter Results","Schedule","Content","League Setup"].map(t=><button key={t} onClick={()=>setCommTab(t)} style={{padding:"11px 18px",background:"transparent",border:"none",borderBottom:commTab===t?`3px solid ${RED}`:"3px solid transparent",color:commTab===t?"#fff":"#888",cursor:"pointer",fontSize:12,fontWeight:700,fontFamily:ff,textTransform:"uppercase",letterSpacing:0.5,whiteSpace:"nowrap"}}>{t}</button>)}
         </div>
         <div style={{maxWidth:800,margin:"0 auto",padding:"20px 14px"}}>
-          {commTab==="Enter Results"&&<EnterResultsPanel entries={entries} weekResults={weekResults} setWeekResults={setWeekResults} week={week} imageFile={imageFile} imagePreview={imagePreview} processingImage={processingImage} imageResult={imageResult} parsedFromImage={parsedFromImage} handleImageUpload={handleImageUpload} processImage={processImage} applyImageResults={applyImageResults} setParsedFromImage={setParsedFromImage} applyWeekResults={applyWeekResults} postSeasonInputs={postSeasonInputs} setPSI={setPSI} applyPostSeason={applyPostSeason} finalizeSeason={finalizeSeason} season={season} teamNames={teamNames} schedule={schedule}/>}
-          {commTab==="Schedule"&&<SchedulePanel entries={entries} schedule={schedule} setSchedule={setSchedule}/>}
-          {commTab==="Content"&&<ContentHub sorted={sorted} entries={entries} week={week} season={season} leagueName={leagueName} history={history} leader={leader} articles={articles} setArticles={setArticles} setActiveArticle={setActiveArticle} schedule={schedule}/>}
+          {commTab==="Enter Results"&&<EnterResultsPanel entries={activeEntries} weekResults={weekResults} setWeekResults={setWeekResults} week={week} imageFile={imageFile} imagePreview={imagePreview} processingImage={processingImage} imageResult={imageResult} parsedFromImage={parsedFromImage} handleImageUpload={handleImageUpload} processImage={processImage} applyImageResults={applyImageResults} setParsedFromImage={setParsedFromImage} applyWeekResults={applyWeekResults} postSeasonInputs={postSeasonInputs} setPSI={setPSI} applyPostSeason={applyPostSeason} finalizeSeason={finalizeSeason} season={season} teamNames={teamNames} schedule={schedule}/>}
+          {commTab==="Schedule"&&<SchedulePanel entries={activeEntries} schedule={schedule} setSchedule={setSchedule}/>}
+          {commTab==="Content"&&<ContentHub sorted={sorted} entries={activeEntries} week={week} season={season} leagueName={leagueName} history={history} leader={leader} articles={articles} setArticles={setArticles} setActiveArticle={setActiveArticle} schedule={schedule}/>}
           {commTab==="League Setup"&&<SetupPanel entries={entries} setup={setup} postSeasonInputs={postSeasonInputs} setPSI={setPSI} handleStart={handleStart} setCommissionerUnlocked={setCommUnlocked} season={season} setEntries={setEntries} setWeekResults={setWeekResults} setSetup={setSetup}/>}
         </div>
       </div>}
