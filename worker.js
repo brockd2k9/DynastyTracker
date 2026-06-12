@@ -8,6 +8,16 @@ export default {
         const body = await request.json();
         const { prompt, max_tokens = 1200, image } = body;
 
+        // Try both variable names in case user set it differently in Cloudflare
+        const apiKey = env.VITE_ANTHROPIC_KEY || env.ANTHROPIC_KEY || env.ANTHROPIC_API_KEY;
+
+        if (!apiKey) {
+          return new Response(JSON.stringify({ error: "API key not configured. Add VITE_ANTHROPIC_KEY as a secret in Cloudflare Workers settings." }), {
+            status: 500,
+            headers: { "Content-Type": "application/json" },
+          });
+        }
+
         const messages = image
           ? [{ role: "user", content: [{ type: "image", source: { type: "base64", media_type: image.media_type, data: image.data } }, { type: "text", text: prompt }] }]
           : [{ role: "user", content: prompt }];
@@ -16,7 +26,7 @@ export default {
           method: "POST",
           headers: {
             "Content-Type": "application/json",
-            "x-api-key": env.VITE_ANTHROPIC_KEY,
+            "x-api-key": apiKey,
             "anthropic-version": "2023-06-01",
           },
           body: JSON.stringify({
