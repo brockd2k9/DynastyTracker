@@ -787,25 +787,191 @@ function SetupPanel({entries,setup,postSeasonInputs,setPSI,handleStart,setCommis
   );
 }
 
+// ── BulkResultsUploader ───────────────────────────────────────────────────
+function fuzzyMatchTeam(parsed, knownTeams) {
+  if (!parsed) return {team:"",confidence:"none"};
+  const p = parsed.toLowerCase().trim();
+  const exact = knownTeams.find(t=>t.toLowerCase()===p);
+  if (exact) return {team:exact,confidence:"exact"};
+  const contains = knownTeams.find(t=>p.includes(t.toLowerCase())||t.toLowerCase().includes(p));
+  if (contains) return {team:contains,confidence:"fuzzy"};
+  function lev(a,b){const m=a.length,n=b.length;const d=Array.from({length:m+1},(_,i)=>Array.from({length:n+1},(_,j)=>j===0?i:i===0?j:0));for(let i=1;i<=m;i++)for(let j=1;j<=n;j++)d[i][j]=a[i-1]===b[j-1]?d[i-1][j-1]:1+Math.min(d[i-1][j],d[i][j-1],d[i-1][j-1]);return d[m][n];}
+  let best=null,bestDist=Infinity;
+  knownTeams.forEach(t=>{const dist=lev(p,t.toLowerCase());if(dist<bestDist){bestDist=dist;best=t;}});
+  if(best&&bestDist<=Math.max(3,Math.floor(p.length*0.4)))return{team:best,confidence:"fuzzy"};
+  return {team:"",confidence:"none"};
+}
+
+function BulkResultsUploader({entries,week,teamNames,onConfirm}) {
+  const [files,setFiles]=useState([]);
+  const [imgStatuses,setImgStatuses]=useState([]);
+  const [phase,setPhase]=useState("upload");
+  const [gameRows,setGameRows]=useState([]);
+  const [successInfo,setSuccessInfo]=useState(null);
+
+  const SCOREBOARD_PROMPT='You are parsing a College Football 27 video game scoreboard screenshot. Extract the following and return ONLY a valid JSON object with no extra text or markdown: { "home_team": "", "away_team": "", "home_score": 0, "away_score": 0, "home_stats": { "passing_yards": 0, "rushing_yards": 0, "total_yards": 0, "turnovers": 0 }, "away_stats": { "passing_yards": 0, "rushing_yards": 0, "total_yards": 0, "turnovers": 0 } }';
+
+  function handleFileChange(e) {
+    const chosen=Array.from(e.target.files).slice(0,16);
+    setFiles(chosen);
+    setImgStatuses(chosen.map(f=>({name:f.name,status:"pending",raw:null,error:null})));
+    setPhase("upload");setGameRows([]);setSuccessInfo(null);
+  }
+
+  async function processAll() {
+    if(!files.length)return;
+    const apiKey=import.meta.env.VITE_ANTHROPIC_KEY;
+    if(!apiKey){alert("VITE_ANTHROPIC_KEY not set.");return;}
+    setPhase("processing");
+    const allGames=[];
+    for(let i=0;i<files.length;i++){
+      setImgStatuses(prev=>prev.map((s,idx)=>idx===i?{...s,status:"processing"}:s));
+      try{
+        const file=files[i];
+        const b64=await new Promise((res,rej)=>{const r=new FileReader();r.onload=e=>res(e.target.result.split(",")[1]);r.onerror=rej;r.readAsDataURL(file);});
+        const resp=await fetch("https://api.anthropic.com/v1/messages",{
+          method:"POST",
+          headers:{"Content-Type":"application/json","x-api-key":apiKey,"anthropic-version":"2023-06-01","anthropic-dangerous-direct-browser-access":"true"},
+          body:JSON.stringify({model:"claude-haiku-4-5-20251001",max_tokens:600,system:SCOREBOARD_PROMPT,messages:[{role:"user",content:[{type:"image",source:{type:"base64",media_type:file.type||"image/jpeg",data:b64}},{type:"text",text:"Parse this scoreboard screenshot."}]}]}),
+        });
+        if(!resp.ok){const e=await resp.json().catch(()=>({}));throw new Error(e?.error?.message||`API error ${resp.status}`);}
+        const data=await resp.json();
+        const raw=data.content?.[0]?.text||"";
+        const jm=raw.match(/\{[\s\S]*\}/);
+        if(!jm)throw new Error("No JSON found in response");
+        const parsed=JSON.parse(jm[0]);
+        setImgStatuses(prev=>prev.map((s,idx)=>idx===i?{...s,status:"done",raw:parsed}:s));
+        allGames.push(parsed);
+      }catch(e){
+        setImgStatuses(prev=>prev.map((s,idx)=>idx===i?{...s,status:"error",error:e.message}:s));
+      }
+    }
+    const rows=allGames.map((g,idx)=>{
+      const hm=fuzzyMatchTeam(g.home_team,teamNames);
+      const am=fuzzyMatchTeam(g.away_team,teamNames);
+      return{id:idx,homeRaw:g.home_team||"",awayRaw:g.away_team||"",homeTeam:hm.team,awayTeam:am.team,homeConf:hm.confidence,awayConf:am.confidence,homeScore:parseInt(g.home_score)||0,awayScore:parseInt(g.away_score)||0,homeStats:g.home_stats||{passing_yards:0,rushing_yards:0,total_yards:0,turnovers:0},awayStats:g.away_stats||{passing_yards:0,rushing_yards:0,total_yards:0,turnovers:0},ranked25:false,ranked10:false};
+    });
+    setGameRows(rows);
+    setPhase("review");
+  }
+
+  function updateRow(id,field,val){setGameRows(prev=>prev.map(r=>r.id===id?{...r,[field]:val}:r));}
+
+  function handleConfirm(){
+    const results=[];
+    gameRows.forEach(row=>{
+      const hScore=parseInt(row.homeScore)||0,aScore=parseInt(row.awayScore)||0,hWon=hScore>aScore;
+      const hLeague=teamNames.includes(row.homeTeam),aLeague=teamNames.includes(row.awayTeam);
+      if(hLeague)results.push({leagueTeam:row.homeTeam,result:hWon?"win":"loss",opponent:row.awayTeam||row.awayRaw||"Unknown",ranked25:hWon?row.ranked25:false,ranked10:hWon?row.ranked10:false,stats:row.homeStats});
+      if(aLeague&&row.awayTeam!==row.homeTeam)results.push({leagueTeam:row.awayTeam,result:!hWon?"win":"loss",opponent:row.homeTeam||row.homeRaw||"Unknown",ranked25:!hWon?row.ranked25:false,ranked10:!hWon?row.ranked10:false,stats:row.awayStats});
+    });
+    onConfirm(results);
+    setSuccessInfo({count:results.length,week});
+    setPhase("done");
+  }
+
+  const confC=c=>c==="exact"?"#007a00":c==="fuzzy"?"#cc7700":RED;
+  const confL=c=>c==="exact"?"✓ Exact":c==="fuzzy"?"~ Fuzzy":"✗ No match";
+  const rowConf=row=>row.homeConf==="none"&&row.awayConf==="none"?"none":(row.homeConf==="exact"||row.awayConf==="exact")?"exact":"fuzzy";
+
+  return (
+    <Card><div style={{padding:16}}>
+      <SL>Bulk Game Result Import</SL>
+      <p style={{fontSize:13,color:"#888",marginBottom:12,lineHeight:1.5}}>Upload up to 16 scoreboard screenshots. Claude reads each one and builds a confirmation table — nothing is saved until you click Confirm.</p>
+
+      {phase!=="done"&&<>
+        <input type="file" accept="image/*" multiple onChange={handleFileChange} style={{color:"#111",fontSize:13,marginBottom:10,display:"block"}}/>
+        {imgStatuses.length>0&&<div style={{display:"flex",flexDirection:"column",gap:3,marginBottom:12}}>
+          {imgStatuses.map((s,i)=>(
+            <div key={i} style={{display:"flex",alignItems:"center",gap:8,padding:"5px 10px",background:s.status==="done"?"#f0f8f0":s.status==="error"?"#fff8f8":s.status==="processing"?"#fffbf0":"#f9f9f9",border:`1px solid ${s.status==="done"?"#cce5cc":s.status==="error"?"#ffcccc":s.status==="processing"?"#ffe88a":"#eee"}`,borderRadius:2,fontSize:12}}>
+              <span style={{flex:1,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap",color:"#333"}}>{s.name}</span>
+              <span style={{color:s.status==="done"?"#007a00":s.status==="error"?RED:s.status==="processing"?"#cc7700":"#aaa",fontWeight:700,flexShrink:0,fontSize:11}}>
+                {s.status==="done"?"✓ Done":s.status==="error"?("✗ "+(s.error||"Error")):s.status==="processing"?"⏳ Reading...":"⏸ Pending"}
+              </span>
+            </div>
+          ))}
+        </div>}
+        {phase==="upload"&&files.length>0&&<button onClick={processAll} style={{background:RED,color:"#fff",border:"none",borderRadius:2,padding:"10px 20px",cursor:"pointer",fontFamily:ff,fontSize:13,fontWeight:800,textTransform:"uppercase"}}>Read {files.length} Screenshot{files.length>1?"s":""} →</button>}
+        {phase==="processing"&&<div style={{color:"#cc7700",fontSize:13,fontWeight:700,padding:"8px 0"}}>⏳ Processing images — do not close this tab.</div>}
+      </>}
+
+      {phase==="review"&&gameRows.length===0&&<div style={{color:RED,fontSize:13,marginTop:8}}>No games could be parsed. Try clearer screenshots.</div>}
+
+      {phase==="review"&&gameRows.length>0&&<>
+        <div style={{fontSize:11,fontWeight:800,color:"#555",letterSpacing:1,textTransform:"uppercase",marginTop:12,marginBottom:8}}>Review & Edit — {gameRows.length} game{gameRows.length>1?"s":""} found</div>
+        <div style={{overflowX:"auto",marginBottom:14,border:"1px solid #eee",borderRadius:2}}>
+          <table style={{width:"100%",borderCollapse:"collapse",fontSize:12,minWidth:600}}>
+            <thead><tr style={{background:"#f7f7f7",borderBottom:`2px solid ${RED}`}}>
+              {["Home Team","","Score","—","Score","","Away Team","Confidence","Winner Ranked?"].map((h,i)=>(
+                <th key={i} style={{padding:"7px 8px",textAlign:"center",color:"#555",fontSize:9,letterSpacing:1,textTransform:"uppercase",fontWeight:800,whiteSpace:"nowrap",borderRight:"1px solid #eee"}}>{h}</th>
+              ))}
+            </tr></thead>
+            <tbody>
+              {gameRows.map(row=>{
+                const hScore=parseInt(row.homeScore)||0,aScore=parseInt(row.awayScore)||0,hWon=hScore>aScore;
+                const hLeague=teamNames.includes(row.homeTeam),aLeague=teamNames.includes(row.awayTeam);
+                const conf=rowConf(row);
+                const winnerIsLeague=hWon?hLeague:aLeague;
+                return(
+                  <tr key={row.id} style={{borderBottom:"1px solid #eee",background:conf==="none"?"#fff8f8":conf==="exact"?"#f9fff9":"#fffbf0"}}>
+                    <td style={{padding:"7px 6px",borderRight:"1px solid #eee"}}>
+                      <select value={row.homeTeam} onChange={e=>updateRow(row.id,"homeTeam",e.target.value)} style={{border:"1px solid #ddd",borderRadius:2,padding:"3px 5px",fontFamily:ff,fontSize:11,background:"#fff",color:hLeague?"#111":"#999",width:100}}>
+                        <option value="">{row.homeRaw||"?"}</option>
+                        {teamNames.map(t=><option key={t} value={t}>{t}</option>)}
+                      </select>
+                    </td>
+                    <td style={{padding:"4px 2px",textAlign:"center",fontSize:9,color:hWon?"#007a00":RED,fontWeight:800,borderRight:"1px solid #eee",whiteSpace:"nowrap"}}>{hWon?"WIN":"LOSS"}</td>
+                    <td style={{padding:"7px 6px",borderRight:"1px solid #eee"}}>
+                      <input type="number" value={row.homeScore} onChange={e=>updateRow(row.id,"homeScore",parseInt(e.target.value)||0)} style={{width:44,border:"1px solid #ddd",borderRadius:2,padding:"3px 5px",fontFamily:ff,fontSize:14,fontWeight:900,textAlign:"center",color:hWon?"#007a00":RED,background:"transparent"}}/>
+                    </td>
+                    <td style={{padding:"4px",textAlign:"center",color:"#bbb",fontWeight:700,borderRight:"1px solid #eee"}}>—</td>
+                    <td style={{padding:"7px 6px",borderRight:"1px solid #eee"}}>
+                      <input type="number" value={row.awayScore} onChange={e=>updateRow(row.id,"awayScore",parseInt(e.target.value)||0)} style={{width:44,border:"1px solid #ddd",borderRadius:2,padding:"3px 5px",fontFamily:ff,fontSize:14,fontWeight:900,textAlign:"center",color:!hWon?"#007a00":RED,background:"transparent"}}/>
+                    </td>
+                    <td style={{padding:"4px 2px",textAlign:"center",fontSize:9,color:!hWon?"#007a00":RED,fontWeight:800,borderRight:"1px solid #eee",whiteSpace:"nowrap"}}>{!hWon?"WIN":"LOSS"}</td>
+                    <td style={{padding:"7px 6px",borderRight:"1px solid #eee"}}>
+                      <select value={row.awayTeam} onChange={e=>updateRow(row.id,"awayTeam",e.target.value)} style={{border:"1px solid #ddd",borderRadius:2,padding:"3px 5px",fontFamily:ff,fontSize:11,background:"#fff",color:aLeague?"#111":"#999",width:100}}>
+                        <option value="">{row.awayRaw||"?"}</option>
+                        {teamNames.map(t=><option key={t} value={t}>{t}</option>)}
+                      </select>
+                    </td>
+                    <td style={{padding:"7px 8px",textAlign:"center",borderRight:"1px solid #eee"}}>
+                      <span style={{fontSize:10,fontWeight:700,color:confC(conf),background:conf==="exact"?"#f0f8f0":conf==="fuzzy"?"#fffbf0":"#fff8f8",padding:"2px 6px",borderRadius:2,border:`1px solid ${confC(conf)}`,whiteSpace:"nowrap"}}>{confL(conf)}</span>
+                    </td>
+                    <td style={{padding:"7px 8px"}}>
+                      {winnerIsLeague&&<div style={{display:"flex",gap:8,justifyContent:"center"}}>
+                        <label style={{display:"flex",alignItems:"center",gap:3,fontSize:10,color:"#888",cursor:"pointer",whiteSpace:"nowrap"}}>
+                          <input type="checkbox" checked={row.ranked25} onChange={e=>{updateRow(row.id,"ranked25",e.target.checked);if(e.target.checked)updateRow(row.id,"ranked10",false);}}/>T25
+                        </label>
+                        <label style={{display:"flex",alignItems:"center",gap:3,fontSize:10,color:RED,cursor:"pointer",whiteSpace:"nowrap",fontWeight:700}}>
+                          <input type="checkbox" checked={row.ranked10} onChange={e=>{updateRow(row.id,"ranked10",e.target.checked);if(e.target.checked)updateRow(row.id,"ranked25",false);}}/>T10
+                        </label>
+                      </div>}
+                    </td>
+                  </tr>
+                );
+              })}
+            </tbody>
+          </table>
+        </div>
+        <div style={{background:"#fffbf0",border:"1px solid #ffe88a",borderRadius:2,padding:"10px 14px",fontSize:12,color:"#665500",marginBottom:14}}>
+          Clicking <strong>Confirm</strong> records all results, updates dynasty points, and advances to Week {week+1}. This cannot be undone.
+        </div>
+        <button onClick={handleConfirm} style={{background:"#007a00",color:"#fff",border:"none",borderRadius:2,padding:"12px 26px",cursor:"pointer",fontFamily:ff,fontSize:14,fontWeight:800,textTransform:"uppercase",letterSpacing:0.5}}>✓ Confirm & Record All Results</button>
+      </>}
+
+      {successInfo&&<div style={{marginTop:12,background:"#f0f8f0",border:"1px solid #cce5cc",borderRadius:2,padding:"12px 16px",fontSize:13,color:"#007a00",fontWeight:700}}>✅ {successInfo.count} result{successInfo.count!==1?"s":""} recorded for Week {successInfo.week}! Dynasty points calculated and season advanced.</div>}
+    </div></Card>
+  );
+}
+
 // ── EnterResultsPanel ─────────────────────────────────────────────────────
-function EnterResultsPanel({entries,weekResults,setWeekResults,week,imageFile,imagePreview,processingImage,imageResult,parsedFromImage,handleImageUpload,processImage,applyImageResults,setParsedFromImage,applyWeekResults,postSeasonInputs,setPSI,applyPostSeason,finalizeSeason,season,teamNames,schedule}) {
+function EnterResultsPanel({entries,weekResults,setWeekResults,week,applyBulkResults,applyWeekResults,postSeasonInputs,setPSI,applyPostSeason,finalizeSeason,season,teamNames,schedule}) {
   const setWR=(i,f,v)=>setWeekResults(prev=>prev.map((r,idx)=>idx===i?{...r,[f]:v}:r));
   const thisWeekSchedule = schedule?.[week]||{};
   return (
     <div style={{display:"flex",flexDirection:"column",gap:16}}>
-      <Card><div style={{padding:16}}>
-        <SL>Upload CF27 Screenshot</SL>
-        <p style={{fontSize:13,color:"#888",marginBottom:12,lineHeight:1.5}}>Take a photo of your Scores/Schedules screen and Claude will read results automatically.</p>
-        <input type="file" accept="image/*" onChange={handleImageUpload} style={{color:"#111",fontSize:13,marginBottom:12,display:"block"}}/>
-        {imagePreview&&<img src={imagePreview} alt="preview" style={{maxWidth:"100%",maxHeight:160,borderRadius:2,border:"1px solid #ddd",marginBottom:12,display:"block"}}/>}
-        <button onClick={processImage} disabled={!imageFile||processingImage} style={{background:imageFile&&!processingImage?RED:"#ccc",color:"#fff",border:"none",borderRadius:2,padding:"9px 18px",cursor:imageFile&&!processingImage?"pointer":"not-allowed",fontFamily:ff,fontSize:13,fontWeight:800,textTransform:"uppercase"}}>{processingImage?"Reading...":"Read Screenshot"}</button>
-        {imageResult&&<div style={{marginTop:10,background:"#f7f7f7",borderRadius:2,padding:10,fontSize:13,color:"#111",borderLeft:`3px solid ${imageResult.startsWith("✅")?"#007a00":imageResult.startsWith("❌")?RED:"#cc7700"}`}}>{imageResult}</div>}
-        {parsedFromImage.length>0&&<div style={{marginTop:14}}>
-          <SL>Review Results</SL>
-          {parsedFromImage.map((p,i)=>{const entry=entries.find(e=>e.teamName.toLowerCase()===p.teamName.toLowerCase());return(<div key={i} style={{display:"flex",alignItems:"center",gap:8,marginBottom:8,flexWrap:"wrap",padding:"7px 0",borderBottom:"1px solid #f0f0f0"}}><div style={{width:140}}><div style={{fontSize:13,color:"#111",fontWeight:600}}>{p.teamName}</div>{entry?<div style={{fontSize:11,color:"#888"}}>{entry.userName}</div>:<div style={{fontSize:11,color:RED}}>⚠ no match</div>}</div>{["win","loss"].map(opt=><button key={opt} onClick={()=>setParsedFromImage(prev=>prev.map((r,idx)=>idx===i?{...r,result:opt}:r))} style={{padding:"4px 10px",borderRadius:2,border:"1px solid",borderColor:p.result===opt?(opt==="win"?"#007a00":RED):"#ddd",background:p.result===opt?(opt==="win"?"#f0f8f0":"#fff8f8"):"#fff",color:p.result===opt?(opt==="win"?"#007a00":RED):"#888",cursor:"pointer",fontSize:11,fontFamily:ff,fontWeight:700,textTransform:"uppercase"}}>{opt}</button>)}<label style={{display:"flex",alignItems:"center",gap:4,fontSize:11,color:"#888",cursor:"pointer"}}><input type="checkbox" checked={p.ranked25} onChange={e=>setParsedFromImage(prev=>prev.map((r,idx)=>idx===i?{...r,ranked25:e.target.checked,ranked10:false}:r))}/> Top 25</label><label style={{display:"flex",alignItems:"center",gap:4,fontSize:11,color:RED,cursor:"pointer"}}><input type="checkbox" checked={p.ranked10} onChange={e=>setParsedFromImage(prev=>prev.map((r,idx)=>idx===i?{...r,ranked10:e.target.checked,ranked25:false}:r))}/> Top 10</label></div>);})}
-          <button onClick={applyImageResults} style={{marginTop:8,background:RED,color:"#fff",border:"none",borderRadius:2,padding:"9px 18px",cursor:"pointer",fontFamily:ff,fontSize:13,fontWeight:800,textTransform:"uppercase"}}>Apply & Advance Week →</button>
-        </div>}
-      </div></Card>
+      <BulkResultsUploader entries={entries} week={week} teamNames={teamNames} onConfirm={applyBulkResults}/>
       {week<=12&&<Card><div style={{padding:16}}>
         <SL>Manual Entry — Week {week}</SL>
         {Object.keys(thisWeekSchedule).length>0&&<div style={{background:"#f0f8f0",border:"1px solid #cce5cc",borderRadius:2,padding:"8px 12px",fontSize:12,color:"#555",marginBottom:12}}>✓ Schedule loaded — entering one team's result automatically updates their opponent's record.</div>}
@@ -1047,11 +1213,6 @@ export default function App() {
   const [history,setHistory] = useState([]);
   const [weekResults,setWeekResults] = useState([]);
   const [postSeasonInputs,setPSI] = useState(null);
-  const [imageFile,setImageFile] = useState(null);
-  const [imagePreview,setImagePreview] = useState(null);
-  const [processingImage,setProcessingImage] = useState(false);
-  const [imageResult,setImageResult] = useState("");
-  const [parsedFromImage,setParsedFromImage] = useState([]);
   const [commUnlocked,setCommUnlocked] = useState(false);
   const [showPw,setShowPw] = useState(false);
   const [pwInput,setPwInput] = useState("");
@@ -1165,19 +1326,23 @@ export default function App() {
     setTimeout(()=>saveToDb({week:newWeek}),100);
   }
 
-  function applyImageResults() {
-    if(!parsedFromImage.length)return;
+  function applyBulkResults(results) {
+    const thisWeekSchedule=schedule[week]||{};
     setEntries(prev=>prev.map(entry=>{
-      const r=parsedFromImage.find(p=>p.teamName.toLowerCase()===entry.teamName.toLowerCase());
+      const r=results.find(x=>x.leagueTeam===entry.teamName);
       if(!r)return entry;
       let pts=0,bonus=0;
       if(r.result==="win"){pts=15;bonus=r.ranked10?10:r.ranked25?5:0;}
-      const log={week,result:r.result,ranked25:r.ranked25,ranked10:r.ranked10,pts:pts+bonus};
-      return{...entry,wins:r.result==="win"?entry.wins+1:entry.wins,losses:r.result==="loss"?entry.losses+1:entry.losses,gamePts:entry.gamePts+pts,rankedBonusPts:entry.rankedBonusPts+bonus,weekLog:[...(entry.weekLog||[]),log]};
+      const opp=thisWeekSchedule[entry.teamName]||r.opponent;
+      const log={week,result:r.result,ranked25:r.ranked25,ranked10:r.ranked10,pts:pts+bonus,opponent:opp,stats:r.stats};
+      const h2h={...entry.h2h||{}};
+      if(opp&&!["CPU","BYE","Unknown"].includes(opp)){if(!h2h[opp])h2h[opp]={wins:0,losses:0};if(r.result==="win")h2h[opp].wins++;else if(r.result==="loss")h2h[opp].losses++;}
+      return{...entry,wins:r.result==="win"?entry.wins+1:entry.wins,losses:r.result==="loss"?entry.losses+1:entry.losses,gamePts:entry.gamePts+pts,rankedBonusPts:entry.rankedBonusPts+bonus,weekLog:[...(entry.weekLog||[]),log],h2h};
     }));
-    const newWeek = week+1;
-    setWeek(newWeek);setParsedFromImage([]);setImageResult("");setImagePreview(null);setImageFile(null);
-    setTimeout(() => saveToDb({week: newWeek}), 100);
+    setWeekResults(prev=>prev.map(r=>({...r,result:"none",ranked25:false,ranked10:false})));
+    const newWeek=week+1;
+    setWeek(newWeek);
+    setTimeout(()=>saveToDb({week:newWeek}),100);
   }
 
   function applyPostSeason() {
@@ -1209,32 +1374,6 @@ export default function App() {
     setPSI(newPSI);
     const newSeason = season+1;
     dbSave({season:newSeason, week:1, entries:fresh, post_season_inputs:newPSI});
-  }
-
-  async function handleImageUpload(e) {
-    const file=e.target.files[0];if(!file)return;
-    setImageFile(file);const reader=new FileReader();reader.onload=ev=>setImagePreview(ev.target.result);reader.readAsDataURL(file);
-    setParsedFromImage([]);setImageResult("");
-  }
-
-  async function processImage() {
-    if(!imageFile||!entries.length)return;
-    setProcessingImage(true);setParsedFromImage([]);
-    const teamList=entries.map(e=>`${e.teamName} (user: ${e.userName})`).join(", ");
-    try {
-      setImageResult("Reading image...");
-      const base64=await new Promise((res,rej)=>{const r=new FileReader();r.onload=ev=>res(ev.target.result.split(",")[1]);r.onerror=()=>rej(new Error("Read failed"));r.readAsDataURL(imageFile);});
-      setImageResult("Sending to Claude...");
-      const apiKey=import.meta.env.VITE_ANTHROPIC_KEY;
-      if(!apiKey){setImageResult("❌ VITE_ANTHROPIC_KEY not set.");setProcessingImage(false);return;}
-      const response=await fetch("https://api.anthropic.com/v1/messages",{method:"POST",headers:{"Content-Type":"application/json","x-api-key":apiKey,"anthropic-version":"2023-06-01","anthropic-dangerous-direct-browser-access":"true"},body:JSON.stringify({model:"claude-haiku-4-5-20251001",max_tokens:1000,messages:[{role:"user",content:[{type:"image",source:{type:"base64",media_type:imageFile.type||"image/jpeg",data:base64}},{type:"text",text:`CF27 Scores screen. Dynasty teams: ${teamList}. For each visible team determine win/loss from score. Return ONLY raw JSON array:\n[{"teamName":"Troy","result":"win","ranked25":false,"ranked10":false}]\nOnly include dynasty teams you can see.`}]}]})});
-      if(!response.ok){const t=await response.text();setImageResult(`❌ API error ${response.status}: ${t.slice(0,200)}`);setProcessingImage(false);return;}
-      const data=await response.json();
-      const text=data.content?.[0]?.text||"";
-      if(!text){setImageResult("❌ Empty response.");setProcessingImage(false);return;}
-      try{const m=text.replace(/```json|```/g,"").trim().match(/\[[\s\S]*\]/);const parsed=JSON.parse(m?m[0]:text);if(!Array.isArray(parsed)||!parsed.length){setImageResult("⚠️ No dynasty teams found. Enter manually. Claude saw: "+text.slice(0,200));}else{setParsedFromImage(parsed);setImageResult(`✅ Found ${parsed.length} result(s) — review and apply below.`);}}catch{setImageResult("⚠️ Could not parse. Enter manually. Claude said: "+text.slice(0,200));}
-    }catch(err){setImageResult("❌ "+err.message);}
-    setProcessingImage(false);
   }
 
   function tryPw(){if(pwInput===PASS){setCommUnlocked(true);setShowPw(false);setPwInput("");setCommTab("Enter Results");}else setPwErr(true);}
@@ -1510,7 +1649,7 @@ export default function App() {
           {["Enter Results","Schedule","Content","League Setup"].map(t=><button key={t} onClick={()=>setCommTab(t)} style={{padding:"11px 18px",background:"transparent",border:"none",borderBottom:commTab===t?`3px solid ${RED}`:"3px solid transparent",color:commTab===t?"#fff":"#888",cursor:"pointer",fontSize:12,fontWeight:700,fontFamily:ff,textTransform:"uppercase",letterSpacing:0.5,whiteSpace:"nowrap"}}>{t}</button>)}
         </div>
         <div style={{maxWidth:800,margin:"0 auto",padding:"20px 14px"}}>
-          {commTab==="Enter Results"&&<EnterResultsPanel entries={activeEntries} weekResults={weekResults} setWeekResults={setWeekResults} week={week} imageFile={imageFile} imagePreview={imagePreview} processingImage={processingImage} imageResult={imageResult} parsedFromImage={parsedFromImage} handleImageUpload={handleImageUpload} processImage={processImage} applyImageResults={applyImageResults} setParsedFromImage={setParsedFromImage} applyWeekResults={applyWeekResults} postSeasonInputs={postSeasonInputs} setPSI={setPSI} applyPostSeason={applyPostSeason} finalizeSeason={finalizeSeason} season={season} teamNames={teamNames} schedule={schedule}/>}
+          {commTab==="Enter Results"&&<EnterResultsPanel entries={activeEntries} weekResults={weekResults} setWeekResults={setWeekResults} week={week} applyBulkResults={applyBulkResults} applyWeekResults={applyWeekResults} postSeasonInputs={postSeasonInputs} setPSI={setPSI} applyPostSeason={applyPostSeason} finalizeSeason={finalizeSeason} season={season} teamNames={teamNames} schedule={schedule}/>}
           {commTab==="Schedule"&&<SchedulePanel entries={activeEntries} schedule={schedule} setSchedule={setSchedule}/>}
           {commTab==="Content"&&<ContentHub sorted={sorted} entries={activeEntries} week={week} season={season} leagueName={leagueName} history={history} leader={leader} articles={articles} setArticles={setArticles} setActiveArticle={setActiveArticle} schedule={schedule}/>}
           {commTab==="League Setup"&&<SetupPanel entries={entries} setup={setup} postSeasonInputs={postSeasonInputs} setPSI={setPSI} handleStart={handleStart} setCommissionerUnlocked={setCommUnlocked} season={season} setEntries={setEntries} setWeekResults={setWeekResults} setSetup={setSetup}/>}
