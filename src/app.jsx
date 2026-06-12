@@ -260,11 +260,83 @@ function WeekMatchupsCard({schedule,week,sorted,leagueName,season,setActiveArtic
 function SchedulePanel({entries,schedule,setSchedule}) {
   const [editWeek,setEditWeek] = useState(1);
   const [saved,setSaved] = useState(false);
+  const [schedImg,setSchedImg] = useState(null);
+  const [schedImgPreview,setSchedImgPreview] = useState(null);
+  const [schedParsing,setSchedParsing] = useState(false);
+  const [schedResult,setSchedResult] = useState("");
   const teamNames = (entries||[]).map(e=>e.teamName);
   const WEEKS = Array.from({length:12},(_,i)=>i+1);
   const OPPONENTS = ["BYE","CPU",...teamNames];
   const SUPA_URL2 = "https://uyaqmdljwwslskoqxvpn.supabase.co";
   const SUPA_KEY2 = "sb_publishable_GNVG6TW43VXjW7IhWcBtmA_L_mMok1C";
+
+  function handleSchedImage(e) {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    setSchedImg(file);
+    setSchedResult("");
+    const reader = new FileReader();
+    reader.onload = ev => setSchedImgPreview(ev.target.result);
+    reader.readAsDataURL(file);
+  }
+
+  async function parseScheduleImage() {
+    if (!schedImg) return;
+    setSchedParsing(true);
+    setSchedResult("");
+    try {
+      const apiKey = import.meta.env.VITE_ANTHROPIC_KEY;
+      if (!apiKey) throw new Error("VITE_ANTHROPIC_KEY not set.");
+      const reader = new FileReader();
+      const b64 = await new Promise((res,rej)=>{reader.onload=e=>res(e.target.result.split(",")[1]);reader.onerror=rej;reader.readAsDataURL(schedImg);});
+      const prompt = "This is a screenshot of a college football game schedule from a video game dynasty mode. " +
+        "The dynasty teams are: " + teamNames.join(", ") + ". " +
+        "Parse ALL visible weeks and matchups. For each week, list every dynasty team and their opponent. " +
+        "If the opponent is another dynasty team, use their exact name. If the opponent is a non-dynasty CPU team, write 'CPU'. If it's a bye week, write 'BYE'. " +
+        "Return ONLY a JSON object in this exact format with no extra text or markdown:\n" +
+        "{\"1\":{\"TeamA\":\"TeamB\",\"TeamB\":\"TeamA\"},\"2\":{\"TeamA\":\"CPU\"},\"3\":{\"TeamA\":\"BYE\"},...}\n" +
+        "Only include weeks and teams visible in the image. Use the dynasty team names exactly as listed above.";
+      const r = await fetch("https://api.anthropic.com/v1/messages", {
+        method: "POST",
+        headers: {"Content-Type":"application/json","x-api-key":apiKey,"anthropic-version":"2023-06-01","anthropic-dangerous-direct-browser-access":"true"},
+        body: JSON.stringify({
+          model: "claude-haiku-4-5-20251001",
+          max_tokens: 2000,
+          messages: [{role:"user",content:[
+            {type:"image",source:{type:"base64",media_type:schedImg.type||"image/jpeg",data:b64}},
+            {type:"text",text:prompt}
+          ]}],
+        }),
+      });
+      if (!r.ok) { const e=await r.json().catch(()=>({})); throw new Error(e?.error?.message||`API error ${r.status}`); }
+      const d = await r.json();
+      const raw = d.content?.[0]?.text || "";
+      const jsonMatch = raw.match(/\{[\s\S]*\}/);
+      if (!jsonMatch) throw new Error("Could not parse schedule from image. Try a clearer screenshot.");
+      const parsed = JSON.parse(jsonMatch[0]);
+      let filled = 0;
+      setSchedule(prev => {
+        const ns = {...prev};
+        Object.entries(parsed).forEach(([wk, matchups]) => {
+          const w = parseInt(wk);
+          if (w < 1 || w > 12) return;
+          ns[w] = {...(ns[w]||{})};
+          Object.entries(matchups).forEach(([team, opp]) => {
+            const matchedTeam = teamNames.find(t => t.toLowerCase() === team.toLowerCase()) || team;
+            const matchedOpp = opp === "CPU" || opp === "BYE" ? opp : (teamNames.find(t => t.toLowerCase() === opp.toLowerCase()) || opp);
+            if (teamNames.includes(matchedTeam)) { ns[w][matchedTeam] = matchedOpp; filled++; }
+            if (matchedOpp !== "CPU" && matchedOpp !== "BYE" && teamNames.includes(matchedOpp)) ns[w][matchedOpp] = matchedTeam;
+          });
+        });
+        return ns;
+      });
+      setSchedResult("✅ Parsed " + Object.keys(parsed).length + " weeks (" + filled + " matchups). Review below and save.");
+    } catch(e) {
+      setSchedResult("❌ " + e.message);
+    } finally {
+      setSchedParsing(false);
+    }
+  }
 
   function setMatchup(wk,team,opp) {
     setSchedule(prev=>{
@@ -297,6 +369,14 @@ function SchedulePanel({entries,schedule,setSchedule}) {
 
   return (
     <div style={{display:"flex",flexDirection:"column",gap:16}}>
+      <Card style={{padding:16}}>
+        <SL>Import Schedule from Screenshot</SL>
+        <p style={{fontSize:13,color:"#888",marginBottom:12,lineHeight:1.5}}>Take a screenshot of your dynasty schedule screen and Claude will read all 12 weeks automatically.</p>
+        <input type="file" accept="image/*" onChange={handleSchedImage} style={{color:"#111",fontSize:13,marginBottom:12,display:"block"}}/>
+        {schedImgPreview&&<img src={schedImgPreview} alt="schedule preview" style={{maxWidth:"100%",maxHeight:180,borderRadius:2,border:"1px solid #ddd",marginBottom:12,display:"block"}}/>}
+        <button onClick={parseScheduleImage} disabled={!schedImg||schedParsing} style={{background:schedImg&&!schedParsing?RED:"#ccc",color:"#fff",border:"none",borderRadius:2,padding:"9px 18px",cursor:schedImg&&!schedParsing?"pointer":"not-allowed",fontFamily:ff,fontSize:13,fontWeight:800,textTransform:"uppercase"}}>{schedParsing?"Reading Schedule...":"Parse Schedule →"}</button>
+        {schedResult&&<div style={{marginTop:10,background:"#f7f7f7",borderRadius:2,padding:10,fontSize:13,color:"#111",borderLeft:`3px solid ${schedResult.startsWith("✅")?"#007a00":RED}`}}>{schedResult}</div>}
+      </Card>
       <Card style={{padding:16}}>
         <SL>Season Schedule Setup</SL>
         <p style={{fontSize:13,color:"#888",marginBottom:14,lineHeight:1.5}}>Set each team's opponent for every week. Picking a dynasty team auto-fills both sides. Each team needs 10 conference + 2 CPU games.</p>
