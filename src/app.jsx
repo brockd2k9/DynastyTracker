@@ -83,17 +83,28 @@ function cleanArticle(text, maxChars=1000) {
 }
 
 async function callClaude(prompt) {
-  const r = await fetch("/.netlify/functions/claude", {
+  const apiKey = import.meta.env.VITE_ANTHROPIC_KEY;
+  if (!apiKey) throw new Error("VITE_ANTHROPIC_KEY not set in Cloudflare build variables.");
+  const r = await fetch("https://api.anthropic.com/v1/messages", {
     method: "POST",
-    headers: {"Content-Type":"application/json"},
-    body: JSON.stringify({prompt, max_tokens: 1200})
+    headers: {
+      "Content-Type": "application/json",
+      "x-api-key": apiKey,
+      "anthropic-version": "2023-06-01",
+      "anthropic-dangerous-direct-browser-access": "true",
+    },
+    body: JSON.stringify({
+      model: "claude-haiku-4-5-20251001",
+      max_tokens: 1200,
+      messages: [{role:"user", content: prompt}],
+    }),
   });
   if (!r.ok) {
     const err = await r.json().catch(()=>({}));
-    throw new Error(err?.error || `Server error ${r.status}`);
+    throw new Error(err?.error?.message || `API error ${r.status}`);
   }
   const d = await r.json();
-  return d.text || "No content returned.";
+  return d.content?.[0]?.text || "No content returned.";
 }
 
 const ff = "'Helvetica Neue',Arial,sans-serif";
@@ -1117,10 +1128,12 @@ export default function App() {
       setImageResult("Reading image...");
       const base64=await new Promise((res,rej)=>{const r=new FileReader();r.onload=ev=>res(ev.target.result.split(",")[1]);r.onerror=()=>rej(new Error("Read failed"));r.readAsDataURL(imageFile);});
       setImageResult("Sending to Claude...");
-      const response=await fetch("/.netlify/functions/claude",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({image:{data:base64,media_type:imageFile.type||"image/jpeg"},prompt:`CF27 Scores screen. Dynasty teams: ${teamList}. For each visible team determine win/loss from score. Return ONLY raw JSON array:\n[{"teamName":"Troy","result":"win","ranked25":false,"ranked10":false}]\nOnly include dynasty teams you can see.`,max_tokens:1000})});
+      const apiKey=import.meta.env.VITE_ANTHROPIC_KEY;
+      if(!apiKey){setImageResult("❌ VITE_ANTHROPIC_KEY not set.");setProcessingImage(false);return;}
+      const response=await fetch("https://api.anthropic.com/v1/messages",{method:"POST",headers:{"Content-Type":"application/json","x-api-key":apiKey,"anthropic-version":"2023-06-01","anthropic-dangerous-direct-browser-access":"true"},body:JSON.stringify({model:"claude-haiku-4-5-20251001",max_tokens:1000,messages:[{role:"user",content:[{type:"image",source:{type:"base64",media_type:imageFile.type||"image/jpeg",data:base64}},{type:"text",text:`CF27 Scores screen. Dynasty teams: ${teamList}. For each visible team determine win/loss from score. Return ONLY raw JSON array:\n[{"teamName":"Troy","result":"win","ranked25":false,"ranked10":false}]\nOnly include dynasty teams you can see.`}]}]})});
       if(!response.ok){const t=await response.text();setImageResult(`❌ API error ${response.status}: ${t.slice(0,200)}`);setProcessingImage(false);return;}
-      const data=await response.json();if(data.error){setImageResult(`❌ ${data.error}`);setProcessingImage(false);return;}
-      const text=data.text||"";
+      const data=await response.json();
+      const text=data.content?.[0]?.text||"";
       if(!text){setImageResult("❌ Empty response.");setProcessingImage(false);return;}
       try{const m=text.replace(/```json|```/g,"").trim().match(/\[[\s\S]*\]/);const parsed=JSON.parse(m?m[0]:text);if(!Array.isArray(parsed)||!parsed.length){setImageResult("⚠️ No dynasty teams found. Enter manually. Claude saw: "+text.slice(0,200));}else{setParsedFromImage(parsed);setImageResult(`✅ Found ${parsed.length} result(s) — review and apply below.`);}}catch{setImageResult("⚠️ Could not parse. Enter manually. Claude said: "+text.slice(0,200));}
     }catch(err){setImageResult("❌ "+err.message);}
