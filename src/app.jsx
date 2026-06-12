@@ -491,77 +491,225 @@ function HistoryTab({history}) {
 
 // ── Profile Tab ───────────────────────────────────────────────────────────
 function ScheduleTab({schedule,entries,week,season}) {
-  const [view,setView] = useState("full"); // "full" | teamName
+  const [view,setView] = useState("full");
+  const [expanded,setExpanded] = useState({}); // key -> bool
   const weeks = Object.keys(schedule||{}).map(Number).sort((a,b)=>a-b);
   const teams = entries.map(e=>e.teamName).sort();
 
-  // Build matchups per week (deduplicated pairs)
-  function getMatchups(w) {
-    const raw = schedule[w]||{};
-    const pairs=[];
-    const seen=new Set();
-    Object.entries(raw).forEach(([team,opp])=>{
-      const key=[team,opp].sort().join("||");
-      if(!seen.has(key)){seen.add(key);pairs.push({home:team,away:opp});}
-    });
-    return pairs;
+  // Build a lookup: teamName -> weekNum -> weekLog entry (with stats)
+  const resultLookup = {};
+  entries.forEach(e=>{
+    resultLookup[e.teamName]={};
+    (e.weekLog||[]).forEach(log=>{ resultLookup[e.teamName][log.week]=log; });
+  });
+
+  // For a given matchup, find the recorded game result (winner, scores)
+  // Stats come from the bulk uploader's log.stats field
+  function getGameResult(teamA, teamB, w) {
+    const logA = resultLookup[teamA]?.[w];
+    const logB = resultLookup[teamB]?.[w];
+    if (!logA && !logB) return null;
+    const winner = logA?.result==="win" ? teamA : logB?.result==="win" ? teamB : null;
+    const loser  = logA?.result==="loss"? teamA : logB?.result==="loss"? teamB : null;
+    // Scores — stored as stats.score_for / score_against if available, else derive from stats
+    const statsA = logA?.stats || null;
+    const statsB = logB?.stats || null;
+    // score fields: may be stored as score_for/score_against on the log itself
+    const scoreA = logA?.score ?? logA?.scoreFor ?? null;
+    const scoreB = logB?.score ?? logB?.scoreFor ?? null;
+    return {winner, loser, logA, logB, statsA, statsB, scoreA, scoreB};
   }
 
-  // Team's full schedule across all weeks
+  function BoxScore({teamA, teamB, result}) {
+    const {logA, logB, statsA, statsB, scoreA, scoreB, winner} = result;
+    const wA = logA?.result==="win", wB = logB?.result==="win";
+    const rows = [
+      ["Passing Yds", statsA?.passing_yards, statsB?.passing_yards],
+      ["Rushing Yds", statsA?.rushing_yards, statsB?.rushing_yards],
+      ["Total Yds",   statsA?.total_yards,   statsB?.total_yards],
+      ["Turnovers",  statsA?.turnovers,      statsB?.turnovers],
+    ];
+    const hasStats = statsA || statsB;
+    return (
+      <div style={{background:"#111",padding:"0",borderTop:"1px solid #333"}}>
+        {/* Score header */}
+        <div style={{display:"flex",alignItems:"stretch",background:"#1a1a1a",borderBottom:"1px solid #333"}}>
+          <div style={{flex:1,padding:"10px 14px",textAlign:"right"}}>
+            <div style={{fontSize:13,fontWeight:wA?900:600,color:wA?"#fff":"#888"}}>{teamA}</div>
+            {(scoreA!=null)&&<div style={{fontSize:22,fontWeight:900,color:wA?"#fff":"#888",lineHeight:1.1}}>{scoreA}</div>}
+          </div>
+          <div style={{padding:"10px 8px",display:"flex",alignItems:"center",justifyContent:"center"}}>
+            <div style={{fontSize:9,fontWeight:800,color:"#555",textTransform:"uppercase",letterSpacing:1}}>FINAL</div>
+          </div>
+          <div style={{flex:1,padding:"10px 14px",textAlign:"left"}}>
+            <div style={{fontSize:13,fontWeight:wB?900:600,color:wB?"#fff":"#888"}}>{teamB}</div>
+            {(scoreB!=null)&&<div style={{fontSize:22,fontWeight:900,color:wB?"#fff":"#888",lineHeight:1.1}}>{scoreB}</div>}
+          </div>
+        </div>
+        {/* Stats table */}
+        {hasStats&&<table style={{width:"100%",borderCollapse:"collapse",fontSize:12}}>
+          <thead><tr>
+            <th style={{padding:"6px 14px",textAlign:"right",color:"#555",fontSize:9,fontWeight:800,letterSpacing:1,textTransform:"uppercase",width:"40%"}}>{teamA}</th>
+            <th style={{padding:"6px 8px",textAlign:"center",color:"#444",fontSize:9,fontWeight:700,letterSpacing:1,textTransform:"uppercase"}}>&nbsp;</th>
+            <th style={{padding:"6px 14px",textAlign:"left",color:"#555",fontSize:9,fontWeight:800,letterSpacing:1,textTransform:"uppercase",width:"40%"}}>{teamB}</th>
+          </tr></thead>
+          <tbody>{rows.map(([label,valA,valB])=>{
+            const hasStat=valA!=null||valB!=null;
+            if(!hasStat)return null;
+            const aWins=label==="Turnovers"?(valA!=null&&valB!=null&&valA<valB):(valA!=null&&valB!=null&&valA>valB);
+            const bWins=label==="Turnovers"?(valB!=null&&valA!=null&&valB<valA):(valB!=null&&valA!=null&&valB>valA);
+            return(<tr key={label} style={{borderTop:"1px solid #222"}}>
+              <td style={{padding:"7px 14px",textAlign:"right",fontWeight:aWins?800:400,color:aWins?"#fff":"#888",fontSize:13}}>{valA??"-"}</td>
+              <td style={{padding:"7px 8px",textAlign:"center",color:"#444",fontSize:9,fontWeight:700,textTransform:"uppercase",letterSpacing:1,whiteSpace:"nowrap"}}>{label}</td>
+              <td style={{padding:"7px 14px",textAlign:"left",fontWeight:bWins?800:400,color:bWins?"#fff":"#888",fontSize:13}}>{valB??"-"}</td>
+            </tr>);
+          })}</tbody>
+        </table>}
+        {!hasStats&&<div style={{padding:"10px 14px",color:"#555",fontSize:11,textAlign:"center"}}>No box score data recorded for this game.</div>}
+      </div>
+    );
+  }
+
+  function MatchupRow({home, away, w}) {
+    const isCPU = away==="CPU"||away==="BYE";
+    const result = !isCPU ? getGameResult(home, away, w) : null;
+    const played = !!result;
+    const winHome = result?.winner===home, winAway = result?.winner===away;
+    const key = `${w}-${[home,away].sort().join("||")}`;
+    const isOpen = expanded[key];
+
+    return (
+      <div style={{borderBottom:"1px solid #f0f0f0"}}>
+        <div
+          onClick={played ? ()=>setExpanded(p=>({...p,[key]:!p[key]})) : undefined}
+          style={{display:"flex",alignItems:"center",padding:"10px 14px",gap:8,cursor:played?"pointer":"default",background:isOpen?"#fafafa":"transparent"}}
+          onMouseEnter={played?e=>e.currentTarget.style.background="#fafafa":undefined}
+          onMouseLeave={played?e=>e.currentTarget.style.background=isOpen?"#fafafa":"transparent":undefined}
+        >
+          {/* Home side */}
+          <div style={{flex:1,display:"flex",alignItems:"center",justifyContent:"flex-end",gap:6}}>
+            <span style={{fontSize:13,fontWeight:played?(winHome?800:500):700,color:played?(winHome?"#111":"#999"):"#111",textAlign:"right"}}>{home}</span>
+            {played&&<span style={{fontSize:10,fontWeight:800,padding:"1px 5px",borderRadius:2,background:winHome?"#e8f5e9":"#fff0f0",color:winHome?"#007a00":RED,flexShrink:0}}>{winHome?"W":"L"}</span>}
+          </div>
+
+          {/* Score / VS center */}
+          <div style={{textAlign:"center",minWidth:70,flexShrink:0}}>
+            {played ? (
+              <div style={{display:"flex",alignItems:"center",justifyContent:"center",gap:4}}>
+                {result.scoreA!=null
+                  ? <span style={{fontSize:15,fontWeight:900,color:winHome?"#111":"#999"}}>{result.scoreA}</span>
+                  : null}
+                <span style={{fontSize:10,fontWeight:800,color:"#ccc"}}>–</span>
+                {result.scoreB!=null
+                  ? <span style={{fontSize:15,fontWeight:900,color:winAway?"#111":"#999"}}>{result.scoreB}</span>
+                  : null}
+                {result.scoreA==null&&result.scoreB==null&&<span style={{fontSize:9,fontWeight:800,color:"#007a00",textTransform:"uppercase",letterSpacing:0.5,padding:"1px 5px",background:"#f0f8f0",borderRadius:2}}>FINAL</span>}
+              </div>
+            ) : (
+              <span style={{fontSize:10,fontWeight:800,color:"#bbb",padding:"2px 8px",border:"1px solid #eee",borderRadius:2}}>{isCPU?"":"VS"}</span>
+            )}
+          </div>
+
+          {/* Away side */}
+          <div style={{flex:1,display:"flex",alignItems:"center",gap:6}}>
+            {played&&<span style={{fontSize:10,fontWeight:800,padding:"1px 5px",borderRadius:2,background:winAway?"#e8f5e9":"#fff0f0",color:winAway?"#007a00":RED,flexShrink:0}}>{winAway?"W":"L"}</span>}
+            <span style={{fontSize:13,fontWeight:played?(winAway?800:500):700,color:isCPU?"#aaa":played?(winAway?"#111":"#999"):"#111"}}>{away}</span>
+          </div>
+
+          {played&&<span style={{fontSize:11,color:"#ccc",flexShrink:0}}>{isOpen?"▲":"▼"}</span>}
+        </div>
+        {played&&isOpen&&<BoxScore teamA={home} teamB={away} result={result}/>}
+      </div>
+    );
+  }
+
+  // Per-team schedule with result lookup
   function getTeamSchedule(teamName) {
     return weeks.map(w=>{
       const opp=schedule[w]?.[teamName];
-      return{week:w,opp:opp||"—"};
-    });
+      if(!opp)return null;
+      const log=resultLookup[teamName]?.[w]||null;
+      return{week:w,opp,log};
+    }).filter(Boolean);
   }
 
   if(!weeks.length) return <Card style={{padding:20,textAlign:"center",color:"#888",fontSize:13}}>No schedule set up yet. Add matchups in Commissioner Mode.</Card>;
 
   return(
     <div style={{display:"flex",flexDirection:"column",gap:14}}>
-      {/* View selector */}
       <Card style={{overflow:"hidden"}}>
         <div style={{display:"flex",overflowX:"auto",borderBottom:"1px solid #eee"}}>
           <button onClick={()=>setView("full")} style={{padding:"9px 16px",background:"transparent",border:"none",borderBottom:view==="full"?`3px solid ${RED}`:"3px solid transparent",color:view==="full"?"#111":"#888",cursor:"pointer",fontSize:11,fontWeight:700,fontFamily:ff,textTransform:"uppercase",letterSpacing:0.5,whiteSpace:"nowrap"}}>Full Schedule</button>
           {teams.map(t=><button key={t} onClick={()=>setView(t)} style={{padding:"9px 14px",background:"transparent",border:"none",borderBottom:view===t?`3px solid ${RED}`:"3px solid transparent",color:view===t?"#111":"#888",cursor:"pointer",fontSize:11,fontWeight:700,fontFamily:ff,whiteSpace:"nowrap"}}>{t}</button>)}
         </div>
 
-        {view==="full"?(
+        {view==="full"&&(
           <div>
-            {weeks.map(w=>(
-              <div key={w}>
-                <div style={{background:"#f7f7f7",padding:"7px 14px",display:"flex",alignItems:"center",gap:10,borderBottom:"1px solid #eee"}}>
-                  <span style={{fontSize:10,fontWeight:800,color:RED,textTransform:"uppercase",letterSpacing:1}}>{w>12?"Post-Season":`Week ${w}`}</span>
-                  {w===week&&<span style={{background:RED,color:"#fff",fontSize:9,fontWeight:800,padding:"1px 6px",borderRadius:10,textTransform:"uppercase",letterSpacing:0.5}}>Current</span>}
-                </div>
-                {getMatchups(w).map(({home,away},i)=>(
-                  <div key={i} style={{display:"flex",alignItems:"center",padding:"10px 14px",borderBottom:"1px solid #f5f5f5",gap:8}}>
-                    <span style={{flex:1,fontSize:13,fontWeight:700,color:"#111",textAlign:"right"}}>{home}</span>
-                    <span style={{fontSize:10,fontWeight:800,color:"#999",padding:"2px 8px",border:"1px solid #eee",borderRadius:2}}>VS</span>
-                    <span style={{flex:1,fontSize:13,fontWeight:700,color:away==="CPU"||away==="BYE"?"#aaa":"#111"}}>{away}</span>
+            {weeks.map(w=>{
+              const matchups=[];
+              const seen=new Set();
+              Object.entries(schedule[w]||{}).forEach(([team,opp])=>{
+                const key=[team,opp].sort().join("||");
+                if(!seen.has(key)){seen.add(key);matchups.push({home:team,away:opp});}
+              });
+              return(
+                <div key={w}>
+                  <div style={{background:"#f7f7f7",padding:"7px 14px",display:"flex",alignItems:"center",gap:10,borderBottom:"1px solid #eee"}}>
+                    <span style={{fontSize:10,fontWeight:800,color:RED,textTransform:"uppercase",letterSpacing:1}}>{w>12?"Post-Season":`Week ${w}`}</span>
+                    {w===week&&<span style={{background:RED,color:"#fff",fontSize:9,fontWeight:800,padding:"1px 6px",borderRadius:10,textTransform:"uppercase",letterSpacing:0.5}}>Current</span>}
+                    {w<week&&<span style={{background:"#007a00",color:"#fff",fontSize:9,fontWeight:800,padding:"1px 6px",borderRadius:10,textTransform:"uppercase",letterSpacing:0.5}}>Final</span>}
                   </div>
-                ))}
-              </div>
-            ))}
+                  {matchups.map(({home,away},i)=>(
+                    <MatchupRow key={i} home={home} away={away} w={w}/>
+                  ))}
+                </div>
+              );
+            })}
           </div>
-        ):(
+        )}
+
+        {view!=="full"&&(
           <div>
             <div style={{padding:"12px 14px",borderBottom:"1px solid #eee",display:"flex",alignItems:"center",gap:10}}>
               <div style={{fontSize:16,fontWeight:900,color:"#111"}}>{view}</div>
               <div style={{fontSize:11,color:"#888"}}>Season {season} Schedule</div>
             </div>
-            <table style={{width:"100%",borderCollapse:"collapse",fontSize:13}}>
-              <thead><tr style={{background:"#f7f7f7",borderBottom:`2px solid ${RED}`}}>
-                {["Week","Opponent",""].map(h=><th key={h} style={{padding:"8px 12px",textAlign:h==="Opponent"?"left":"center",color:"#555",fontSize:9,letterSpacing:1,textTransform:"uppercase",fontWeight:800}}>{h}</th>)}
-              </tr></thead>
-              <tbody>{getTeamSchedule(view).map(({week:w,opp})=>(
-                <tr key={w} style={{borderBottom:"1px solid #eee",background:w===week?"#fff8f8":"transparent"}}>
-                  <td style={{padding:"9px 12px",textAlign:"center",fontWeight:w===week?800:400,color:w===week?RED:"#555"}}>{w>12?"Post-Season":`Wk ${w}`}</td>
-                  <td style={{padding:"9px 12px",fontWeight:700,color:opp==="CPU"||opp==="BYE"?"#aaa":"#111"}}>{opp}</td>
-                  <td style={{padding:"9px 12px",textAlign:"center"}}>{w===week&&<span style={{background:RED,color:"#fff",fontSize:9,fontWeight:800,padding:"2px 6px",borderRadius:10}}>NOW</span>}</td>
-                </tr>
-              ))}</tbody>
-            </table>
+            {getTeamSchedule(view).map(({week:w,opp,log})=>{
+              const played=!!log;
+              const won=log?.result==="win";
+              const key=`team-${view}-${w}`;
+              const isOpen=expanded[key];
+              const oppLog=resultLookup[opp]?.[w]||null;
+              // Scores for this team
+              const myScore=log?.scoreFor??log?.score??null;
+              const theirScore=oppLog?.scoreFor??oppLog?.score??null;
+              return(
+                <div key={w} style={{borderBottom:"1px solid #eee"}}>
+                  <div
+                    onClick={played?()=>setExpanded(p=>({...p,[key]:!p[key]})):undefined}
+                    style={{display:"flex",alignItems:"center",padding:"10px 14px",gap:10,cursor:played?"pointer":"default",background:w===week?"#fff8f8":isOpen?"#fafafa":"transparent"}}
+                  >
+                    <div style={{width:50,flexShrink:0}}>
+                      <div style={{fontSize:12,fontWeight:w===week?800:500,color:w===week?RED:"#555",textAlign:"center"}}>{w>12?"Post":w===week?<span style={{background:RED,color:"#fff",fontSize:9,fontWeight:800,padding:"1px 5px",borderRadius:10}}>NOW</span>:`Wk ${w}`}</div>
+                    </div>
+                    <div style={{flex:1,display:"flex",alignItems:"center",gap:8}}>
+                      {played&&<span style={{fontSize:10,fontWeight:800,padding:"2px 6px",borderRadius:2,background:won?"#e8f5e9":"#fff0f0",color:won?"#007a00":RED,flexShrink:0}}>{won?"W":"L"}</span>}
+                      <span style={{fontSize:13,fontWeight:700,color:opp==="CPU"||opp==="BYE"?"#aaa":"#111"}}>{opp==="BYE"?"BYE WEEK":opp}</span>
+                    </div>
+                    {played&&(myScore!=null||theirScore!=null)&&(
+                      <div style={{fontSize:14,fontWeight:900,color:"#111",flexShrink:0}}>
+                        <span style={{color:won?"#007a00":RED}}>{myScore??"-"}</span>
+                        <span style={{color:"#ccc",margin:"0 4px"}}>–</span>
+                        <span style={{color:!won?"#007a00":RED}}>{theirScore??"-"}</span>
+                      </div>
+                    )}
+                    {played&&!myScore&&!theirScore&&<span style={{fontSize:9,fontWeight:800,color:"#007a00",textTransform:"uppercase",padding:"1px 5px",background:"#f0f8f0",borderRadius:2,flexShrink:0}}>FINAL</span>}
+                    {played&&<span style={{fontSize:11,color:"#ccc",flexShrink:0}}>{isOpen?"▲":"▼"}</span>}
+                  </div>
+                  {played&&isOpen&&<BoxScore teamA={view} teamB={opp} result={{winner:won?view:opp,loser:won?opp:view,logA:log,logB:oppLog,statsA:log?.stats||null,statsB:oppLog?.stats||null,scoreA:myScore,scoreB:theirScore}}/>}
+                </div>
+              );
+            })}
           </div>
         )}
       </Card>
