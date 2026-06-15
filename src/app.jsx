@@ -263,6 +263,7 @@ function WeekMatchupsCard({schedule,week,sorted,leagueName,season,setActiveArtic
 
 // ── Schedule Panel ────────────────────────────────────────────────────────
 function SchedulePanel({entries,schedule,setSchedule}) {
+  const isMobile = useIsMobile();
   const [editWeek,setEditWeek] = useState(1);
   const [saved,setSaved] = useState(false);
   const [schedImg,setSchedImg] = useState(null);
@@ -430,7 +431,7 @@ function SchedulePanel({entries,schedule,setSchedule}) {
           {saved&&<div style={{fontSize:12,color:"#007a00",fontWeight:700}}>✓ Saved!</div>}
         </div>
       </Card>
-      {teamNames.length>0&&Object.keys(schedule).length>0&&(
+      {!isMobile&&teamNames.length>0&&Object.keys(schedule).length>0&&(
         <Card style={{overflow:"hidden"}}>
           <CardHead>Full Schedule Grid</CardHead>
           <div style={{overflowX:"auto",padding:14}}>
@@ -462,6 +463,7 @@ function SchedulePanel({entries,schedule,setSchedule}) {
 
 // ── History Tab ───────────────────────────────────────────────────────────
 function HistoryTab({history}) {
+  const isMobile = useIsMobile();
   const [sel,setSel] = useState(null);
   if (!history.length) return <Card style={{padding:20}}><div style={{color:"#888",fontSize:14,textAlign:"center"}}>No completed seasons yet.</div></Card>;
   const allWins={},allPts={},champs={},confT={};
@@ -475,7 +477,7 @@ function HistoryTab({history}) {
   return (
     <div style={{display:"flex",flexDirection:"column",gap:14}}>
       {Object.keys(champs).length>0&&<Card><CardHead bg={RED}>Dynasty Champions</CardHead><div style={{padding:"10px 14px",display:"flex",flexWrap:"wrap",gap:10}}>{Object.entries(champs).map(([u,c])=><div key={u} style={{background:RED,borderRadius:3,padding:"8px 14px",textAlign:"center"}}><div style={{color:"#fff",fontWeight:800,fontSize:14}}>{u}</div><div style={{color:"rgba(255,255,255,0.7)",fontSize:11}}>{c}× CHAMPION</div></div>)}</div></Card>}
-      <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:14}}>
+      <div style={{display:"grid",gridTemplateColumns:isMobile?"1fr":"1fr 1fr",gap:14}}>
         <Card><CardHead>All-Time Wins</CardHead><div style={{padding:"4px 0"}}>{wList.map(([u,w],i)=><div key={u} style={{display:"flex",justifyContent:"space-between",alignItems:"center",padding:"7px 12px",borderBottom:"1px solid #f5f5f5"}}><span style={{fontSize:12,color:i===0?"#111":"#555",fontWeight:i===0?700:400}}>{i+1}. {u}</span><span style={{fontSize:13,fontWeight:800,color:"#007a00"}}>{w}W</span></div>)}</div></Card>
         <Card><CardHead>All-Time Pts</CardHead><div style={{padding:"4px 0"}}>{pList.map(([u,p],i)=><div key={u} style={{display:"flex",justifyContent:"space-between",alignItems:"center",padding:"7px 12px",borderBottom:"1px solid #f5f5f5"}}><span style={{fontSize:12,color:i===0?"#111":"#555",fontWeight:i===0?700:400}}>{i+1}. {u}</span><span style={{fontSize:13,fontWeight:800,color:RED}}>{p}</span></div>)}</div></Card>
       </div>
@@ -483,7 +485,7 @@ function HistoryTab({history}) {
         <div style={{padding:"12px 14px",display:"flex",gap:8,flexWrap:"wrap"}}>
           {history.map((s,i)=><button key={i} onClick={()=>setSel(sel===i?null:i)} style={{padding:"5px 12px",borderRadius:2,border:"1px solid",borderColor:sel===i?RED:"#ddd",background:sel===i?RED:"#fff",color:sel===i?"#fff":"#555",cursor:"pointer",fontSize:12,fontWeight:700,fontFamily:ff,textTransform:"uppercase"}}>{s.year} · S{s.seasonNum}</button>)}
         </div>
-        {sel!==null&&(()=>{const s=history[sel];const srt=[...s.finalStandings].sort((a,b)=>calcTotal(b)-calcTotal(a));const top=calcTotal(srt[0]);return(<div style={{padding:"0 14px 14px"}}><div style={{display:"flex",gap:8,marginBottom:12,flexWrap:"wrap"}}>{s.champion&&<div style={{background:RED,borderRadius:2,padding:"3px 10px",fontSize:11,color:"#fff",fontWeight:700}}>🏆 {s.champion}</div>}{s.confChampion&&<div style={{background:"#f5f5f5",border:"1px solid #ddd",borderRadius:2,padding:"3px 10px",fontSize:11,color:"#111",fontWeight:700}}>🏅 {s.confChampion}</div>}{s.heisman&&<div style={{background:"#fff8e8",border:"1px solid #ddd",borderRadius:2,padding:"3px 10px",fontSize:11,color:"#cc7700",fontWeight:700}}>🏈 {s.heisman}</div>}</div><table style={{width:"100%",borderCollapse:"collapse",fontSize:isMobile?11:13}}><thead><tr style={{borderBottom:`2px solid ${RED}`,background:"#f7f7f7"}}>{["#","User","Team","W","L","PTS","Behind"].map(h=><th key={h} style={{padding:"7px 6px",textAlign:h==="User"||h==="Team"?"left":"center",color:"#555",fontSize:9,letterSpacing:1,textTransform:"uppercase",fontWeight:800}}>{h}</th>)}</tr></thead><tbody>{srt.map((t,i)=>{const tot=calcTotal(t);return(<tr key={t.userName} style={{borderBottom:"1px solid #eee",background:i===0?"#fff8f8":"transparent"}}><td style={{padding:"8px 6px",textAlign:"center",color:i===0?RED:"#bbb",fontWeight:800,fontSize:13}}>{i+1}</td><td style={{padding:"8px 6px",color:"#111",fontWeight:i===0?800:400}}>{t.userName}</td><td style={{padding:"8px 6px",color:"#888",fontSize:12}}>{t.teamName}</td><td style={{padding:"8px 6px",textAlign:"center",color:"#007a00",fontWeight:700}}>{t.wins}</td><td style={{padding:"8px 6px",textAlign:"center",color:RED,fontWeight:700}}>{t.losses}</td><td style={{padding:"8px 6px",textAlign:"center",fontWeight:800,color:i===0?RED:"#111",fontSize:14}}>{tot}</td><td style={{padding:"8px 6px",textAlign:"center",color:i===0?"#007a00":RED,fontSize:12}}>{i===0?"LEAD":`-${top-tot}`}</td></tr>);})}</tbody></table></div>);})()}
+        {sel!==null&&(()=>{const s=history[sel];const srt=[...s.finalStandings].sort((a,b)=>calcTotal(b)-calcTotal(a));const top=calcTotal(srt[0]);return(<div style={{padding:"0 14px 14px"}}><div style={{display:"flex",gap:8,marginBottom:12,flexWrap:"wrap"}}>{s.champion&&<div style={{background:RED,borderRadius:2,padding:"3px 10px",fontSize:11,color:"#fff",fontWeight:700}}>🏆 {s.champion}</div>}{s.confChampion&&<div style={{background:"#f5f5f5",border:"1px solid #ddd",borderRadius:2,padding:"3px 10px",fontSize:11,color:"#111",fontWeight:700}}>🏅 {s.confChampion}</div>}{s.heisman&&<div style={{background:"#fff8e8",border:"1px solid #ddd",borderRadius:2,padding:"3px 10px",fontSize:11,color:"#cc7700",fontWeight:700}}>🏈 {s.heisman}</div>}</div><table style={{width:"100%",borderCollapse:"collapse",fontSize:isMobile?11:13}}><thead><tr style={{borderBottom:`2px solid ${RED}`,background:"#f7f7f7"}}>{["#","User",...(isMobile?[]:["Team"]),"W","L","PTS","Behind"].map(h=><th key={h} style={{padding:"7px 6px",textAlign:h==="User"||h==="Team"?"left":"center",color:"#555",fontSize:9,letterSpacing:1,textTransform:"uppercase",fontWeight:800}}>{h}</th>)}</tr></thead><tbody>{srt.map((t,i)=>{const tot=calcTotal(t);return(<tr key={t.userName} style={{borderBottom:"1px solid #eee",background:i===0?"#fff8f8":"transparent"}}><td style={{padding:"8px 6px",textAlign:"center",color:i===0?RED:"#bbb",fontWeight:800,fontSize:13}}>{i+1}</td><td style={{padding:"8px 6px",color:"#111",fontWeight:i===0?800:400}}>{t.userName}</td>{!isMobile&&<td style={{padding:"8px 6px",color:"#888",fontSize:12}}>{t.teamName}</td>}<td style={{padding:"8px 6px",textAlign:"center",color:"#007a00",fontWeight:700}}>{t.wins}</td><td style={{padding:"8px 6px",textAlign:"center",color:RED,fontWeight:700}}>{t.losses}</td><td style={{padding:"8px 6px",textAlign:"center",fontWeight:800,color:i===0?RED:"#111",fontSize:14}}>{tot}</td><td style={{padding:"8px 6px",textAlign:"center",color:i===0?"#007a00":RED,fontSize:12}}>{i===0?"LEAD":`-${top-tot}`}</td></tr>);})}</tbody></table></div>);})()}
       </Card>
     </div>
   );
@@ -491,6 +493,7 @@ function HistoryTab({history}) {
 
 // ── Profile Tab ───────────────────────────────────────────────────────────
 function ScheduleTab({schedule,entries,week,season}) {
+  const isMobile = useIsMobile();
   const [view,setView] = useState("full");
   const [expanded,setExpanded] = useState({}); // key -> bool
   const weeks = Object.keys(schedule||{}).map(Number).sort((a,b)=>a-b);
@@ -714,6 +717,7 @@ function ScheduleTab({schedule,entries,week,season}) {
 }
 
 function ProfileTab({history,setupRows,currentEntries,season}) {
+  const isMobile = useIsMobile();
   const [sel,setSel] = useState(null);
   const [pTab,setPTab] = useState("overview");
   const [expandedSeasons,setExpandedSeasons] = useState({});
@@ -771,7 +775,7 @@ function ProfileTab({history,setupRows,currentEntries,season}) {
     <div style={{display:"flex",flexDirection:"column",gap:14}}>
       {Object.keys(lr).length>0&&<Card><CardHead>🏆 League Records</CardHead><div style={{padding:"4px 14px 10px",display:"grid",gridTemplateColumns:"1fr 1fr",gap:"0 24px"}}>{lr.mostWins&&<RR label="Most Wins" holder={lr.mostWins[0]} val={lr.mostWins[1].totalWins+"W"}/>}{lr.mostPts&&<RR label="Most Pts" holder={lr.mostPts[0]} val={String(lr.mostPts[1].totalPts)}/>}{lr.mostChamps&&<RR label="Most Titles" holder={lr.mostChamps[0]} val={lr.mostChamps[1].championships+"×"}/>}{lr.bestWinPct&&<RR label="Best Win%" holder={lr.bestWinPct[0]} val={lr.bestWinPct[1].winPct+"%"}/>}{lr.longestWS&&<RR label="Win Streak" holder={lr.longestWS[0]} val={lr.longestWS[1].longestWin+"G"}/>}{lr.mostRW&&<RR label="Ranked Wins" holder={lr.mostRW[0]} val={lr.mostRW[1].rankedWins+"W"}/>}</div></Card>}
       <SL>Select User</SL>
-      <div style={{display:"flex",flexWrap:"wrap",gap:8}}>
+      <div style={{display:"grid",gridTemplateColumns:isMobile?"1fr 1fr":"repeat(auto-fill,minmax(160px,1fr))",gap:8}}>
         {allUsers.map(u=><button key={u.userName} onClick={()=>{setSel(sel===u.userName?null:u.userName);setPTab("overview");}} style={{padding:"10px 14px",borderRadius:2,border:"1px solid",borderColor:sel===u.userName?RED:"#ddd",background:sel===u.userName?RED:"#fff",color:sel===u.userName?"#fff":"#333",cursor:"pointer",fontFamily:ff,textAlign:"left"}}><div style={{fontWeight:800,fontSize:13}}>{u.userName}</div><div style={{fontSize:10,color:sel===u.userName?"rgba(255,255,255,0.7)":"#999",marginTop:2,textTransform:"uppercase"}}>{u.teamName}</div></button>)}
       </div>
       {profile&&user&&<Card style={{borderTop:`3px solid ${RED}`,overflow:"hidden"}}>
@@ -781,7 +785,7 @@ function ProfileTab({history,setupRows,currentEntries,season}) {
         <div style={{display:"flex",borderBottom:"1px solid #eee",background:"#fff",overflowX:"auto"}}>
           {["overview","seasons","h2h","streaks","points"].map(t=><button key={t} onClick={()=>setPTab(t)} style={{padding:"10px 14px",background:"transparent",border:"none",borderBottom:pTab===t?`3px solid ${RED}`:"3px solid transparent",color:pTab===t?"#111":"#888",cursor:"pointer",fontSize:11,fontWeight:700,fontFamily:ff,textTransform:"uppercase",letterSpacing:0.5,whiteSpace:"nowrap"}}>{t==="h2h"?"H2H Records":t}</button>)}
         </div>
-        <div style={{padding:18}}>
+        <div style={{padding:isMobile?12:18}}>
           {pTab==="overview"&&<div style={{display:"flex",flexDirection:"column",gap:16}}>
             <div><SL>Career Stats</SL><div style={{display:"grid",gridTemplateColumns:"repeat(auto-fill,minmax(90px,1fr))",gap:8}}><SB label="Total Pts" val={profile.totalPts} color={RED}/><SB label="Wins" val={profile.totalWins} color="#007a00"/><SB label="Losses" val={profile.totalLosses} color={RED}/><SB label="Win %" val={profile.winPct+"%"}/><SB label="Best Finish" val={profile.bestFinish?`#${profile.bestFinish}`:"—"} color={RED}/><SB label="Seasons" val={profile.seasons.length+(profile.cur?1:0)}/></div></div>
             <div><SL>Streaks & Ranked</SL><div style={{display:"grid",gridTemplateColumns:"repeat(auto-fill,minmax(110px,1fr))",gap:8}}><SB label="Win Streak" val={profile.longestWin+"G"} color="#007a00"/><SB label="Loss Streak" val={profile.longestLoss+"G"} color={RED}/><SB label="Ranked Wins" val={profile.rankedWins} color="#cc7700"/><SB label="Top 10 Wins" val={profile.top10Wins} color={RED}/></div></div>
@@ -790,10 +794,15 @@ function ProfileTab({history,setupRows,currentEntries,season}) {
           {pTab==="h2h"&&<div>
             <SL>Head-to-Head Records</SL>
             {Object.keys(profile.h2hMerged).length===0?<div style={{color:"#888",fontSize:13,padding:"12px 0"}}>No head-to-head data yet. Records are tracked when opponent names match dynasty users.</div>:
+            isMobile?(
+              <div style={{display:"flex",flexDirection:"column",gap:6,marginTop:4}}>
+                {Object.entries(profile.h2hMerged).sort((a,b)=>(b[1].wins+b[1].losses)-(a[1].wins+a[1].losses)).map(([opp,rec])=>{const winning=rec.wins>rec.losses;return(<div key={opp} style={{display:"flex",justifyContent:"space-between",alignItems:"center",padding:"10px 12px",borderRadius:2,border:"1px solid #eee",background:winning?"#f0f8f0":rec.wins<rec.losses?"#fff8f8":"transparent"}}><span style={{fontSize:13,fontWeight:600,color:"#111",flex:1,minWidth:0,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{opp}</span><span style={{fontSize:12,fontWeight:700,color:"#555",margin:"0 10px",flexShrink:0}}>{rec.wins}W-{rec.losses}L</span><span style={{background:winning?RED:"#007a00",color:"#fff",borderRadius:2,padding:"2px 8px",fontSize:10,fontWeight:700,flexShrink:0}}>{winning?"LEADS":"TRAILS"}{rec.wins===rec.losses?" (TIED)":""}</span></div>);})}
+              </div>
+            ):(
             <table style={{width:"100%",borderCollapse:"collapse",fontSize:13}}>
               <thead><tr style={{borderBottom:`2px solid ${RED}`,background:"#f7f7f7"}}>{["Opponent","W","L","W%","Result"].map(h=><th key={h} style={{padding:"8px 10px",textAlign:h==="Opponent"?"left":"center",color:"#555",fontSize:9,letterSpacing:1,textTransform:"uppercase",fontWeight:800}}>{h}</th>)}</tr></thead>
               <tbody>{Object.entries(profile.h2hMerged).sort((a,b)=>(b[1].wins+b[1].losses)-(a[1].wins+a[1].losses)).map(([opp,rec])=>{const total=rec.wins+rec.losses;const wpct=total>0?((rec.wins/total)*100).toFixed(0):0;const winning=rec.wins>rec.losses;return(<tr key={opp} style={{borderBottom:"1px solid #eee",background:winning?"#f0f8f0":rec.wins<rec.losses?"#fff8f8":"transparent"}}><td style={{padding:"9px 10px",fontWeight:600,color:"#111"}}>{opp}</td><td style={{padding:"9px 10px",textAlign:"center",fontWeight:700,color:"#007a00"}}>{rec.wins}</td><td style={{padding:"9px 10px",textAlign:"center",fontWeight:700,color:RED}}>{rec.losses}</td><td style={{padding:"9px 10px",textAlign:"center",color:"#555"}}>{wpct}%</td><td style={{padding:"9px 10px",textAlign:"center"}}><span style={{background:winning?RED:"#007a00",color:"#fff",borderRadius:2,padding:"2px 8px",fontSize:10,fontWeight:700}}>{winning?"LEADS":"TRAILS"}{rec.wins===rec.losses?" (TIED)":""}</span></td></tr>);})}</tbody>
-            </table>}
+            </table>)}
           </div>}
 
           {pTab==="seasons"&&<div style={{display:"flex",flexDirection:"column",gap:0}}>
@@ -952,6 +961,7 @@ function fuzzyMatchTeam(parsed, knownTeams) {
 }
 
 function BulkResultsUploader({entries,week,teamNames,onConfirm}) {
+  const isMobile = useIsMobile();
   const [files,setFiles]=useState([]);
   const [imgStatuses,setImgStatuses]=useState([]);
   const [phase,setPhase]=useState("upload");
@@ -1048,6 +1058,44 @@ function BulkResultsUploader({entries,week,teamNames,onConfirm}) {
 
       {phase==="review"&&gameRows.length>0&&<>
         <div style={{fontSize:11,fontWeight:800,color:"#555",letterSpacing:1,textTransform:"uppercase",marginTop:12,marginBottom:8}}>Review & Edit — {gameRows.length} game{gameRows.length>1?"s":""} found</div>
+        {isMobile?(
+          <div style={{marginBottom:14,display:"flex",flexDirection:"column",gap:6}}>
+            {gameRows.map(row=>{
+              const hScore=parseInt(row.homeScore)||0,aScore=parseInt(row.awayScore)||0,hWon=hScore>aScore;
+              const hLeague=teamNames.includes(row.homeTeam),aLeague=teamNames.includes(row.awayTeam);
+              const conf=rowConf(row);
+              const winnerIsLeague=hWon?hLeague:aLeague;
+              return(
+                <div key={row.id} style={{border:"1px solid #eee",borderRadius:2,marginBottom:8,overflow:"hidden",background:conf==="none"?"#fff8f8":conf==="exact"?"#f9fff9":"#fffbf0"}}>
+                  <div style={{display:"flex",alignItems:"center",padding:"10px 12px",gap:8}}>
+                    <select value={row.homeTeam} onChange={e=>updateRow(row.id,"homeTeam",e.target.value)} style={{flex:1,minWidth:0,border:"1px solid #ddd",borderRadius:2,padding:"3px 5px",fontFamily:ff,fontSize:11,background:"#fff",color:hLeague?"#111":"#999"}}>
+                      <option value="">{row.homeRaw||"?"}</option>
+                      {teamNames.map(t=><option key={t} value={t}>{t}</option>)}
+                    </select>
+                    <input type="number" value={row.homeScore} onChange={e=>updateRow(row.id,"homeScore",parseInt(e.target.value)||0)} style={{width:44,border:"1px solid #ddd",borderRadius:2,padding:"3px 5px",fontFamily:ff,fontSize:14,fontWeight:900,textAlign:"center",color:hWon?"#007a00":RED,background:"transparent",flexShrink:0}}/>
+                    <span style={{color:"#ccc",flexShrink:0}}>–</span>
+                    <input type="number" value={row.awayScore} onChange={e=>updateRow(row.id,"awayScore",parseInt(e.target.value)||0)} style={{width:44,border:"1px solid #ddd",borderRadius:2,padding:"3px 5px",fontFamily:ff,fontSize:14,fontWeight:900,textAlign:"center",color:!hWon?"#007a00":RED,background:"transparent",flexShrink:0}}/>
+                    <select value={row.awayTeam} onChange={e=>updateRow(row.id,"awayTeam",e.target.value)} style={{flex:1,minWidth:0,border:"1px solid #ddd",borderRadius:2,padding:"3px 5px",fontFamily:ff,fontSize:11,background:"#fff",color:aLeague?"#111":"#999"}}>
+                      <option value="">{row.awayRaw||"?"}</option>
+                      {teamNames.map(t=><option key={t} value={t}>{t}</option>)}
+                    </select>
+                  </div>
+                  <div style={{display:"flex",alignItems:"center",padding:"4px 12px 10px",gap:8,borderTop:"1px solid #f5f5f5"}}>
+                    <span style={{fontSize:10,fontWeight:800,padding:"2px 7px",borderRadius:2,background:conf==="exact"?"#f0f8f0":conf==="fuzzy"?"#fffbf0":"#fff8f8",color:confC(conf),border:`1px solid ${confC(conf)}`}}>{confL(conf)}</span>
+                    {winnerIsLeague&&<div style={{display:"flex",gap:8,marginLeft:"auto"}}>
+                      <label style={{fontSize:11,display:"flex",alignItems:"center",gap:4}}>
+                        <input type="checkbox" checked={row.ranked25} onChange={e=>{updateRow(row.id,"ranked25",e.target.checked);if(e.target.checked)updateRow(row.id,"ranked10",false);}}/> T25
+                      </label>
+                      <label style={{fontSize:11,display:"flex",alignItems:"center",gap:4,color:RED,fontWeight:700}}>
+                        <input type="checkbox" checked={row.ranked10} onChange={e=>{updateRow(row.id,"ranked10",e.target.checked);if(e.target.checked)updateRow(row.id,"ranked25",false);}}/> T10
+                      </label>
+                    </div>}
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+        ):(
         <div style={{overflowX:"auto",marginBottom:14,border:"1px solid #eee",borderRadius:2}}>
           <table style={{width:"100%",borderCollapse:"collapse",fontSize:12,minWidth:600}}>
             <thead><tr style={{background:"#f7f7f7",borderBottom:`2px solid ${RED}`}}>
@@ -1103,6 +1151,7 @@ function BulkResultsUploader({entries,week,teamNames,onConfirm}) {
             </tbody>
           </table>
         </div>
+        )}
         <div style={{background:"#fffbf0",border:"1px solid #ffe88a",borderRadius:2,padding:"10px 14px",fontSize:12,color:"#665500",marginBottom:14}}>
           Clicking <strong>Confirm</strong> records all results, updates dynasty points, and advances to Week {week+1}. This cannot be undone.
         </div>
@@ -1570,9 +1619,9 @@ export default function App() {
         <span style={{fontSize:8,color:RED,fontWeight:800,textTransform:"uppercase",letterSpacing:1.5,marginRight:10,flexShrink:0}}>SCORES</span>
         {sorted.length===0&&<span style={{fontSize:11,color:"#666",fontStyle:"italic"}}>Season not started</span>}
         {sorted.map((t,i)=>(
-          <div key={t.teamName} style={{display:"flex",alignItems:"center",gap:5,padding:"0 10px",borderRight:"1px solid #333",flexShrink:0,minWidth:isMobile?80:0}}>
+          <div key={t.teamName} style={{display:"flex",alignItems:"center",gap:5,padding:"0 10px",borderRight:"1px solid #333",flexShrink:0,minWidth:isMobile?70:0}}>
             <span style={{fontSize:9,fontWeight:800,color:i===0?RED:"#555",width:10}}>{i+1}</span>
-            <span style={{fontSize:11,fontWeight:700,color:"#fff",whiteSpace:"nowrap"}}>{t.teamName}</span>
+            <span style={{fontSize:11,fontWeight:700,color:"#fff",whiteSpace:"nowrap"}}>{isMobile?t.teamName.split(" ")[0]:t.teamName}</span>
             <span style={{fontSize:12,fontWeight:900,color:i===0?"#e8c84a":"#999",marginLeft:3}}>{calcTotal(t)}</span>
           </div>
         ))}
