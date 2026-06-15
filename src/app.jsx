@@ -1058,99 +1058,101 @@ function BulkResultsUploader({entries,week,teamNames,onConfirm}) {
 
       {phase==="review"&&gameRows.length>0&&<>
         <div style={{fontSize:11,fontWeight:800,color:"#555",letterSpacing:1,textTransform:"uppercase",marginTop:12,marginBottom:8}}>Review & Edit — {gameRows.length} game{gameRows.length>1?"s":""} found</div>
-        {isMobile?(
-          <div style={{marginBottom:14,display:"flex",flexDirection:"column",gap:6}}>
+        {isMobile ? (
+          <div style={{display:"flex",flexDirection:"column",gap:8,marginBottom:14}}>
             {gameRows.map(row=>{
               const hScore=parseInt(row.homeScore)||0,aScore=parseInt(row.awayScore)||0,hWon=hScore>aScore;
               const hLeague=teamNames.includes(row.homeTeam),aLeague=teamNames.includes(row.awayTeam);
               const conf=rowConf(row);
               const winnerIsLeague=hWon?hLeague:aLeague;
               return(
-                <div key={row.id} style={{border:"1px solid #eee",borderRadius:2,marginBottom:8,overflow:"hidden",background:conf==="none"?"#fff8f8":conf==="exact"?"#f9fff9":"#fffbf0"}}>
-                  <div style={{display:"flex",alignItems:"center",padding:"10px 12px",gap:8}}>
-                    <select value={row.homeTeam} onChange={e=>updateRow(row.id,"homeTeam",e.target.value)} style={{flex:1,minWidth:0,border:"1px solid #ddd",borderRadius:2,padding:"3px 5px",fontFamily:ff,fontSize:11,background:"#fff",color:hLeague?"#111":"#999"}}>
+                <div key={row.id} style={{border:`1px solid ${conf==="none"?"#ffcccc":conf==="exact"?"#cce5cc":"#ffe88a"}`,borderRadius:2,padding:"10px 12px",background:conf==="none"?"#fff8f8":conf==="exact"?"#f9fff9":"#fffbf0"}}>
+                  <div style={{display:"flex",alignItems:"center",gap:8,marginBottom:8}}>
+                    <select value={row.homeTeam} onChange={e=>updateRow(row.id,"homeTeam",e.target.value)} style={{flex:1,border:"1px solid #ddd",borderRadius:2,padding:"4px 6px",fontFamily:ff,fontSize:12,background:"#fff",color:hLeague?"#111":"#999"}}>
                       <option value="">{row.homeRaw||"?"}</option>
                       {teamNames.map(t=><option key={t} value={t}>{t}</option>)}
                     </select>
-                    <input type="number" value={row.homeScore} onChange={e=>updateRow(row.id,"homeScore",parseInt(e.target.value)||0)} style={{width:44,border:"1px solid #ddd",borderRadius:2,padding:"3px 5px",fontFamily:ff,fontSize:14,fontWeight:900,textAlign:"center",color:hWon?"#007a00":RED,background:"transparent",flexShrink:0}}/>
-                    <span style={{color:"#ccc",flexShrink:0}}>–</span>
-                    <input type="number" value={row.awayScore} onChange={e=>updateRow(row.id,"awayScore",parseInt(e.target.value)||0)} style={{width:44,border:"1px solid #ddd",borderRadius:2,padding:"3px 5px",fontFamily:ff,fontSize:14,fontWeight:900,textAlign:"center",color:!hWon?"#007a00":RED,background:"transparent",flexShrink:0}}/>
-                    <select value={row.awayTeam} onChange={e=>updateRow(row.id,"awayTeam",e.target.value)} style={{flex:1,minWidth:0,border:"1px solid #ddd",borderRadius:2,padding:"3px 5px",fontFamily:ff,fontSize:11,background:"#fff",color:aLeague?"#111":"#999"}}>
+                    <span style={{fontSize:10,fontWeight:800,color:hWon?"#007a00":RED,flexShrink:0}}>{hWon?"WIN":"LOSS"}</span>
+                    <input type="number" value={row.homeScore} onChange={e=>updateRow(row.id,"homeScore",parseInt(e.target.value)||0)} style={{width:42,border:"1px solid #ddd",borderRadius:2,padding:"4px",fontSize:14,fontWeight:900,textAlign:"center",color:hWon?"#007a00":RED,background:"transparent"}}/>
+                    <span style={{color:"#bbb",fontWeight:700}}>—</span>
+                    <input type="number" value={row.awayScore} onChange={e=>updateRow(row.id,"awayScore",parseInt(e.target.value)||0)} style={{width:42,border:"1px solid #ddd",borderRadius:2,padding:"4px",fontSize:14,fontWeight:900,textAlign:"center",color:!hWon?"#007a00":RED,background:"transparent"}}/>
+                    <span style={{fontSize:10,fontWeight:800,color:!hWon?"#007a00":RED,flexShrink:0}}>{!hWon?"WIN":"LOSS"}</span>
+                  </div>
+                  <div style={{display:"flex",alignItems:"center",gap:8}}>
+                    <select value={row.awayTeam} onChange={e=>updateRow(row.id,"awayTeam",e.target.value)} style={{flex:1,border:"1px solid #ddd",borderRadius:2,padding:"4px 6px",fontFamily:ff,fontSize:12,background:"#fff",color:aLeague?"#111":"#999"}}>
                       <option value="">{row.awayRaw||"?"}</option>
                       {teamNames.map(t=><option key={t} value={t}>{t}</option>)}
                     </select>
+                    <span style={{fontSize:10,fontWeight:700,color:confC(conf),background:conf==="exact"?"#f0f8f0":conf==="fuzzy"?"#fffbf0":"#fff8f8",padding:"2px 6px",borderRadius:2,border:`1px solid ${confC(conf)}`,whiteSpace:"nowrap",flexShrink:0}}>{confL(conf)}</span>
                   </div>
-                  <div style={{display:"flex",alignItems:"center",padding:"4px 12px 10px",gap:8,borderTop:"1px solid #f5f5f5"}}>
-                    <span style={{fontSize:10,fontWeight:800,padding:"2px 7px",borderRadius:2,background:conf==="exact"?"#f0f8f0":conf==="fuzzy"?"#fffbf0":"#fff8f8",color:confC(conf),border:`1px solid ${confC(conf)}`}}>{confL(conf)}</span>
-                    {winnerIsLeague&&<div style={{display:"flex",gap:8,marginLeft:"auto"}}>
-                      <label style={{fontSize:11,display:"flex",alignItems:"center",gap:4}}>
-                        <input type="checkbox" checked={row.ranked25} onChange={e=>{updateRow(row.id,"ranked25",e.target.checked);if(e.target.checked)updateRow(row.id,"ranked10",false);}}/> T25
-                      </label>
-                      <label style={{fontSize:11,display:"flex",alignItems:"center",gap:4,color:RED,fontWeight:700}}>
-                        <input type="checkbox" checked={row.ranked10} onChange={e=>{updateRow(row.id,"ranked10",e.target.checked);if(e.target.checked)updateRow(row.id,"ranked25",false);}}/> T10
-                      </label>
-                    </div>}
-                  </div>
+                  {winnerIsLeague&&<div style={{display:"flex",gap:12,marginTop:8,paddingTop:8,borderTop:"1px solid #eee"}}>
+                    <label style={{display:"flex",alignItems:"center",gap:3,fontSize:11,color:"#888",cursor:"pointer"}}>
+                      <input type="checkbox" checked={row.ranked25} onChange={e=>{updateRow(row.id,"ranked25",e.target.checked);if(e.target.checked)updateRow(row.id,"ranked10",false);}}/>Winner vs Top 25
+                    </label>
+                    <label style={{display:"flex",alignItems:"center",gap:3,fontSize:11,color:RED,cursor:"pointer",fontWeight:700}}>
+                      <input type="checkbox" checked={row.ranked10} onChange={e=>{updateRow(row.id,"ranked10",e.target.checked);if(e.target.checked)updateRow(row.id,"ranked25",false);}}/>vs Top 10
+                    </label>
+                  </div>}
                 </div>
               );
             })}
           </div>
-        ):(
-        <div style={{overflowX:"auto",marginBottom:14,border:"1px solid #eee",borderRadius:2}}>
-          <table style={{width:"100%",borderCollapse:"collapse",fontSize:12,minWidth:600}}>
-            <thead><tr style={{background:"#f7f7f7",borderBottom:`2px solid ${RED}`}}>
-              {["Home Team","","Score","—","Score","","Away Team","Confidence","Winner Ranked?"].map((h,i)=>(
-                <th key={i} style={{padding:"7px 8px",textAlign:"center",color:"#555",fontSize:9,letterSpacing:1,textTransform:"uppercase",fontWeight:800,whiteSpace:"nowrap",borderRight:"1px solid #eee"}}>{h}</th>
-              ))}
-            </tr></thead>
-            <tbody>
-              {gameRows.map(row=>{
-                const hScore=parseInt(row.homeScore)||0,aScore=parseInt(row.awayScore)||0,hWon=hScore>aScore;
-                const hLeague=teamNames.includes(row.homeTeam),aLeague=teamNames.includes(row.awayTeam);
-                const conf=rowConf(row);
-                const winnerIsLeague=hWon?hLeague:aLeague;
-                return(
-                  <tr key={row.id} style={{borderBottom:"1px solid #eee",background:conf==="none"?"#fff8f8":conf==="exact"?"#f9fff9":"#fffbf0"}}>
-                    <td style={{padding:"7px 6px",borderRight:"1px solid #eee"}}>
-                      <select value={row.homeTeam} onChange={e=>updateRow(row.id,"homeTeam",e.target.value)} style={{border:"1px solid #ddd",borderRadius:2,padding:"3px 5px",fontFamily:ff,fontSize:11,background:"#fff",color:hLeague?"#111":"#999",width:100}}>
-                        <option value="">{row.homeRaw||"?"}</option>
-                        {teamNames.map(t=><option key={t} value={t}>{t}</option>)}
-                      </select>
-                    </td>
-                    <td style={{padding:"4px 2px",textAlign:"center",fontSize:9,color:hWon?"#007a00":RED,fontWeight:800,borderRight:"1px solid #eee",whiteSpace:"nowrap"}}>{hWon?"WIN":"LOSS"}</td>
-                    <td style={{padding:"7px 6px",borderRight:"1px solid #eee"}}>
-                      <input type="number" value={row.homeScore} onChange={e=>updateRow(row.id,"homeScore",parseInt(e.target.value)||0)} style={{width:44,border:"1px solid #ddd",borderRadius:2,padding:"3px 5px",fontFamily:ff,fontSize:14,fontWeight:900,textAlign:"center",color:hWon?"#007a00":RED,background:"transparent"}}/>
-                    </td>
-                    <td style={{padding:"4px",textAlign:"center",color:"#bbb",fontWeight:700,borderRight:"1px solid #eee"}}>—</td>
-                    <td style={{padding:"7px 6px",borderRight:"1px solid #eee"}}>
-                      <input type="number" value={row.awayScore} onChange={e=>updateRow(row.id,"awayScore",parseInt(e.target.value)||0)} style={{width:44,border:"1px solid #ddd",borderRadius:2,padding:"3px 5px",fontFamily:ff,fontSize:14,fontWeight:900,textAlign:"center",color:!hWon?"#007a00":RED,background:"transparent"}}/>
-                    </td>
-                    <td style={{padding:"4px 2px",textAlign:"center",fontSize:9,color:!hWon?"#007a00":RED,fontWeight:800,borderRight:"1px solid #eee",whiteSpace:"nowrap"}}>{!hWon?"WIN":"LOSS"}</td>
-                    <td style={{padding:"7px 6px",borderRight:"1px solid #eee"}}>
-                      <select value={row.awayTeam} onChange={e=>updateRow(row.id,"awayTeam",e.target.value)} style={{border:"1px solid #ddd",borderRadius:2,padding:"3px 5px",fontFamily:ff,fontSize:11,background:"#fff",color:aLeague?"#111":"#999",width:100}}>
-                        <option value="">{row.awayRaw||"?"}</option>
-                        {teamNames.map(t=><option key={t} value={t}>{t}</option>)}
-                      </select>
-                    </td>
-                    <td style={{padding:"7px 8px",textAlign:"center",borderRight:"1px solid #eee"}}>
-                      <span style={{fontSize:10,fontWeight:700,color:confC(conf),background:conf==="exact"?"#f0f8f0":conf==="fuzzy"?"#fffbf0":"#fff8f8",padding:"2px 6px",borderRadius:2,border:`1px solid ${confC(conf)}`,whiteSpace:"nowrap"}}>{confL(conf)}</span>
-                    </td>
-                    <td style={{padding:"7px 8px"}}>
-                      {winnerIsLeague&&<div style={{display:"flex",gap:8,justifyContent:"center"}}>
-                        <label style={{display:"flex",alignItems:"center",gap:3,fontSize:10,color:"#888",cursor:"pointer",whiteSpace:"nowrap"}}>
-                          <input type="checkbox" checked={row.ranked25} onChange={e=>{updateRow(row.id,"ranked25",e.target.checked);if(e.target.checked)updateRow(row.id,"ranked10",false);}}/>T25
-                        </label>
-                        <label style={{display:"flex",alignItems:"center",gap:3,fontSize:10,color:RED,cursor:"pointer",whiteSpace:"nowrap",fontWeight:700}}>
-                          <input type="checkbox" checked={row.ranked10} onChange={e=>{updateRow(row.id,"ranked10",e.target.checked);if(e.target.checked)updateRow(row.id,"ranked25",false);}}/>T10
-                        </label>
-                      </div>}
-                    </td>
-                  </tr>
-                );
-              })}
-            </tbody>
-          </table>
-        </div>
+        ) : (
+          <div style={{overflowX:"auto",marginBottom:14,border:"1px solid #eee",borderRadius:2}}>
+            <table style={{width:"100%",borderCollapse:"collapse",fontSize:12,minWidth:600}}>
+              <thead><tr style={{background:"#f7f7f7",borderBottom:`2px solid ${RED}`}}>
+                {["Home Team","","Score","—","Score","","Away Team","Confidence","Winner Ranked?"].map((h,i)=>(
+                  <th key={i} style={{padding:"7px 8px",textAlign:"center",color:"#555",fontSize:9,letterSpacing:1,textTransform:"uppercase",fontWeight:800,whiteSpace:"nowrap",borderRight:"1px solid #eee"}}>{h}</th>
+                ))}
+              </tr></thead>
+              <tbody>
+                {gameRows.map(row=>{
+                  const hScore=parseInt(row.homeScore)||0,aScore=parseInt(row.awayScore)||0,hWon=hScore>aScore;
+                  const hLeague=teamNames.includes(row.homeTeam),aLeague=teamNames.includes(row.awayTeam);
+                  const conf=rowConf(row);
+                  const winnerIsLeague=hWon?hLeague:aLeague;
+                  return(
+                    <tr key={row.id} style={{borderBottom:"1px solid #eee",background:conf==="none"?"#fff8f8":conf==="exact"?"#f9fff9":"#fffbf0"}}>
+                      <td style={{padding:"7px 6px",borderRight:"1px solid #eee"}}>
+                        <select value={row.homeTeam} onChange={e=>updateRow(row.id,"homeTeam",e.target.value)} style={{border:"1px solid #ddd",borderRadius:2,padding:"3px 5px",fontFamily:ff,fontSize:11,background:"#fff",color:hLeague?"#111":"#999",width:100}}>
+                          <option value="">{row.homeRaw||"?"}</option>
+                          {teamNames.map(t=><option key={t} value={t}>{t}</option>)}
+                        </select>
+                      </td>
+                      <td style={{padding:"4px 2px",textAlign:"center",fontSize:9,color:hWon?"#007a00":RED,fontWeight:800,borderRight:"1px solid #eee",whiteSpace:"nowrap"}}>{hWon?"WIN":"LOSS"}</td>
+                      <td style={{padding:"7px 6px",borderRight:"1px solid #eee"}}>
+                        <input type="number" value={row.homeScore} onChange={e=>updateRow(row.id,"homeScore",parseInt(e.target.value)||0)} style={{width:44,border:"1px solid #ddd",borderRadius:2,padding:"3px 5px",fontFamily:ff,fontSize:14,fontWeight:900,textAlign:"center",color:hWon?"#007a00":RED,background:"transparent"}}/>
+                      </td>
+                      <td style={{padding:"4px",textAlign:"center",color:"#bbb",fontWeight:700,borderRight:"1px solid #eee"}}>—</td>
+                      <td style={{padding:"7px 6px",borderRight:"1px solid #eee"}}>
+                        <input type="number" value={row.awayScore} onChange={e=>updateRow(row.id,"awayScore",parseInt(e.target.value)||0)} style={{width:44,border:"1px solid #ddd",borderRadius:2,padding:"3px 5px",fontFamily:ff,fontSize:14,fontWeight:900,textAlign:"center",color:!hWon?"#007a00":RED,background:"transparent"}}/>
+                      </td>
+                      <td style={{padding:"4px 2px",textAlign:"center",fontSize:9,color:!hWon?"#007a00":RED,fontWeight:800,borderRight:"1px solid #eee",whiteSpace:"nowrap"}}>{!hWon?"WIN":"LOSS"}</td>
+                      <td style={{padding:"7px 6px",borderRight:"1px solid #eee"}}>
+                        <select value={row.awayTeam} onChange={e=>updateRow(row.id,"awayTeam",e.target.value)} style={{border:"1px solid #ddd",borderRadius:2,padding:"3px 5px",fontFamily:ff,fontSize:11,background:"#fff",color:aLeague?"#111":"#999",width:100}}>
+                          <option value="">{row.awayRaw||"?"}</option>
+                          {teamNames.map(t=><option key={t} value={t}>{t}</option>)}
+                        </select>
+                      </td>
+                      <td style={{padding:"7px 8px",textAlign:"center",borderRight:"1px solid #eee"}}>
+                        <span style={{fontSize:10,fontWeight:700,color:confC(conf),background:conf==="exact"?"#f0f8f0":conf==="fuzzy"?"#fffbf0":"#fff8f8",padding:"2px 6px",borderRadius:2,border:`1px solid ${confC(conf)}`,whiteSpace:"nowrap"}}>{confL(conf)}</span>
+                      </td>
+                      <td style={{padding:"7px 8px"}}>
+                        {winnerIsLeague&&<div style={{display:"flex",gap:8,justifyContent:"center"}}>
+                          <label style={{display:"flex",alignItems:"center",gap:3,fontSize:10,color:"#888",cursor:"pointer",whiteSpace:"nowrap"}}>
+                            <input type="checkbox" checked={row.ranked25} onChange={e=>{updateRow(row.id,"ranked25",e.target.checked);if(e.target.checked)updateRow(row.id,"ranked10",false);}}/>T25
+                          </label>
+                          <label style={{display:"flex",alignItems:"center",gap:3,fontSize:10,color:RED,cursor:"pointer",whiteSpace:"nowrap",fontWeight:700}}>
+                            <input type="checkbox" checked={row.ranked10} onChange={e=>{updateRow(row.id,"ranked10",e.target.checked);if(e.target.checked)updateRow(row.id,"ranked25",false);}}/>T10
+                          </label>
+                        </div>}
+                      </td>
+                    </tr>
+                  );
+                })}
+              </tbody>
+            </table>
+          </div>
         )}
         <div style={{background:"#fffbf0",border:"1px solid #ffe88a",borderRadius:2,padding:"10px 14px",fontSize:12,color:"#665500",marginBottom:14}}>
           Clicking <strong>Confirm</strong> records all results, updates dynasty points, and advances to Week {week+1}. This cannot be undone.
