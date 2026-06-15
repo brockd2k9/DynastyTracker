@@ -74,6 +74,7 @@ const FRESH_PSI = (entries) => ({
 // e.g. { 1: { Troy: "Georgia Southern", "Georgia Southern": "Troy", Toledo: "CPU", UNLV: "BYE" } }
 
 function calcTotal(t) {
+  if (t.historicalTotal !== undefined) return t.historicalTotal;
   return (t.gamePts||0)+(t.rankedBonusPts||0)+(t.confStandPts||0)+(t.confChampPts||0)+(t.bowlPts||0)+(t.recruitingPts||0)+(t.prestigePts||0)+(t.heismanPts||0);
 }
 
@@ -476,9 +477,9 @@ function HistoryTab({history}) {
       </div>
       <Card><CardHead>Season History</CardHead>
         <div style={{padding:"12px 14px",display:"flex",gap:8,flexWrap:"wrap"}}>
-          {history.map((s,i)=><button key={i} onClick={()=>setSel(sel===i?null:i)} style={{padding:"5px 12px",borderRadius:2,border:"1px solid",borderColor:sel===i?RED:"#ddd",background:sel===i?RED:"#fff",color:sel===i?"#fff":"#555",cursor:"pointer",fontSize:12,fontWeight:700,fontFamily:ff,textTransform:"uppercase"}}>{s.year} · S{s.seasonNum}</button>)}
+          {history.map((s,i)=><button key={i} onClick={()=>setSel(sel===i?null:i)} style={{padding:"5px 12px",borderRadius:2,border:"1px solid",borderColor:sel===i?RED:s.isHistorical?"#aaa":"#ddd",background:sel===i?RED:s.isHistorical?"#f5f5f5":"#fff",color:sel===i?"#fff":s.isHistorical?"#555":"#555",cursor:"pointer",fontSize:12,fontWeight:700,fontFamily:ff,textTransform:"uppercase"}}>{s.year}{s.isHistorical?" · HIST":` · S${s.seasonNum}`}</button>)}
         </div>
-        {sel!==null&&(()=>{const s=history[sel];const srt=[...s.finalStandings].sort((a,b)=>calcTotal(b)-calcTotal(a));const top=calcTotal(srt[0]);return(<div style={{padding:"0 14px 14px"}}><div style={{display:"flex",gap:8,marginBottom:12,flexWrap:"wrap"}}>{s.champion&&<div style={{background:RED,borderRadius:2,padding:"3px 10px",fontSize:11,color:"#fff",fontWeight:700}}>🏆 {s.champion}</div>}{s.confChampion&&<div style={{background:"#f5f5f5",border:"1px solid #ddd",borderRadius:2,padding:"3px 10px",fontSize:11,color:"#111",fontWeight:700}}>🏅 {s.confChampion}</div>}{s.heisman&&<div style={{background:"#fff8e8",border:"1px solid #ddd",borderRadius:2,padding:"3px 10px",fontSize:11,color:"#cc7700",fontWeight:700}}>🏈 {s.heisman}</div>}</div><table style={{width:"100%",borderCollapse:"collapse",fontSize:isMobile?11:13}}><thead><tr style={{borderBottom:`2px solid ${RED}`,background:"#f7f7f7"}}>{["#","User",...(isMobile?[]:["Team"]),"W","L","PTS","Behind"].map(h=><th key={h} style={{padding:"7px 6px",textAlign:h==="User"||h==="Team"?"left":"center",color:"#555",fontSize:9,letterSpacing:1,textTransform:"uppercase",fontWeight:800}}>{h}</th>)}</tr></thead><tbody>{srt.map((t,i)=>{const tot=calcTotal(t);return(<tr key={t.userName} style={{borderBottom:"1px solid #eee",background:i===0?"#fff8f8":"transparent"}}><td style={{padding:"8px 6px",textAlign:"center",color:i===0?RED:"#bbb",fontWeight:800,fontSize:13}}>{i+1}</td><td style={{padding:"8px 6px",color:"#111",fontWeight:i===0?800:400}}>{t.userName}</td>{!isMobile&&<td style={{padding:"8px 6px",color:"#888",fontSize:12}}>{t.teamName}</td>}<td style={{padding:"8px 6px",textAlign:"center",color:"#007a00",fontWeight:700}}>{t.wins}</td><td style={{padding:"8px 6px",textAlign:"center",color:RED,fontWeight:700}}>{t.losses}</td><td style={{padding:"8px 6px",textAlign:"center",fontWeight:800,color:i===0?RED:"#111",fontSize:14}}>{tot}</td><td style={{padding:"8px 6px",textAlign:"center",color:i===0?"#007a00":RED,fontSize:12}}>{i===0?"LEAD":`-${top-tot}`}</td></tr>);})}</tbody></table></div>);})()}
+        {sel!==null&&(()=>{const s=history[sel];const srt=[...s.finalStandings].sort((a,b)=>calcTotal(b)-calcTotal(a));const top=calcTotal(srt[0]);const showWL=!s.isHistorical;return(<div style={{padding:"0 14px 14px"}}><div style={{display:"flex",gap:8,marginBottom:12,flexWrap:"wrap"}}>{s.isHistorical&&<div style={{background:"#555",borderRadius:2,padding:"3px 10px",fontSize:11,color:"#fff",fontWeight:700}}>📥 IMPORTED SEASON</div>}{s.champion&&<div style={{background:RED,borderRadius:2,padding:"3px 10px",fontSize:11,color:"#fff",fontWeight:700}}>🏆 {s.champion}</div>}{s.confChampion&&<div style={{background:"#f5f5f5",border:"1px solid #ddd",borderRadius:2,padding:"3px 10px",fontSize:11,color:"#111",fontWeight:700}}>🏅 {s.confChampion}</div>}{s.heisman&&<div style={{background:"#fff8e8",border:"1px solid #ddd",borderRadius:2,padding:"3px 10px",fontSize:11,color:"#cc7700",fontWeight:700}}>🏈 {s.heisman}</div>}</div><table style={{width:"100%",borderCollapse:"collapse",fontSize:isMobile?11:13}}><thead><tr style={{borderBottom:`2px solid ${RED}`,background:"#f7f7f7"}}>{["#","User",...(isMobile?[]:["Team"]),...(showWL?["W","L"]:[]),"PTS","Behind"].map(h=><th key={h} style={{padding:"7px 6px",textAlign:h==="User"||h==="Team"?"left":"center",color:"#555",fontSize:9,letterSpacing:1,textTransform:"uppercase",fontWeight:800}}>{h}</th>)}</tr></thead><tbody>{srt.map((t,i)=>{const tot=calcTotal(t);return(<tr key={t.userName} style={{borderBottom:"1px solid #eee",background:i===0?"#fff8f8":"transparent"}}><td style={{padding:"8px 6px",textAlign:"center",color:i===0?RED:"#bbb",fontWeight:800,fontSize:13}}>{i+1}</td><td style={{padding:"8px 6px",color:"#111",fontWeight:i===0?800:400}}>{t.userName}</td>{!isMobile&&<td style={{padding:"8px 6px",color:"#888",fontSize:12}}>{t.teamName}</td>}{showWL&&<><td style={{padding:"8px 6px",textAlign:"center",color:"#007a00",fontWeight:700}}>{t.wins}</td><td style={{padding:"8px 6px",textAlign:"center",color:RED,fontWeight:700}}>{t.losses}</td></>}<td style={{padding:"8px 6px",textAlign:"center",fontWeight:800,color:i===0?RED:"#111",fontSize:14}}>{tot}</td><td style={{padding:"8px 6px",textAlign:"center",color:i===0?"#007a00":RED,fontSize:12}}>{i===0?"LEAD":`-${top-tot}`}</td></tr>);})}</tbody></table></div>);})()}
       </Card>
     </div>
   );
@@ -1153,8 +1154,75 @@ function BulkResultsUploader({entries,week,teamNames,onConfirm}) {
   );
 }
 
+// ── HistoricalImportPanel ─────────────────────────────────────────────────
+function HistoricalImportPanel({setupRows, history, onImport}) {
+  const currentCalYear = new Date().getFullYear();
+  const YEARS = Array.from({length: currentCalYear - 2009}, (_, i) => currentCalYear - 1 - i);
+  const [year, setYear] = useState(YEARS[0]);
+  const [pts, setPts] = useState({});
+  const [saved, setSaved] = useState(false);
+  const teamRows = (setupRows||[]).filter(r=>r.userName&&r.teamName);
+  const alreadyImported = (year) => history.some(s=>s.isHistorical&&s.year===year);
+
+  function handleSave() {
+    if (!teamRows.length) return alert("No teams configured yet.");
+    const standings = teamRows.map(r=>({
+      userName: r.userName, teamName: r.teamName,
+      historicalTotal: parseInt(pts[r.teamName])||0,
+      wins:0, losses:0, confWins:0, confLosses:0,
+      gamePts:0, rankedBonusPts:0, confStandPts:0, confChampPts:0,
+      bowlPts:0, recruitingPts:0, prestigePts:0, heismanPts:0,
+      weekLog:[], h2h:{},
+    }));
+    const sorted=[...standings].sort((a,b)=>b.historicalTotal-a.historicalTotal);
+    onImport({year, seasonNum:null, isHistorical:true, finalStandings:standings,
+      champion:sorted[0]?.userName||"", confChampion:"", heisman:""});
+    setSaved(true);
+    setTimeout(()=>setSaved(false),3000);
+  }
+
+  return (
+    <Card>
+      <CardHead bg="#333">📥 Historical Season Import</CardHead>
+      <div style={{padding:16}}>
+        <div style={{fontSize:12,color:"#888",marginBottom:14}}>Import final dynasty points totals from a past season with no individual game data. These will appear in Season History and each player's profile.</div>
+        <div style={{display:"flex",alignItems:"center",gap:12,marginBottom:16,flexWrap:"wrap"}}>
+          <div>
+            <div style={{fontSize:10,fontWeight:700,color:"#888",textTransform:"uppercase",letterSpacing:1,marginBottom:5}}>Season Year</div>
+            <select value={year} onChange={e=>setYear(Number(e.target.value))} style={{fontSize:15,fontWeight:700,padding:"7px 10px",border:`2px solid ${alreadyImported(year)?"#cc7700":"#cc0000"}`,borderRadius:2,background:"#fff",fontFamily:"'Helvetica Neue',Arial,sans-serif",cursor:"pointer"}}>
+              {YEARS.map(y=><option key={y} value={y}>{y}{alreadyImported(y)?" (imported)":""}</option>)}
+            </select>
+          </div>
+          {alreadyImported(year)&&<div style={{padding:"6px 12px",background:"#fffbf0",border:"1px solid #f0c040",borderRadius:2,fontSize:12,color:"#886600",fontWeight:600}}>⚠ This year already has an import — saving will add a second entry</div>}
+        </div>
+        <div style={{marginBottom:14}}>
+          <div style={{fontSize:11,fontWeight:700,color:"#555",textTransform:"uppercase",letterSpacing:1,marginBottom:8}}>Dynasty Points per Team</div>
+          {teamRows.length===0&&<div style={{color:"#aaa",fontSize:13,padding:"10px 0"}}>No teams found. Set up the league first.</div>}
+          {teamRows.map(r=>(
+            <div key={r.teamName} style={{display:"flex",alignItems:"center",gap:12,padding:"8px 0",borderBottom:"1px solid #f5f5f5"}}>
+              <div style={{flex:1}}>
+                <div style={{fontSize:13,fontWeight:700,color:"#111"}}>{r.userName}</div>
+                <div style={{fontSize:10,color:"#aaa",textTransform:"uppercase",letterSpacing:0.5}}>{r.teamName}</div>
+              </div>
+              <input type="number" min="0" max="9999" placeholder="0"
+                value={pts[r.teamName]||""}
+                onChange={e=>setPts(p=>({...p,[r.teamName]:e.target.value}))}
+                style={{width:80,padding:"6px 10px",border:"1px solid #ccc",borderRadius:2,fontSize:15,fontWeight:700,textAlign:"center",fontFamily:"'Helvetica Neue',Arial,sans-serif"}}
+              />
+              <div style={{fontSize:11,color:"#888",width:24}}>pts</div>
+            </div>
+          ))}
+        </div>
+        <button onClick={handleSave} style={{background:saved?"#007a00":"#cc0000",color:"#fff",border:"none",borderRadius:2,padding:"11px 24px",cursor:"pointer",fontFamily:"'Helvetica Neue',Arial,sans-serif",fontSize:13,fontWeight:800,textTransform:"uppercase",transition:"background 0.2s"}}>
+          {saved?"✓ Saved!":"Save Historical Season"}
+        </button>
+      </div>
+    </Card>
+  );
+}
+
 // ── EnterResultsPanel ─────────────────────────────────────────────────────
-function EnterResultsPanel({entries,weekResults,setWeekResults,week,applyBulkResults,applyWeekResults,postSeasonInputs,setPSI,applyPostSeason,finalizeSeason,season,teamNames,schedule}) {
+function EnterResultsPanel({entries,weekResults,setWeekResults,week,applyBulkResults,applyWeekResults,postSeasonInputs,setPSI,applyPostSeason,finalizeSeason,season,teamNames,schedule,history,onImportHistory,setupRows}) {
   const [entryWeek,setEntryWeek] = useState(week);
   const setWR=(i,f,v)=>setWeekResults(prev=>prev.map((r,idx)=>idx===i?{...r,[f]:v}:r));
   const thisWeekSchedule = schedule?.[entryWeek]||{};
@@ -1257,6 +1325,8 @@ function EnterResultsPanel({entries,weekResults,setWeekResults,week,applyBulkRes
           </div></Card>
         </>);
       })()}
+
+      <HistoricalImportPanel setupRows={setupRows} history={history||[]} onImport={onImportHistory}/>
     </div>
   );
 }
@@ -1665,6 +1735,14 @@ export default function App() {
     dbSave({season:newSeason, week:1, entries:fresh, post_season_inputs:newPSI});
   }
 
+  function importHistoricalSeason(entry) {
+    setHistory(prev=>{
+      const next=[...prev, entry];
+      setTimeout(()=>saveToDb({history:next}),100);
+      return next;
+    });
+  }
+
   function tryPw(){if(pwInput===PASS){setCommUnlocked(true);setShowPw(false);setPwInput("");setCommTab("Enter Results");}else setPwErr(true);}
 
   if (dbLoading) return (
@@ -1937,7 +2015,7 @@ export default function App() {
           {["Enter Results","Schedule","Content","League Setup"].map(t=><button key={t} onClick={()=>setCommTab(t)} style={{padding:"11px 18px",background:"transparent",border:"none",borderBottom:commTab===t?`3px solid ${RED}`:"3px solid transparent",color:commTab===t?"#fff":"#888",cursor:"pointer",fontSize:12,fontWeight:700,fontFamily:ff,textTransform:"uppercase",letterSpacing:0.5,whiteSpace:"nowrap"}}>{t}</button>)}
         </div>
         <div style={{maxWidth:800,margin:"0 auto",padding:"20px 14px"}}>
-          {commTab==="Enter Results"&&<EnterResultsPanel entries={activeEntries} weekResults={weekResults} setWeekResults={setWeekResults} week={week} applyBulkResults={applyBulkResults} applyWeekResults={applyWeekResults} postSeasonInputs={postSeasonInputs} setPSI={setPSI} applyPostSeason={applyPostSeason} finalizeSeason={finalizeSeason} season={season} teamNames={teamNames} schedule={schedule}/>}
+          {commTab==="Enter Results"&&<EnterResultsPanel entries={activeEntries} weekResults={weekResults} setWeekResults={setWeekResults} week={week} applyBulkResults={applyBulkResults} applyWeekResults={applyWeekResults} postSeasonInputs={postSeasonInputs} setPSI={setPSI} applyPostSeason={applyPostSeason} finalizeSeason={finalizeSeason} season={season} teamNames={teamNames} schedule={schedule} history={history} onImportHistory={importHistoricalSeason} setupRows={setup?.rows||[]}/>}
           {commTab==="Schedule"&&<SchedulePanel entries={activeEntries} schedule={schedule} setSchedule={setSchedule}/>}
           {commTab==="Content"&&<ContentHub sorted={sorted} entries={activeEntries} week={week} season={season} leagueName={leagueName} history={history} leader={leader} articles={articles} setArticles={setArticles} setActiveArticle={setActiveArticle} schedule={schedule}/>}
           {commTab==="League Setup"&&<SetupPanel entries={entries} setup={setup} postSeasonInputs={postSeasonInputs} setPSI={setPSI} handleStart={handleStart} setCommissionerUnlocked={setCommUnlocked} season={season} setEntries={setEntries} setWeekResults={setWeekResults} setSetup={setSetup}/>}
