@@ -1611,8 +1611,8 @@ export default function App() {
 
       {/* Nav tabs */}
       <div style={{background:RED,display:"flex",alignItems:"center",overflowX:"auto",WebkitOverflowScrolling:"touch"}}>
-        {["Home","Standings","Schedule","History","Profiles","Rules"].map(t=>(
-          <button key={t} onClick={()=>setTab(t)} style={{flex:"0 0 auto",padding:isMobile?"0 11px":"0 14px",height:isMobile?38:40,background:tab===t?"rgba(255,255,255,0.18)":"transparent",border:"none",borderBottom:tab===t?"3px solid #fff":"3px solid transparent",color:"#fff",cursor:"pointer",fontSize:isMobile?11:11,fontWeight:tab===t?800:500,fontFamily:ff,textTransform:"uppercase",letterSpacing:0.3,whiteSpace:"nowrap"}}>{t}</button>
+        {(isMobile?[["Home","Home"],["Stndgs","Standings"],["Sched","Schedule"],["History","History"],["Profiles","Profiles"],["Rules","Rules"]]:[["Home","Home"],["Standings","Standings"],["Schedule","Schedule"],["History","History"],["Profiles","Profiles"],["Rules","Rules"]]).map(([label,val])=>(
+          <button key={val} onClick={()=>setTab(val)} style={{flex:"0 0 auto",padding:isMobile?"0 10px":"0 14px",height:isMobile?38:40,background:tab===val?"rgba(255,255,255,0.18)":"transparent",border:"none",borderBottom:tab===val?"3px solid #fff":"3px solid transparent",color:"#fff",cursor:"pointer",fontSize:isMobile?10:11,fontWeight:tab===val?800:500,fontFamily:ff,textTransform:"uppercase",letterSpacing:0.3,whiteSpace:"nowrap"}}>{label}</button>
         ))}
       </div>
 
@@ -1696,7 +1696,7 @@ export default function App() {
                     <div style={{width:32,height:32,borderRadius:"50%",background:a.reporterColor||RED,display:"flex",alignItems:"center",justifyContent:"center",fontSize:10,fontWeight:800,color:"#fff",flexShrink:0}}>{a.reporterAvatar||"DC"}</div>
                     <div style={{flex:1,minWidth:0}}>
                       <div style={{fontSize:10,color:a.reporterColor||RED,fontWeight:700,textTransform:"uppercase",letterSpacing:0.5}}>{a.label} · S{a.season} Wk{a.week}</div>
-                      <div style={{fontSize:12,fontWeight:700,color:"#111",overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap",marginTop:1}}>{articleHeadline(a.text)}</div>
+                      <div style={{fontSize:12,fontWeight:700,color:"#111",display:"-webkit-box",WebkitLineClamp:2,WebkitBoxOrient:"vertical",overflow:"hidden",lineHeight:1.35,marginTop:1}}>{articleHeadline(a.text)}</div>
                     </div>
                     <div style={{color:"#ccc",fontSize:16,flexShrink:0}}>›</div>
                   </div>
@@ -1716,7 +1716,7 @@ export default function App() {
                     {articles[0].reporterAvatar&&<div style={{width:20,height:20,borderRadius:"50%",background:articles[0].reporterColor||RED,display:"flex",alignItems:"center",justifyContent:"center",fontSize:8,fontWeight:800,color:"#fff",flexShrink:0}}>{articles[0].reporterAvatar}</div>}
                     <div style={{fontSize:9,color:articles[0].reporterColor||RED,fontWeight:700,letterSpacing:1,textTransform:"uppercase"}}>{articles[0].reporter} · {articles[0].label}</div>
                   </div>
-                  <div style={{fontSize:13,fontWeight:700,color:"#fff",lineHeight:1.4,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{articleHeadline(articles[0].text)}</div>
+                  <div style={{fontSize:13,fontWeight:700,color:"#fff",lineHeight:1.4,display:"-webkit-box",WebkitLineClamp:2,WebkitBoxOrient:"vertical",overflow:"hidden"}}>{articleHeadline(articles[0].text)}</div>
                 </div>
                 <div style={{color:RED,fontWeight:800,fontSize:12,flexShrink:0}}>READ →</div>
               </div>
@@ -1768,7 +1768,7 @@ export default function App() {
                       <div style={{width:32,height:32,borderRadius:"50%",background:a.reporterColor||RED,display:"flex",alignItems:"center",justifyContent:"center",fontSize:10,fontWeight:800,color:"#fff",flexShrink:0}}>{a.reporterAvatar||"DC"}</div>
                       <div style={{flex:1,minWidth:0}}>
                         <div style={{fontSize:10,color:a.reporterColor||RED,fontWeight:700,textTransform:"uppercase",letterSpacing:0.5}}>{a.label} · S{a.season} Wk{a.week}</div>
-                        <div style={{fontSize:12,fontWeight:700,color:"#111",overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap",marginTop:1}}>{articleHeadline(a.text)}</div>
+                        <div style={{fontSize:12,fontWeight:700,color:"#111",display:"-webkit-box",WebkitLineClamp:2,WebkitBoxOrient:"vertical",overflow:"hidden",lineHeight:1.35,marginTop:1}}>{articleHeadline(a.text)}</div>
                       </div>
                       <div style={{color:"#ccc",fontSize:16,flexShrink:0}}>›</div>
                     </div>
