@@ -64,6 +64,7 @@ const FRESH_PSI = (entries) => ({
   playoffR2: [],
   nattyGame: {teamA:"",teamB:"",winner:""},
   recruiting: entries.map((e,i)=>({teamName:e.teamName,rank:i+1})),
+  dynastyTop5: entries.map((e,i)=>({teamName:e.teamName,rank:i+1})),
   heisman:"",
   prestigeGains:[],
   maxPrestige:[],
@@ -1243,6 +1244,8 @@ function EnterResultsPanel({entries,weekResults,setWeekResults,week,applyBulkRes
             <div style={{marginBottom:14}}><div style={{fontSize:12,color:"#555",marginBottom:8,fontWeight:600}}>Final Conference Standings</div>{psi.confStandings.map((s,i)=><div key={s.teamName} style={{display:"flex",alignItems:"center",gap:8,marginBottom:5}}><span style={{color:i<3?RED:"#bbb",width:22,textAlign:"right",fontSize:12,fontWeight:800}}>{i+1}.</span><select value={s.teamName} onChange={e=>{const nv=e.target.value;const si2=psi.confStandings.findIndex(x=>x.teamName===nv);setPSI(prev=>{const arr=[...prev.confStandings];[arr[i],arr[si2]]=[arr[si2],arr[i]];return{...prev,confStandings:arr};});}} style={{background:"#fff",color:"#111",border:"1px solid #ccc",borderRadius:2,padding:"5px 8px",fontFamily:ff2,fontSize:12}}>{teamNames.map(t=><option key={t} value={t}>{t} ({entries.find(e=>e.teamName===t)?.userName})</option>)}</select><span style={{fontSize:11,color:"#007a00",fontWeight:700}}>+{CONF_STAND_PTS[i]||0}</span></div>)}</div>
             {/* Recruiting */}
             <div style={{marginBottom:12}}><div style={{fontSize:12,color:"#555",marginBottom:6,fontWeight:600}}>Recruiting (Top 5)</div>{psi.recruiting.map((r,i)=><div key={r.teamName} style={{display:"flex",alignItems:"center",gap:8,marginBottom:5}}><span style={{color:i<5?RED:"#bbb",width:22,textAlign:"right",fontSize:12,fontWeight:800}}>{i+1}.</span><select value={r.teamName} onChange={e=>{const nv=e.target.value;const si2=psi.recruiting.findIndex(x=>x.teamName===nv);setPSI(prev=>{const arr=[...prev.recruiting];[arr[i],arr[si2]]=[arr[si2],arr[i]];return{...prev,recruiting:arr};});}} style={{background:"#fff",color:"#111",border:"1px solid #ccc",borderRadius:2,padding:"5px 8px",fontFamily:ff2,fontSize:12}}>{teamNames.map(t=><option key={t} value={t}>{t}</option>)}</select>{i<5&&<span style={{fontSize:11,color:"#007a00",fontWeight:700}}>+{RECRUITING_PTS[i]||0}</span>}</div>)}</div>
+            {/* Dynasty Top 5 */}
+            <div style={{marginBottom:14}}><div style={{fontSize:12,color:"#555",marginBottom:8,fontWeight:600}}>Top 5 Teams in Dynasty</div>{(psi.dynastyTop5||[]).slice(0,5).map((r,i)=><div key={i} style={{display:"flex",alignItems:"center",gap:8,marginBottom:5}}><span style={{color:i<5?RED:"#bbb",width:22,textAlign:"right",fontSize:12,fontWeight:800}}>{i+1}.</span><select value={r.teamName} onChange={e=>{const nv=e.target.value;const si2=(psi.dynastyTop5||[]).findIndex(x=>x.teamName===nv);setPSI(prev=>{const arr=[...prev.dynastyTop5];[arr[i],arr[si2]]=[arr[si2],arr[i]];return{...prev,dynastyTop5:arr};});}} style={{background:"#fff",color:"#111",border:"1px solid #ccc",borderRadius:2,padding:"5px 8px",fontFamily:ff2,fontSize:12}}>{teamNames.map(t=><option key={t} value={t}>{t} ({entries.find(e=>e.teamName===t)?.userName})</option>)}</select><span style={{fontSize:11,color:"#007a00",fontWeight:700}}>+{[15,10,7,5,3][i]}</span></div>)}</div>
             {/* Heisman */}
             <div style={{marginBottom:12}}><div style={{fontSize:12,color:"#555",marginBottom:6,fontWeight:600}}>Heisman Winner (+15)</div><select value={psi.heisman} onChange={e=>setPSI(prev=>({...prev,heisman:e.target.value}))} style={{background:"#fff",color:"#111",border:"1px solid #ccc",borderRadius:2,padding:"6px 10px",fontFamily:ff2,fontSize:13}}><option value="">-- None --</option>{teamNames.map(t=><option key={t} value={t}>{t} ({entries.find(e=>e.teamName===t)?.userName})</option>)}</select></div>
             {/* Prestige */}
@@ -1637,7 +1640,11 @@ export default function App() {
       const rp=ri>=0?(RECRUITING_PTS[ri]||0):0;
       // Prestige & Heisman
       let pp=0;if(psi.prestigeGains.includes(t))pp+=10;if(psi.maxPrestige?.includes(t))pp+=10;
-      const hp=psi.heisman===t?15:0;
+      // Dynasty Top 5 ranking (15/10/7/5/3)
+      const DYNASTY_TOP5_PTS=[15,10,7,5,3];
+      const di=(psi.dynastyTop5||[]).findIndex(r=>r.teamName===t);
+      const dp=di>=0&&di<5?(DYNASTY_TOP5_PTS[di]||0):0;
+      const hp=(psi.heisman===t?15:0)+dp;
       return{...entry,confStandPts:entry.confStandPts+sp,confChampPts:entry.confChampPts+cc,bowlPts:entry.bowlPts+bp,recruitingPts:entry.recruitingPts+rp,prestigePts:entry.prestigePts+pp,heismanPts:entry.heismanPts+hp};
     }));
     setTimeout(()=>saveToDb(),200);
@@ -1863,7 +1870,7 @@ export default function App() {
           {tab==="Profiles"&&<ProfileTab history={history} setupRows={setup?.rows||[]} currentEntries={entries} season={season}/>}
           {tab==="Schedule"&&<ScheduleTab schedule={schedule} entries={activeEntries} week={week} season={season}/>}
           {tab==="Rules"&&<div style={{display:"grid",gridTemplateColumns:isMobile?"1fr":"repeat(auto-fill,minmax(250px,1fr))",gap:10}}>
-            {[["🏈 Regular Season",[["Win","15 pts"],["Win vs Top 25","+5 bonus"],["Win vs Top 10","+10 bonus"],["Loss","0 pts"]]],["📊 Conference Standings",[["1st","50"],["2nd","43"],["3rd","36"],["4th","30"],["5th","24"],["6th","18"],["7th","14"],["8th","10"],["9th","7"],["10th","5"],["11th","3"],["12th","1"]]],["🏆 Conference Championship",[["Make the Game","10 pts"],["Win the Game","15 pts"]]],["🥣 Bowl & Playoff",[["Make a Bowl","5 pts"],["Win a Bowl","+10 pts"],["Playoff Round 1","15 pts"],["Win R1","+10 pts"],["Win Semifinal (R2)","+15 pts"],["Win National Championship","+25 pts"]]],["🎓 Recruiting (Top 5)",[["#1","15 pts"],["#2","10 pts"],["#3","7 pts"],["#4","5 pts"],["#5","3 pts"]]],["⭐ Prestige & Awards",[["Gain a Prestige Star","10 pts"],["Reach Max Prestige","10 pts"],["Heisman Winner","15 pts"]]]].map(([title,rows])=><Card key={title} style={{overflow:"hidden"}}><CardHead bg={RED}>{title}</CardHead><table style={{width:"100%",borderCollapse:"collapse"}}><tbody>{rows.map(([l,p])=><tr key={l} style={{borderBottom:"1px solid #f0f0f0"}}><td style={{padding:"8px 12px",color:"#333",fontSize:13}}>{l}</td><td style={{padding:"8px 12px",textAlign:"right",color:RED,fontWeight:800,fontSize:13}}>{p}</td></tr>)}</tbody></table></Card>)}
+            {[["🏈 Regular Season",[["Win","15 pts"],["Win vs Top 25","+5 bonus"],["Win vs Top 10","+10 bonus"],["Loss","0 pts"]]],["📊 Conference Standings",[["1st","50"],["2nd","43"],["3rd","36"],["4th","30"],["5th","24"],["6th","18"],["7th","14"],["8th","10"],["9th","7"],["10th","5"],["11th","3"],["12th","1"]]],["🏆 Conference Championship",[["Make the Game","10 pts"],["Win the Game","15 pts"]]],["🥣 Bowl & Playoff",[["Make a Bowl","5 pts"],["Win a Bowl","+10 pts"],["Playoff Round 1","15 pts"],["Win R1","+10 pts"],["Win Semifinal (R2)","+15 pts"],["Win National Championship","+25 pts"]]],["🎓 Recruiting (Top 5)",[["#1","15 pts"],["#2","10 pts"],["#3","7 pts"],["#4","5 pts"],["#5","3 pts"]]],["🏅 Dynasty Top 5",[["#1 in Dynasty","15 pts"],["#2 in Dynasty","10 pts"],["#3 in Dynasty","7 pts"],["#4 in Dynasty","5 pts"],["#5 in Dynasty","3 pts"]]],["⭐ Prestige & Awards",[["Gain a Prestige Star","10 pts"],["Reach Max Prestige","10 pts"],["Heisman Winner","15 pts"]]]].map(([title,rows])=><Card key={title} style={{overflow:"hidden"}}><CardHead bg={RED}>{title}</CardHead><table style={{width:"100%",borderCollapse:"collapse"}}><tbody>{rows.map(([l,p])=><tr key={l} style={{borderBottom:"1px solid #f0f0f0"}}><td style={{padding:"8px 12px",color:"#333",fontSize:13}}>{l}</td><td style={{padding:"8px 12px",textAlign:"right",color:RED,fontWeight:800,fontSize:13}}>{p}</td></tr>)}</tbody></table></Card>)}
           </div>}
         </div>
 
