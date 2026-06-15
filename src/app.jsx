@@ -479,7 +479,7 @@ function HistoryTab({history}) {
         <div style={{padding:"12px 14px",display:"flex",gap:8,flexWrap:"wrap"}}>
           {history.map((s,i)=><button key={i} onClick={()=>setSel(sel===i?null:i)} style={{padding:"5px 12px",borderRadius:2,border:"1px solid",borderColor:sel===i?RED:s.isHistorical?"#aaa":"#ddd",background:sel===i?RED:s.isHistorical?"#f5f5f5":"#fff",color:sel===i?"#fff":s.isHistorical?"#555":"#555",cursor:"pointer",fontSize:12,fontWeight:700,fontFamily:ff,textTransform:"uppercase"}}>{s.year}{s.isHistorical?" · HIST":` · S${s.seasonNum}`}</button>)}
         </div>
-        {sel!==null&&(()=>{const s=history[sel];const srt=[...s.finalStandings].sort((a,b)=>calcTotal(b)-calcTotal(a));const top=calcTotal(srt[0]);const showWL=!s.isHistorical;return(<div style={{padding:"0 14px 14px"}}><div style={{display:"flex",gap:8,marginBottom:12,flexWrap:"wrap"}}>{s.isHistorical&&<div style={{background:"#555",borderRadius:2,padding:"3px 10px",fontSize:11,color:"#fff",fontWeight:700}}>📥 IMPORTED SEASON</div>}{s.champion&&<div style={{background:RED,borderRadius:2,padding:"3px 10px",fontSize:11,color:"#fff",fontWeight:700}}>🏆 {s.champion}</div>}{s.confChampion&&<div style={{background:"#f5f5f5",border:"1px solid #ddd",borderRadius:2,padding:"3px 10px",fontSize:11,color:"#111",fontWeight:700}}>🏅 {s.confChampion}</div>}{s.heisman&&<div style={{background:"#fff8e8",border:"1px solid #ddd",borderRadius:2,padding:"3px 10px",fontSize:11,color:"#cc7700",fontWeight:700}}>🏈 {s.heisman}</div>}</div><table style={{width:"100%",borderCollapse:"collapse",fontSize:isMobile?11:13}}><thead><tr style={{borderBottom:`2px solid ${RED}`,background:"#f7f7f7"}}>{["#","User",...(isMobile?[]:["Team"]),...(showWL?["W","L"]:[]),"PTS","Behind"].map(h=><th key={h} style={{padding:"7px 6px",textAlign:h==="User"||h==="Team"?"left":"center",color:"#555",fontSize:9,letterSpacing:1,textTransform:"uppercase",fontWeight:800}}>{h}</th>)}</tr></thead><tbody>{srt.map((t,i)=>{const tot=calcTotal(t);return(<tr key={t.userName} style={{borderBottom:"1px solid #eee",background:i===0?"#fff8f8":"transparent"}}><td style={{padding:"8px 6px",textAlign:"center",color:i===0?RED:"#bbb",fontWeight:800,fontSize:13}}>{i+1}</td><td style={{padding:"8px 6px",color:"#111",fontWeight:i===0?800:400}}>{t.userName}</td>{!isMobile&&<td style={{padding:"8px 6px",color:"#888",fontSize:12}}>{t.teamName}</td>}{showWL&&<><td style={{padding:"8px 6px",textAlign:"center",color:"#007a00",fontWeight:700}}>{t.wins}</td><td style={{padding:"8px 6px",textAlign:"center",color:RED,fontWeight:700}}>{t.losses}</td></>}<td style={{padding:"8px 6px",textAlign:"center",fontWeight:800,color:i===0?RED:"#111",fontSize:14}}>{tot}</td><td style={{padding:"8px 6px",textAlign:"center",color:i===0?"#007a00":RED,fontSize:12}}>{i===0?"LEAD":`-${top-tot}`}</td></tr>);})}</tbody></table></div>);})()}
+        {sel!==null&&(()=>{const s=history[sel];const srt=[...s.finalStandings].sort((a,b)=>calcTotal(b)-calcTotal(a));const top=calcTotal(srt[0]);const showWL=!s.isHistorical;return(<div style={{padding:"0 14px 14px"}}><div style={{display:"flex",gap:8,marginBottom:12,flexWrap:"wrap"}}>{s.isHistorical&&<div style={{background:"#555",borderRadius:2,padding:"3px 10px",fontSize:11,color:"#fff",fontWeight:700}}>📥 IMPORTED SEASON</div>}{s.champion&&<div style={{background:RED,borderRadius:2,padding:"3px 10px",fontSize:11,color:"#fff",fontWeight:700}}>🏆 {s.champion}</div>}{(s.nattyWinner)&&<div style={{background:"#1a3a6b",borderRadius:2,padding:"3px 10px",fontSize:11,color:"#fff",fontWeight:700}}>🏈 Natty: {s.nattyWinner}</div>}{(s.confChampion)&&<div style={{background:"#f5f5f5",border:"1px solid #ddd",borderRadius:2,padding:"3px 10px",fontSize:11,color:"#111",fontWeight:700}}>🏅 Conf: {s.confChampion}</div>}{s.heisman&&<div style={{background:"#fff8e8",border:"1px solid #ddd",borderRadius:2,padding:"3px 10px",fontSize:11,color:"#cc7700",fontWeight:700}}>🏈 Heisman: {s.heisman}</div>}</div><table style={{width:"100%",borderCollapse:"collapse",fontSize:isMobile?11:13}}><thead><tr style={{borderBottom:`2px solid ${RED}`,background:"#f7f7f7"}}>{["#","User",...(isMobile?[]:["Team"]),...(showWL?["W","L"]:[]),"PTS","Behind"].map(h=><th key={h} style={{padding:"7px 6px",textAlign:h==="User"||h==="Team"?"left":"center",color:"#555",fontSize:9,letterSpacing:1,textTransform:"uppercase",fontWeight:800}}>{h}</th>)}</tr></thead><tbody>{srt.map((t,i)=>{const tot=calcTotal(t);return(<tr key={t.userName} style={{borderBottom:"1px solid #eee",background:i===0?"#fff8f8":"transparent"}}><td style={{padding:"8px 6px",textAlign:"center",color:i===0?RED:"#bbb",fontWeight:800,fontSize:13}}>{i+1}</td><td style={{padding:"8px 6px",color:"#111",fontWeight:i===0?800:400}}>{t.userName}</td>{!isMobile&&<td style={{padding:"8px 6px",color:"#888",fontSize:12}}>{t.teamName}</td>}{showWL&&<><td style={{padding:"8px 6px",textAlign:"center",color:"#007a00",fontWeight:700}}>{t.wins}</td><td style={{padding:"8px 6px",textAlign:"center",color:RED,fontWeight:700}}>{t.losses}</td></>}<td style={{padding:"8px 6px",textAlign:"center",fontWeight:800,color:i===0?RED:"#111",fontSize:14}}>{tot}</td><td style={{padding:"8px 6px",textAlign:"center",color:i===0?"#007a00":RED,fontSize:12}}>{i===0?"LEAD":`-${top-tot}`}</td></tr>);})}</tbody></table></div>);})()}
       </Card>
     </div>
   );
@@ -721,7 +721,7 @@ function ProfileTab({history,setupRows,currentEntries,season}) {
   if (!allUsers.length) return <Card style={{padding:20}}><div style={{color:"#888",fontSize:14}}>No users found.</div></Card>;
 
   function getProfile(userName) {
-    const seasons=history.map(s=>{const srt=[...s.finalStandings].sort((a,b)=>calcTotal(b)-calcTotal(a));const entry=srt.find(t=>t.userName===userName);if(!entry)return null;const rank=srt.findIndex(t=>t.userName===userName)+1;return{year:s.year,seasonNum:s.seasonNum,rank,total:calcTotal(entry),wins:entry.wins,losses:entry.losses,teamName:entry.teamName,champion:s.champion===userName,confChamp:s.confChampion===userName,heisman:s.heisman===userName,weekLog:entry.weekLog||[],gamePts:entry.gamePts||0,rankedBonusPts:entry.rankedBonusPts||0,confStandPts:entry.confStandPts||0,confChampPts:entry.confChampPts||0,bowlPts:entry.bowlPts||0,recruitingPts:entry.recruitingPts||0,prestigePts:entry.prestigePts||0,heismanPts:entry.heismanPts||0,h2h:entry.h2h||{}};}).filter(Boolean);
+    const seasons=history.map(s=>{const srt=[...s.finalStandings].sort((a,b)=>calcTotal(b)-calcTotal(a));const entry=srt.find(t=>t.userName===userName);if(!entry)return null;const rank=srt.findIndex(t=>t.userName===userName)+1;return{year:s.year,seasonNum:s.seasonNum,rank,total:calcTotal(entry),wins:entry.wins,losses:entry.losses,teamName:entry.teamName,champion:s.champion===userName,confChamp:s.confChampion===entry.teamName||s.confChampion===userName,nattyWin:s.nattyWinner===entry.teamName,heisman:s.heisman===entry.teamName||s.heisman===userName,weekLog:entry.weekLog||[],gamePts:entry.gamePts||0,rankedBonusPts:entry.rankedBonusPts||0,confStandPts:entry.confStandPts||0,confChampPts:entry.confChampPts||0,bowlPts:entry.bowlPts||0,recruitingPts:entry.recruitingPts||0,prestigePts:entry.prestigePts||0,heismanPts:entry.heismanPts||0,h2h:entry.h2h||{},playoffWins:entry.playoffWins||0,playoffLosses:entry.playoffLosses||0,bowlResult:entry.bowlResult||"none",bowlOpponent:entry.bowlOpponent||"",top25Wins:entry.top25Wins||0,top25Losses:entry.top25Losses||0,top10Wins:entry.top10Wins||0,top10Losses:entry.top10Losses||0,isHistorical:s.isHistorical||false};}).filter(Boolean);
     const cur=currentEntries.find(e=>e.userName===userName);
     const totalWins=seasons.reduce((a,s)=>a+s.wins,0)+(cur?.wins||0);
     const totalLosses=seasons.reduce((a,s)=>a+s.losses,0)+(cur?.losses||0);
@@ -739,11 +739,20 @@ function ProfileTab({history,setupRows,currentEntries,season}) {
     const rankedWins=allWeekLogs.filter(w=>w.result==="win"&&(w.ranked25||w.ranked10)).length;
     const top10Wins=allWeekLogs.filter(w=>w.result==="win"&&w.ranked10).length;
     const winPct=totalWins+totalLosses>0?((totalWins/(totalWins+totalLosses))*100).toFixed(1):0;
+    const nattyWins=seasons.filter(s=>s.nattyWin).length;
+    // Career bowl/playoff/ranked records (from historical + weekLog-derived)
+    const careerPlayoffWins=seasons.reduce((a,s)=>a+(s.playoffWins||0),0);
+    const careerPlayoffLosses=seasons.reduce((a,s)=>a+(s.playoffLosses||0),0);
+    const bowlWins=seasons.filter(s=>s.bowlResult==="win").length;
+    const bowlLosses=seasons.filter(s=>s.bowlResult==="loss").length;
+    const bowlAppearances=seasons.filter(s=>s.bowlResult&&s.bowlResult!=="none").length;
+    const careerTop25Wins=seasons.reduce((a,s)=>a+(s.top25Wins||0),0)+allWeekLogs.filter(w=>w.result==="win"&&w.ranked25&&!w.ranked10).length;
+    const careerTop10Wins=seasons.reduce((a,s)=>a+(s.top10Wins||0),0)+allWeekLogs.filter(w=>w.result==="win"&&w.ranked10).length;
     // H2H - merge across all seasons + current
     const h2hMerged={};
     [...seasons.map(s=>s.h2h||{}),(cur?.h2h||{})].forEach(h2h=>{Object.entries(h2h).forEach(([opp,rec])=>{if(!h2hMerged[opp])h2hMerged[opp]={wins:0,losses:0};h2hMerged[opp].wins+=(rec.wins||0);h2hMerged[opp].losses+=(rec.losses||0);});});
     const ptBreakdown={game:seasons.reduce((a,s)=>a+(s.gamePts||0),0)+(cur?.gamePts||0),bonus:seasons.reduce((a,s)=>a+(s.rankedBonusPts||0),0)+(cur?.rankedBonusPts||0),conf:seasons.reduce((a,s)=>a+(s.confStandPts||0),0)+(cur?.confStandPts||0),cc:seasons.reduce((a,s)=>a+(s.confChampPts||0),0)+(cur?.confChampPts||0),bowl:seasons.reduce((a,s)=>a+(s.bowlPts||0),0)+(cur?.bowlPts||0),rec:seasons.reduce((a,s)=>a+(s.recruitingPts||0),0)+(cur?.recruitingPts||0),awards:seasons.reduce((a,s)=>a+(s.prestigePts||0)+(s.heismanPts||0),0)+((cur?.prestigePts||0)+(cur?.heismanPts||0))};
-    return{seasons,cur,totalWins,totalLosses,totalPts,championships,confTitles,heismans,bestFinish,longestWin,longestLoss,curStreak,curStreakType,rankedWins,top10Wins,winPct,h2hMerged,ptBreakdown};
+    return{seasons,cur,totalWins,totalLosses,totalPts,championships,confTitles,heismans,nattyWins,bestFinish,longestWin,longestLoss,curStreak,curStreakType,rankedWins,top10Wins,winPct,h2hMerged,ptBreakdown,careerPlayoffWins,careerPlayoffLosses,bowlWins,bowlLosses,bowlAppearances,careerTop25Wins,careerTop10Wins};
   }
 
   function getLR() {
@@ -783,8 +792,28 @@ function ProfileTab({history,setupRows,currentEntries,season}) {
         </div>
         <div style={{padding:isMobile?12:18}}>
           {pTab==="overview"&&<div style={{display:"flex",flexDirection:"column",gap:16}}>
-            <div><SL>Career Stats</SL><div style={{display:"grid",gridTemplateColumns:isMobile?"1fr 1fr 1fr":"repeat(auto-fill,minmax(90px,1fr))",gap:8}}><SB label="Total Pts" val={profile.totalPts} color={RED}/><SB label="Wins" val={profile.totalWins} color="#007a00"/><SB label="Losses" val={profile.totalLosses} color={RED}/><SB label="Win %" val={profile.winPct+"%"}/><SB label="Best Finish" val={profile.bestFinish?`#${profile.bestFinish}`:"—"} color={RED}/><SB label="Seasons" val={profile.seasons.length+(profile.cur?1:0)}/></div></div>
-            <div><SL>Streaks & Ranked</SL><div style={{display:"grid",gridTemplateColumns:isMobile?"1fr 1fr":"repeat(auto-fill,minmax(110px,1fr))",gap:8}}><SB label="Win Streak" val={profile.longestWin+"G"} color="#007a00"/><SB label="Loss Streak" val={profile.longestLoss+"G"} color={RED}/><SB label="Ranked Wins" val={profile.rankedWins} color="#cc7700"/><SB label="Top 10 Wins" val={profile.top10Wins} color={RED}/></div></div>
+            <div><SL>Career Stats</SL><div style={{display:"grid",gridTemplateColumns:isMobile?"1fr 1fr 1fr":"repeat(auto-fill,minmax(90px,1fr))",gap:8}}>
+              <SB label="Total Pts" val={profile.totalPts} color={RED}/>
+              <SB label="Wins" val={profile.totalWins} color="#007a00"/>
+              <SB label="Losses" val={profile.totalLosses} color={RED}/>
+              <SB label="Win %" val={profile.winPct+"%"}/>
+              <SB label="Best Finish" val={profile.bestFinish?`#${profile.bestFinish}`:"—"} color={RED}/>
+              <SB label="Seasons" val={profile.seasons.length+(profile.cur?1:0)}/>
+              <SB label="Natty Wins" val={profile.nattyWins} color="#1a3a6b"/>
+              <SB label="Conf Titles" val={profile.confTitles} color="#555"/>
+            </div></div>
+            <div><SL>Bowl & Playoff</SL><div style={{display:"grid",gridTemplateColumns:isMobile?"1fr 1fr":"repeat(auto-fill,minmax(110px,1fr))",gap:8}}>
+              <SB label="Bowl Apps" val={profile.bowlAppearances}/>
+              <SB label="Bowl Record" val={profile.bowlAppearances>0?`${profile.bowlWins}-${profile.bowlLosses}`:"—"} color={profile.bowlWins>profile.bowlLosses?"#007a00":RED}/>
+              <SB label="Playoff W" val={profile.careerPlayoffWins} color="#007a00"/>
+              <SB label="Playoff L" val={profile.careerPlayoffLosses} color={RED}/>
+            </div></div>
+            <div><SL>Ranked Record</SL><div style={{display:"grid",gridTemplateColumns:isMobile?"1fr 1fr":"repeat(auto-fill,minmax(110px,1fr))",gap:8}}>
+              <SB label="Top 25 Wins" val={profile.careerTop25Wins} color="#cc7700"/>
+              <SB label="Top 10 Wins" val={profile.careerTop10Wins} color={RED}/>
+              <SB label="Win Streak" val={profile.longestWin+"G"} color="#007a00"/>
+              <SB label="Loss Streak" val={profile.longestLoss+"G"} color={RED}/>
+            </div></div>
           </div>}
 
           {pTab==="h2h"&&<div>
@@ -1160,61 +1189,190 @@ function HistoricalImportPanel({setupRows, history, onImport}) {
   const YEARS = Array.from({length: currentCalYear - 2009}, (_, i) => currentCalYear - 1 - i);
   const [year, setYear] = useState(YEARS[0]);
   const [pts, setPts] = useState({});
+  const [nattyWinner, setNattyWinner] = useState("");
+  const [nattyRunner, setNattyRunner] = useState("");
+  const [confWinner, setConfWinner] = useState("");
+  const [confRunner, setConfRunner] = useState("");
+  const [heisman, setHeisman] = useState("");
+  const [teamDetails, setTeamDetails] = useState({});
+  const [expanded, setExpanded] = useState({});
   const [saved, setSaved] = useState(false);
   const teamRows = (setupRows||[]).filter(r=>r.userName&&r.teamName);
-  const alreadyImported = (year) => history.some(s=>s.isHistorical&&s.year===year);
+  const alreadyImported = (y) => history.some(s=>s.isHistorical&&s.year===y);
+
+  function setDetail(teamName, field, val) {
+    setTeamDetails(prev=>({...prev,[teamName]:{...(prev[teamName]||{}),[field]:val}}));
+  }
+  function getDetail(teamName, field, def="") {
+    return teamDetails[teamName]?.[field]??def;
+  }
 
   function handleSave() {
     if (!teamRows.length) return alert("No teams configured yet.");
-    const standings = teamRows.map(r=>({
-      userName: r.userName, teamName: r.teamName,
-      historicalTotal: parseInt(pts[r.teamName])||0,
-      wins:0, losses:0, confWins:0, confLosses:0,
-      gamePts:0, rankedBonusPts:0, confStandPts:0, confChampPts:0,
-      bowlPts:0, recruitingPts:0, prestigePts:0, heismanPts:0,
-      weekLog:[], h2h:{},
-    }));
-    const sorted=[...standings].sort((a,b)=>b.historicalTotal-a.historicalTotal);
-    onImport({year, seasonNum:null, isHistorical:true, finalStandings:standings,
-      champion:sorted[0]?.userName||"", confChampion:"", heisman:""});
+    const standings = teamRows.map(r=>{
+      const d = teamDetails[r.teamName]||{};
+      return {
+        userName: r.userName, teamName: r.teamName,
+        historicalTotal: parseInt(pts[r.teamName])||0,
+        wins:0, losses:0, confWins:0, confLosses:0,
+        gamePts:0, rankedBonusPts:0, confStandPts:0, confChampPts:0,
+        bowlPts:0, recruitingPts:0, prestigePts:0, heismanPts:0,
+        weekLog:[], h2h:{},
+        // Extended historical stats
+        playoffWins: parseInt(d.playoffWins)||0,
+        playoffLosses: parseInt(d.playoffLosses)||0,
+        bowlResult: d.bowlResult||"none",
+        bowlOpponent: d.bowlOpponent||"",
+        top25Wins: parseInt(d.top25Wins)||0,
+        top25Losses: parseInt(d.top25Losses)||0,
+        top10Wins: parseInt(d.top10Wins)||0,
+        top10Losses: parseInt(d.top10Losses)||0,
+      };
+    });
+    const sortedByPts=[...standings].sort((a,b)=>b.historicalTotal-a.historicalTotal);
+    onImport({
+      year, seasonNum:null, isHistorical:true, finalStandings:standings,
+      champion:sortedByPts[0]?.userName||"",
+      nattyWinner, nattyRunnerUp:nattyRunner,
+      confChampion:confWinner, confRunnerUp:confRunner,
+      heisman,
+    });
     setSaved(true);
     setTimeout(()=>setSaved(false),3000);
   }
+
+  const inp = (val, onChange, w=70, extra={}) => (
+    <input type="number" min="0" max="999" value={val} onChange={e=>onChange(e.target.value)}
+      style={{width:w,padding:"5px 8px",border:"1px solid #ccc",borderRadius:2,fontSize:14,fontWeight:700,textAlign:"center",fontFamily:"'Helvetica Neue',Arial,sans-serif",...extra}}/>
+  );
+  const TeamSel = ({value, onChange, placeholder="-- None --"}) => (
+    <select value={value} onChange={e=>onChange(e.target.value)}
+      style={{padding:"6px 8px",border:"1px solid #ccc",borderRadius:2,fontSize:13,fontFamily:"'Helvetica Neue',Arial,sans-serif",background:"#fff",color:"#111",minWidth:120}}>
+      <option value="">{placeholder}</option>
+      {teamRows.map(r=><option key={r.teamName} value={r.teamName}>{r.teamName} ({r.userName})</option>)}
+    </select>
+  );
 
   return (
     <Card>
       <CardHead bg="#333">📥 Historical Season Import</CardHead>
       <div style={{padding:16}}>
-        <div style={{fontSize:12,color:"#888",marginBottom:14}}>Import final dynasty points totals from a past season with no individual game data. These will appear in Season History and each player's profile.</div>
-        <div style={{display:"flex",alignItems:"center",gap:12,marginBottom:16,flexWrap:"wrap"}}>
+        <div style={{fontSize:12,color:"#888",marginBottom:14,lineHeight:1.5}}>Import a past season with final standings, championships, and per-team records. These appear in Season History and player profiles.</div>
+
+        {/* Year selector */}
+        <div style={{display:"flex",alignItems:"center",gap:12,marginBottom:18,flexWrap:"wrap"}}>
           <div>
             <div style={{fontSize:10,fontWeight:700,color:"#888",textTransform:"uppercase",letterSpacing:1,marginBottom:5}}>Season Year</div>
-            <select value={year} onChange={e=>setYear(Number(e.target.value))} style={{fontSize:15,fontWeight:700,padding:"7px 10px",border:`2px solid ${alreadyImported(year)?"#cc7700":"#cc0000"}`,borderRadius:2,background:"#fff",fontFamily:"'Helvetica Neue',Arial,sans-serif",cursor:"pointer"}}>
+            <select value={year} onChange={e=>{setYear(Number(e.target.value));setSaved(false);}} style={{fontSize:15,fontWeight:700,padding:"7px 10px",border:`2px solid ${alreadyImported(year)?"#cc7700":"#cc0000"}`,borderRadius:2,background:"#fff",fontFamily:"'Helvetica Neue',Arial,sans-serif",cursor:"pointer"}}>
               {YEARS.map(y=><option key={y} value={y}>{y}{alreadyImported(y)?" (imported)":""}</option>)}
             </select>
           </div>
-          {alreadyImported(year)&&<div style={{padding:"6px 12px",background:"#fffbf0",border:"1px solid #f0c040",borderRadius:2,fontSize:12,color:"#886600",fontWeight:600}}>⚠ This year already has an import — saving will add a second entry</div>}
+          {alreadyImported(year)&&<div style={{padding:"6px 12px",background:"#fffbf0",border:"1px solid #f0c040",borderRadius:2,fontSize:12,color:"#886600",fontWeight:600}}>⚠ Already imported — saving will add a second entry for this year</div>}
         </div>
-        <div style={{marginBottom:14}}>
-          <div style={{fontSize:11,fontWeight:700,color:"#555",textTransform:"uppercase",letterSpacing:1,marginBottom:8}}>Dynasty Points per Team</div>
+
+        {/* Team Points */}
+        <div style={{marginBottom:20}}>
+          <div style={{fontSize:11,fontWeight:800,color:"#555",textTransform:"uppercase",letterSpacing:1,marginBottom:10,borderLeft:"3px solid #cc0000",paddingLeft:8}}>Dynasty Points per Team</div>
           {teamRows.length===0&&<div style={{color:"#aaa",fontSize:13,padding:"10px 0"}}>No teams found. Set up the league first.</div>}
           {teamRows.map(r=>(
-            <div key={r.teamName} style={{display:"flex",alignItems:"center",gap:12,padding:"8px 0",borderBottom:"1px solid #f5f5f5"}}>
-              <div style={{flex:1}}>
-                <div style={{fontSize:13,fontWeight:700,color:"#111"}}>{r.userName}</div>
-                <div style={{fontSize:10,color:"#aaa",textTransform:"uppercase",letterSpacing:0.5}}>{r.teamName}</div>
+            <div key={r.teamName} style={{borderBottom:"1px solid #f0f0f0"}}>
+              {/* Team row header */}
+              <div style={{display:"flex",alignItems:"center",gap:12,padding:"10px 0"}}>
+                <div style={{flex:1}}>
+                  <div style={{fontSize:13,fontWeight:700,color:"#111"}}>{r.userName}</div>
+                  <div style={{fontSize:10,color:"#aaa",textTransform:"uppercase",letterSpacing:0.5}}>{r.teamName}</div>
+                </div>
+                {inp(pts[r.teamName]||"", val=>setPts(p=>({...p,[r.teamName]:val})), 80)}
+                <div style={{fontSize:11,color:"#888",width:24,flexShrink:0}}>pts</div>
+                <button onClick={()=>setExpanded(p=>({...p,[r.teamName]:!p[r.teamName]}))}
+                  style={{padding:"4px 10px",borderRadius:2,border:"1px solid #ddd",background:expanded[r.teamName]?"#f0f0f0":"#fff",color:"#555",cursor:"pointer",fontSize:11,fontFamily:"'Helvetica Neue',Arial,sans-serif",fontWeight:700,flexShrink:0}}>
+                  {expanded[r.teamName]?"▲ Less":"▼ Details"}
+                </button>
               </div>
-              <input type="number" min="0" max="9999" placeholder="0"
-                value={pts[r.teamName]||""}
-                onChange={e=>setPts(p=>({...p,[r.teamName]:e.target.value}))}
-                style={{width:80,padding:"6px 10px",border:"1px solid #ccc",borderRadius:2,fontSize:15,fontWeight:700,textAlign:"center",fontFamily:"'Helvetica Neue',Arial,sans-serif"}}
-              />
-              <div style={{fontSize:11,color:"#888",width:24}}>pts</div>
+              {/* Expanded per-team detail */}
+              {expanded[r.teamName]&&(
+                <div style={{background:"#f9f9f9",border:"1px solid #eee",borderRadius:2,padding:"12px 14px",marginBottom:10,display:"flex",flexDirection:"column",gap:10}}>
+                  {/* Playoff record */}
+                  <div style={{display:"flex",alignItems:"center",gap:10,flexWrap:"wrap"}}>
+                    <div style={{fontSize:12,fontWeight:600,color:"#333",width:120}}>Playoff Record</div>
+                    <div style={{display:"flex",alignItems:"center",gap:6}}>
+                      {inp(getDetail(r.teamName,"playoffWins"), v=>setDetail(r.teamName,"playoffWins",v), 50)}
+                      <span style={{color:"#888",fontWeight:700}}>W</span>
+                      {inp(getDetail(r.teamName,"playoffLosses"), v=>setDetail(r.teamName,"playoffLosses",v), 50)}
+                      <span style={{color:"#888",fontWeight:700}}>L</span>
+                    </div>
+                  </div>
+                  {/* Bowl result */}
+                  <div style={{display:"flex",alignItems:"center",gap:10,flexWrap:"wrap"}}>
+                    <div style={{fontSize:12,fontWeight:600,color:"#333",width:120}}>Bowl Game</div>
+                    <div style={{display:"flex",alignItems:"center",gap:6,flexWrap:"wrap"}}>
+                      {["none","win","loss"].map(opt=>(
+                        <button key={opt} onClick={()=>setDetail(r.teamName,"bowlResult",opt)}
+                          style={{padding:"4px 10px",borderRadius:2,border:"1px solid",borderColor:getDetail(r.teamName,"bowlResult","none")===opt?(opt==="win"?"#007a00":opt==="loss"?"#cc0000":"#888"):"#ddd",background:getDetail(r.teamName,"bowlResult","none")===opt?(opt==="win"?"#f0f8f0":opt==="loss"?"#fff8f8":"#f5f5f5"):"#fff",color:getDetail(r.teamName,"bowlResult","none")===opt?(opt==="win"?"#007a00":opt==="loss"?"#cc0000":"#555"):"#888",cursor:"pointer",fontSize:11,fontFamily:"'Helvetica Neue',Arial,sans-serif",fontWeight:700}}>
+                          {opt==="none"?"No Bowl":opt==="win"?"Win":"Loss"}
+                        </button>
+                      ))}
+                      {getDetail(r.teamName,"bowlResult","none")!=="none"&&(
+                        <input value={getDetail(r.teamName,"bowlOpponent")} onChange={e=>setDetail(r.teamName,"bowlOpponent",e.target.value)} placeholder="Opponent (e.g. Alabama)"
+                          style={{padding:"4px 8px",border:"1px solid #ddd",borderRadius:2,fontSize:12,fontFamily:"'Helvetica Neue',Arial,sans-serif",width:160}}/>
+                      )}
+                    </div>
+                  </div>
+                  {/* vs Top 25 */}
+                  <div style={{display:"flex",alignItems:"center",gap:10,flexWrap:"wrap"}}>
+                    <div style={{fontSize:12,fontWeight:600,color:"#333",width:120}}>vs Top 25</div>
+                    <div style={{display:"flex",alignItems:"center",gap:6}}>
+                      {inp(getDetail(r.teamName,"top25Wins"), v=>setDetail(r.teamName,"top25Wins",v), 50)}
+                      <span style={{color:"#888",fontWeight:700}}>W</span>
+                      {inp(getDetail(r.teamName,"top25Losses"), v=>setDetail(r.teamName,"top25Losses",v), 50)}
+                      <span style={{color:"#888",fontWeight:700}}>L</span>
+                    </div>
+                  </div>
+                  {/* vs Top 10 */}
+                  <div style={{display:"flex",alignItems:"center",gap:10,flexWrap:"wrap"}}>
+                    <div style={{fontSize:12,fontWeight:600,color:"#333",width:120}}>vs Top 10</div>
+                    <div style={{display:"flex",alignItems:"center",gap:6}}>
+                      {inp(getDetail(r.teamName,"top10Wins"), v=>setDetail(r.teamName,"top10Wins",v), 50)}
+                      <span style={{color:"#888",fontWeight:700}}>W</span>
+                      {inp(getDetail(r.teamName,"top10Losses"), v=>setDetail(r.teamName,"top10Losses",v), 50)}
+                      <span style={{color:"#888",fontWeight:700}}>L</span>
+                    </div>
+                  </div>
+                </div>
+              )}
             </div>
           ))}
         </div>
-        <button onClick={handleSave} style={{background:saved?"#007a00":"#cc0000",color:"#fff",border:"none",borderRadius:2,padding:"11px 24px",cursor:"pointer",fontFamily:"'Helvetica Neue',Arial,sans-serif",fontSize:13,fontWeight:800,textTransform:"uppercase",transition:"background 0.2s"}}>
-          {saved?"✓ Saved!":"Save Historical Season"}
+
+        {/* Awards & Championships */}
+        <div style={{marginBottom:20}}>
+          <div style={{fontSize:11,fontWeight:800,color:"#555",textTransform:"uppercase",letterSpacing:1,marginBottom:12,borderLeft:"3px solid #cc0000",paddingLeft:8}}>Awards & Championships</div>
+          <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:14}}>
+            <div>
+              <div style={{fontSize:11,fontWeight:700,color:"#888",marginBottom:5}}>National Championship Winner</div>
+              <TeamSel value={nattyWinner} onChange={setNattyWinner}/>
+            </div>
+            <div>
+              <div style={{fontSize:11,fontWeight:700,color:"#888",marginBottom:5}}>Natty Runner-Up</div>
+              <TeamSel value={nattyRunner} onChange={setNattyRunner}/>
+            </div>
+            <div>
+              <div style={{fontSize:11,fontWeight:700,color:"#888",marginBottom:5}}>Conf Championship Winner</div>
+              <TeamSel value={confWinner} onChange={setConfWinner}/>
+            </div>
+            <div>
+              <div style={{fontSize:11,fontWeight:700,color:"#888",marginBottom:5}}>Conf Runner-Up</div>
+              <TeamSel value={confRunner} onChange={setConfRunner}/>
+            </div>
+            <div>
+              <div style={{fontSize:11,fontWeight:700,color:"#888",marginBottom:5}}>Heisman Winner</div>
+              <TeamSel value={heisman} onChange={setHeisman}/>
+            </div>
+          </div>
+        </div>
+
+        <button onClick={handleSave} style={{background:saved?"#007a00":"#cc0000",color:"#fff",border:"none",borderRadius:2,padding:"12px 28px",cursor:"pointer",fontFamily:"'Helvetica Neue',Arial,sans-serif",fontSize:14,fontWeight:800,textTransform:"uppercase"}}>
+          {saved?"✓ Season Saved!":"Save Season →"}
         </button>
       </div>
     </Card>
