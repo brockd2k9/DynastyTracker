@@ -1,0 +1,8 @@
+name = "dynasty-api"
+main = "src/index.js"
+compatibility_date = "2024-01-01"
+
+# Set the secret via CLI before deploying:
+#   wrangler secret put ANTHROPIC_API_KEY
+# Then deploy with:
+#   wrangler deploy
