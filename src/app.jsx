@@ -979,8 +979,6 @@ function BulkResultsUploader({entries,week,teamNames,onConfirm}) {
 
   async function processAll() {
     if(!files.length)return;
-    const apiKey=import.meta.env.VITE_ANTHROPIC_KEY;
-    if(!apiKey){alert("VITE_ANTHROPIC_KEY not set.");return;}
     setPhase("processing");
     const allGames=[];
     for(let i=0;i<files.length;i++){
@@ -988,17 +986,13 @@ function BulkResultsUploader({entries,week,teamNames,onConfirm}) {
       try{
         const file=files[i];
         const b64=await new Promise((res,rej)=>{const r=new FileReader();r.onload=e=>res(e.target.result.split(",")[1]);r.onerror=rej;r.readAsDataURL(file);});
-        const resp=await fetch("https://api.anthropic.com/v1/messages",{
+        const resp=await fetch("https://dynasty-api.brockdrury.workers.dev/api/parse-screenshot",{
           method:"POST",
-          headers:{"Content-Type":"application/json","x-api-key":apiKey,"anthropic-version":"2023-06-01","anthropic-dangerous-direct-browser-access":"true"},
-          body:JSON.stringify({model:"claude-haiku-4-5-20251001",max_tokens:600,system:SCOREBOARD_PROMPT,messages:[{role:"user",content:[{type:"image",source:{type:"base64",media_type:file.type||"image/jpeg",data:b64}},{type:"text",text:"Parse this scoreboard screenshot."}]}]}),
+          headers:{"Content-Type":"application/json"},
+          body:JSON.stringify({image:b64,mediaType:file.type||"image/jpeg",teams:teamNames}),
         });
-        if(!resp.ok){const e=await resp.json().catch(()=>({}));throw new Error(e?.error?.message||`API error ${resp.status}`);}
-        const data=await resp.json();
-        const raw=data.content?.[0]?.text||"";
-        const jm=raw.match(/\{[\s\S]*\}/);
-        if(!jm)throw new Error("No JSON found in response");
-        const parsed=JSON.parse(jm[0]);
+        if(!resp.ok){const e=await resp.json().catch(()=>({}));throw new Error(e?.error||`API error ${resp.status}`);}
+        const parsed=await resp.json();
         setImgStatuses(prev=>prev.map((s,idx)=>idx===i?{...s,status:"done",raw:parsed}:s));
         allGames.push(parsed);
       }catch(e){
