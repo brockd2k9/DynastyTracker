@@ -48,7 +48,12 @@ const MODEL = "claude-sonnet-4-20250514";
 const API_URL = "https://api.anthropic.com/v1/messages";
 const HEADERS = {"Content-Type":"application/json"};
 
-const INITIAL_ENTRY = (userName, teamName) => ({
+function genId() {
+  return Math.random().toString(36).slice(2,9) + Date.now().toString(36).slice(-4);
+}
+
+const INITIAL_ENTRY = (userName, teamName, userId="") => ({
+  userId: userId || genId(),
   userName, teamName, wins:0, losses:0, confWins:0, confLosses:0,
   gamePts:0, rankedBonusPts:0, confStandPts:0,
   confChampPts:0, bowlPts:0, recruitingPts:0,
@@ -712,17 +717,26 @@ function ScheduleTab({schedule,entries,week,season}) {
   );
 }
 
-function ProfileTab({history,setupRows,currentEntries,season}) {
+function ProfileTab({history,setupRows,currentEntries,season,permanentUsers}) {
   const isMobile = useIsMobile();
   const [sel,setSel] = useState(null);
   const [pTab,setPTab] = useState("overview");
   const [expandedSeasons,setExpandedSeasons] = useState({});
-  const allUsers = setupRows||[];
+  // Use permanentUsers if available, otherwise fall back to setupRows
+  const allUsers = (permanentUsers?.length ? permanentUsers.map(u=>({userId:u.id,userName:u.defaultName,teamName:(setupRows||[]).find(r=>r.userId===u.id)?.teamName||u.teamName||""})) : setupRows)||[];
   if (!allUsers.length) return <Card style={{padding:20}}><div style={{color:"#888",fontSize:14}}>No users found.</div></Card>;
 
-  function getProfile(userName) {
-    const seasons=history.map(s=>{const srt=[...s.finalStandings].sort((a,b)=>calcTotal(b)-calcTotal(a));const entry=srt.find(t=>t.userName===userName);if(!entry)return null;const rank=srt.findIndex(t=>t.userName===userName)+1;return{year:s.year,seasonNum:s.seasonNum,rank,total:calcTotal(entry),wins:entry.wins,losses:entry.losses,teamName:entry.teamName,champion:s.champion===userName,confChamp:s.confChampion===entry.teamName||s.confChampion===userName,nattyWin:s.nattyWinner===entry.teamName,heisman:s.heisman===entry.teamName||s.heisman===userName,weekLog:entry.weekLog||[],gamePts:entry.gamePts||0,rankedBonusPts:entry.rankedBonusPts||0,confStandPts:entry.confStandPts||0,confChampPts:entry.confChampPts||0,bowlPts:entry.bowlPts||0,recruitingPts:entry.recruitingPts||0,prestigePts:entry.prestigePts||0,heismanPts:entry.heismanPts||0,h2h:entry.h2h||{},playoffWins:entry.playoffWins||0,playoffLosses:entry.playoffLosses||0,bowlResult:entry.bowlResult||"none",bowlOpponent:entry.bowlOpponent||"",top25Wins:entry.top25Wins||0,top25Losses:entry.top25Losses||0,top10Wins:entry.top10Wins||0,top10Losses:entry.top10Losses||0,isHistorical:s.isHistorical||false};}).filter(Boolean);
-    const cur=currentEntries.find(e=>e.userName===userName);
+  function getProfile(userId, fallbackUserName) {
+    const seasons=history.map(s=>{
+      const srt=[...s.finalStandings].sort((a,b)=>calcTotal(b)-calcTotal(a));
+      // Match by userId first, then fall back to userName
+      const entry=srt.find(t=>(userId&&t.userId===userId)||(t.userName===fallbackUserName));
+      if(!entry)return null;
+      const rank=srt.findIndex(t=>(userId&&t.userId===userId)||(t.userName===fallbackUserName))+1;
+      const userName=entry.userName;
+      return{year:s.year,seasonNum:s.seasonNum,rank,total:calcTotal(entry),wins:entry.wins,losses:entry.losses,teamName:entry.teamName,userName,champion:s.champion===userName,confChamp:s.confChampion===entry.teamName||s.confChampion===userName,nattyWin:s.nattyWinner===entry.teamName,heisman:s.heisman===entry.teamName||s.heisman===userName,weekLog:entry.weekLog||[],gamePts:entry.gamePts||0,rankedBonusPts:entry.rankedBonusPts||0,confStandPts:entry.confStandPts||0,confChampPts:entry.confChampPts||0,bowlPts:entry.bowlPts||0,recruitingPts:entry.recruitingPts||0,prestigePts:entry.prestigePts||0,heismanPts:entry.heismanPts||0,h2h:entry.h2h||{},playoffWins:entry.playoffWins||0,playoffLosses:entry.playoffLosses||0,bowlResult:entry.bowlResult||"none",bowlOpponent:entry.bowlOpponent||"",top25Wins:entry.top25Wins||0,top25Losses:entry.top25Losses||0,top10Wins:entry.top10Wins||0,top10Losses:entry.top10Losses||0,isHistorical:s.isHistorical||false};
+    }).filter(Boolean);
+    const cur=currentEntries.find(e=>(userId&&e.userId===userId)||(e.userName===fallbackUserName));
     const totalWins=seasons.reduce((a,s)=>a+s.wins,0)+(cur?.wins||0);
     const totalLosses=seasons.reduce((a,s)=>a+s.losses,0)+(cur?.losses||0);
     const totalPts=seasons.reduce((a,s)=>a+s.total,0)+(cur?calcTotal(cur):0);
@@ -757,7 +771,8 @@ function ProfileTab({history,setupRows,currentEntries,season}) {
 
   function getLR() {
     const recs={};
-    allUsers.forEach(u=>{try{recs[u.userName]=getProfile(u.userName);}catch{}});
+    // Use current display name as key for league records display
+    allUsers.forEach(u=>{try{const curEntry=currentEntries.find(e=>u.userId?e.userId===u.userId:e.userName===u.userName);const displayName=curEntry?.userName||u.userName;recs[displayName]=getProfile(u.userId||null,u.userName);}catch{}});
     const e=Object.entries(recs).filter(([,p])=>p);
     if(!e.length)return{};
     return{
@@ -771,8 +786,8 @@ function ProfileTab({history,setupRows,currentEntries,season}) {
   }
 
   const lr=getLR();
-  const user=sel?allUsers.find(u=>u.userName===sel):null;
-  const profile=user?getProfile(user.userName):null;
+  const user=sel?allUsers.find(u=>(u.userId||u.userName)===sel):null;
+  const profile=user?getProfile(user.userId||null,user.userName):null;
   const SB=({label,val,color="#111",sub})=><div style={{background:"#f7f7f7",borderRadius:2,padding:"12px 8px",textAlign:"center",border:"1px solid #eee"}}><div style={{fontSize:19,fontWeight:900,color}}>{val}</div>{sub&&<div style={{fontSize:10,color:"#999"}}>{sub}</div>}<div style={{fontSize:9,color:"#aaa",textTransform:"uppercase",letterSpacing:1,marginTop:3,fontWeight:700}}>{label}</div></div>;
   const RR=({label,holder,val})=><div style={{display:"flex",justifyContent:"space-between",alignItems:"center",padding:"8px 0",borderBottom:"1px solid #f0f0f0"}}><span style={{fontSize:12,color:"#555"}}>{label}</span><div style={{textAlign:"right"}}><div style={{fontSize:13,color:"#111",fontWeight:700}}>{holder}</div><div style={{fontSize:11,color:RED,fontWeight:700}}>{val}</div></div></div>;
 
@@ -781,11 +796,13 @@ function ProfileTab({history,setupRows,currentEntries,season}) {
       {Object.keys(lr).length>0&&<Card><CardHead>🏆 League Records</CardHead><div style={{padding:"4px 14px 10px",display:"grid",gridTemplateColumns:isMobile?"1fr":"1fr 1fr",gap:isMobile?"0":"0 24px"}}>{lr.mostWins&&<RR label="Most Wins" holder={lr.mostWins[0]} val={lr.mostWins[1].totalWins+"W"}/>}{lr.mostPts&&<RR label="Most Pts" holder={lr.mostPts[0]} val={String(lr.mostPts[1].totalPts)}/>}{lr.mostChamps&&<RR label="Most Titles" holder={lr.mostChamps[0]} val={lr.mostChamps[1].championships+"×"}/>}{lr.bestWinPct&&<RR label="Best Win%" holder={lr.bestWinPct[0]} val={lr.bestWinPct[1].winPct+"%"}/>}{lr.longestWS&&<RR label="Win Streak" holder={lr.longestWS[0]} val={lr.longestWS[1].longestWin+"G"}/>}{lr.mostRW&&<RR label="Ranked Wins" holder={lr.mostRW[0]} val={lr.mostRW[1].rankedWins+"W"}/>}</div></Card>}
       <SL>Select User</SL>
       <div style={{display:"grid",gridTemplateColumns:isMobile?"1fr 1fr":"repeat(auto-fill,minmax(160px,1fr))",gap:8}}>
-        {allUsers.map(u=><button key={u.userName} onClick={()=>{setSel(sel===u.userName?null:u.userName);setPTab("overview");}} style={{padding:"10px 14px",borderRadius:2,border:"1px solid",borderColor:sel===u.userName?RED:"#ddd",background:sel===u.userName?RED:"#fff",color:sel===u.userName?"#fff":"#333",cursor:"pointer",fontFamily:ff,textAlign:"left"}}><div style={{fontWeight:800,fontSize:13}}>{u.userName}</div><div style={{fontSize:10,color:sel===u.userName?"rgba(255,255,255,0.7)":"#999",marginTop:2,textTransform:"uppercase"}}>{u.teamName}</div></button>)}
+        {allUsers.map(u=>{const key=u.userId||u.userName;const curEntry=currentEntries.find(e=>u.userId?e.userId===u.userId:e.userName===u.userName);return(<button key={key} onClick={()=>{setSel(sel===key?null:key);setPTab("overview");}} style={{padding:"10px 14px",borderRadius:2,border:"1px solid",borderColor:sel===key?RED:"#ddd",background:sel===key?RED:"#fff",color:sel===key?"#fff":"#333",cursor:"pointer",fontFamily:ff,textAlign:"left"}}><div style={{fontWeight:800,fontSize:13}}>{curEntry?.userName||u.userName}</div><div style={{fontSize:10,color:sel===key?"rgba(255,255,255,0.7)":"#999",marginTop:2,textTransform:"uppercase"}}>{curEntry?.teamName||u.teamName}</div></button>);})}
       </div>
       {profile&&user&&<Card style={{borderTop:`3px solid ${RED}`,overflow:"hidden"}}>
         <div style={{background:"#f7f7f7",padding:"14px 18px",display:"flex",justifyContent:"space-between",alignItems:"flex-start",flexWrap:"wrap",gap:10}}>
-          <div><div style={{fontSize:22,fontWeight:900,color:"#111"}}>{user.userName.toUpperCase()}</div><div style={{fontSize:12,color:"#888",marginTop:2}}>{user.teamName} · {profile.totalWins}W-{profile.totalLosses}L · {profile.winPct}%</div><div style={{display:"flex",gap:6,marginTop:8,flexWrap:"wrap"}}>{profile.championships>0&&<div style={{background:RED,borderRadius:2,padding:"2px 8px",fontSize:10,color:"#fff",fontWeight:700}}>🏆 {profile.championships}×</div>}{profile.confTitles>0&&<div style={{background:"#333",borderRadius:2,padding:"2px 8px",fontSize:10,color:"#fff",fontWeight:700}}>🏅 {profile.confTitles}×</div>}{profile.curStreak>1&&<div style={{background:profile.curStreakType==="win"?"#e8f5e8":"#fff0f0",border:`1px solid ${profile.curStreakType==="win"?"#007a00":RED}`,borderRadius:2,padding:"2px 8px",fontSize:10,color:profile.curStreakType==="win"?"#007a00":RED,fontWeight:700}}>{profile.curStreakType==="win"?"🔥":"❄️"} {profile.curStreak} STREAK</div>}</div></div>
+          {(()=>{const curEntry=currentEntries.find(e=>user.userId?e.userId===user.userId:e.userName===user.userName);const displayName=curEntry?.userName||user.userName;const displayTeam=curEntry?.teamName||user.teamName;return(
+          <div><div style={{fontSize:22,fontWeight:900,color:"#111"}}>{displayName.toUpperCase()}</div><div style={{fontSize:12,color:"#888",marginTop:2}}>{displayTeam} · {profile.totalWins}W-{profile.totalLosses}L · {profile.winPct}%</div><div style={{display:"flex",gap:6,marginTop:8,flexWrap:"wrap"}}>{profile.championships>0&&<div style={{background:RED,borderRadius:2,padding:"2px 8px",fontSize:10,color:"#fff",fontWeight:700}}>🏆 {profile.championships}×</div>}{profile.confTitles>0&&<div style={{background:"#333",borderRadius:2,padding:"2px 8px",fontSize:10,color:"#fff",fontWeight:700}}>🏅 {profile.confTitles}×</div>}{profile.curStreak>1&&<div style={{background:profile.curStreakType==="win"?"#e8f5e8":"#fff0f0",border:`1px solid ${profile.curStreakType==="win"?"#007a00":RED}`,borderRadius:2,padding:"2px 8px",fontSize:10,color:profile.curStreakType==="win"?"#007a00":RED,fontWeight:700}}>{profile.curStreakType==="win"?"🔥":"❄️"} {profile.curStreak} STREAK</div>}</div></div>
+          );})()}
         </div>
         <div style={{display:"flex",borderBottom:"1px solid #eee",background:"#fff",overflowX:"auto"}}>
           {["overview","seasons","h2h","streaks","points"].map(t=><button key={t} onClick={()=>setPTab(t)} style={{padding:isMobile?"10px 10px":"10px 14px",background:"transparent",border:"none",borderBottom:pTab===t?`3px solid ${RED}`:"3px solid transparent",color:pTab===t?"#111":"#888",cursor:"pointer",fontSize:isMobile?10:11,fontWeight:700,fontFamily:ff,textTransform:"uppercase",letterSpacing:0.5,whiteSpace:"nowrap"}}>{isMobile?(t==="overview"?"OVR":t==="seasons"?"SEASONS":t==="h2h"?"H2H":t==="streaks"?"STREAKS":"PTS"):(t==="h2h"?"H2H Records":t)}</button>)}
@@ -917,15 +934,44 @@ function ProfileTab({history,setupRows,currentEntries,season}) {
 }
 
 // ── SetupPanel ────────────────────────────────────────────────────────────
-function SetupPanel({entries,setup,postSeasonInputs,setPSI,handleStart,setCommissionerUnlocked,season,setEntries,setWeekResults,setSetup}) {
-  const [setupRows,setSetupRows] = useState(setup?.rows?.length?setup.rows.map(r=>({userName:r.userName,teamName:r.teamName})):Array.from({length:4},()=>({userName:"",teamName:""})));
+function SetupPanel({entries,setup,postSeasonInputs,setPSI,handleStart,setCommissionerUnlocked,season,setEntries,setWeekResults,setSetup,saveToDb}) {
+  const [setupRows,setSetupRows] = useState(setup?.rows?.length?setup.rows.map(r=>({userId:r.userId||"",userName:r.userName,teamName:r.teamName})):Array.from({length:4},()=>({userId:"",userName:"",teamName:""})));
   const [setupLeague,setSetupLeague] = useState(setup?.leagueName||"");
+  const [rosterSeason,setRosterSeason] = useState(season+1);
+  const [rosterEdits,setRosterEdits] = useState({});
+  const [rosterSaved,setRosterSaved] = useState(false);
   const setSR=(i,f,v)=>setSetupRows(p=>p.map((r,idx)=>idx===i?{...r,[f]:v}:r));
-  const addRow=()=>setSetupRows(p=>[...p,{userName:"",teamName:""}]);
+  const addRow=()=>setSetupRows(p=>[...p,{userId:"",userName:"",teamName:""}]);
   const removeRow=(i)=>{if(setupRows.length<=2)return alert("Minimum 2 teams.");setSetupRows(p=>p.filter((_,idx)=>idx!==i));};
   function applySetup(){const valid=setupRows.filter(r=>r.userName.trim()&&r.teamName.trim());if(valid.length<2)return alert("Enter at least 2 users.");if(entries.length>0&&!window.confirm("This resets all standings. Continue?"))return;handleStart(setupLeague||"Dynasty League",valid);setCommissionerUnlocked(false);}
-  function addMidSeason(){const last=setupRows[setupRows.length-1];if(!last?.userName?.trim()||!last?.teamName?.trim())return alert("Fill in the last row first.");if(entries.find(e=>e.teamName===last.teamName))return alert("That team is already in the dynasty.");const newE=INITIAL_ENTRY(last.userName.trim(),last.teamName.trim());setEntries(prev=>[...prev,newE]);setWeekResults(prev=>[...prev,{teamName:newE.teamName,userName:newE.userName,result:"none",ranked25:false,ranked10:false}]);if(postSeasonInputs)setPSI(prev=>({...prev,confStandings:[...prev.confStandings,{teamName:newE.teamName,rank:prev.confStandings.length+1}],bowls:[...prev.bowls,{teamName:newE.teamName,bowl:"none"}],recruiting:[...prev.recruiting,{teamName:newE.teamName,rank:prev.recruiting.length+1}]}));setSetup(prev=>({...prev,rows:[...(prev?.rows||[]),{userName:newE.userName,teamName:newE.teamName}]}));alert(`${newE.userName} (${newE.teamName}) added!`);}
-  function toggleActive(teamName){setSetup(prev=>{const rows=(prev?.rows||[]).map(r=>r.teamName===teamName?{...r,active:r.active===false?true:false}:r);return{...prev,rows};});}
+  function addMidSeason(){const last=setupRows[setupRows.length-1];if(!last?.userName?.trim()||!last?.teamName?.trim())return alert("Fill in the last row first.");if(entries.find(e=>e.teamName===last.teamName))return alert("That team is already in the dynasty.");const uid=last.userId||genId();const newE=INITIAL_ENTRY(last.userName.trim(),last.teamName.trim(),uid);setEntries(prev=>[...prev,newE]);setWeekResults(prev=>[...prev,{teamName:newE.teamName,userName:newE.userName,result:"none",ranked25:false,ranked10:false}]);if(postSeasonInputs)setPSI(prev=>({...prev,confStandings:[...prev.confStandings,{teamName:newE.teamName,rank:prev.confStandings.length+1}],bowls:[...prev.bowls,{teamName:newE.teamName,bowl:"none"}],recruiting:[...prev.recruiting,{teamName:newE.teamName,rank:prev.recruiting.length+1}]}));const newRow={userId:uid,userName:newE.userName,teamName:newE.teamName};const pUser={id:uid,defaultName:newE.userName};setSetup(prev=>{const updated={...prev,rows:[...(prev?.rows||[]),newRow],permanentUsers:[...(prev?.permanentUsers||[]),pUser]};setTimeout(()=>saveToDb({setup:updated}),100);return updated;});alert(`${newE.userName} (${newE.teamName}) added!`);}
+  function toggleActive(teamName){setSetup(prev=>{const rows=(prev?.rows||[]).map(r=>r.teamName===teamName?{...r,active:r.active===false?true:false}:r);const updated={...prev,rows};setTimeout(()=>saveToDb({setup:updated}),100);return updated;});}
+
+  // Season roster management
+  const permanentUsers = setup?.permanentUsers||[];
+  const existingRoster = setup?.seasonRosters?.[rosterSeason]||[];
+  function getRosterEntry(userId) {
+    const existing = existingRoster.find(r=>r.userId===userId);
+    if(rosterEdits[userId]!==undefined) return rosterEdits[userId];
+    if(existing) return existing;
+    const cur = (setup?.rows||[]).find(r=>r.userId===userId);
+    return {userId, userName:cur?.userName||"", teamName:cur?.teamName||""};
+  }
+  function setRosterField(userId,field,val){
+    const cur = getRosterEntry(userId);
+    setRosterEdits(p=>({...p,[userId]:{...cur,[field]:val}}));
+    setRosterSaved(false);
+  }
+  function saveSeasonRoster(){
+    const roster = permanentUsers.map(u=>getRosterEntry(u.id)).filter(r=>r.userName||r.teamName);
+    const updated = {...setup, seasonRosters:{...(setup?.seasonRosters||{}), [rosterSeason]:roster}};
+    setSetup(updated);
+    saveToDb({setup:updated});
+    setRosterEdits({});
+    setRosterSaved(true);
+    setTimeout(()=>setRosterSaved(false),2000);
+  }
+
   const isLive=entries.length>0;
   return (
     <div style={{display:"flex",flexDirection:"column",gap:14}}>
@@ -933,6 +979,7 @@ function SetupPanel({entries,setup,postSeasonInputs,setPSI,handleStart,setCommis
       <Card><CardHead>League Name</CardHead><div style={{padding:"12px 14px"}}><input value={setupLeague} onChange={e=>setSetupLeague(e.target.value)} placeholder="e.g. Chrome Horn Dynasty 2025" style={{background:"#fff",border:"1px solid #ccc",borderRadius:2,padding:"9px 12px",color:"#111",fontFamily:ff,fontSize:14,width:"100%",boxSizing:"border-box"}}/></div></Card>
       <Card><CardHead bg={RED}>Users & Teams</CardHead>
         <div style={{padding:"0 0 8px"}}>
+          <div style={{padding:"6px 14px 4px",fontSize:11,color:"#888"}}>These are the permanent player accounts. IDs are assigned automatically and persist across all seasons.</div>
           <div style={{display:"grid",gridTemplateColumns:"1fr 1fr 32px",padding:"8px 14px 6px",borderBottom:"1px solid #f0f0f0"}}>
             <div style={{fontSize:10,color:"#999",letterSpacing:1,textTransform:"uppercase",fontWeight:700}}>Username</div>
             <div style={{fontSize:10,color:"#999",letterSpacing:1,textTransform:"uppercase",fontWeight:700}}>Team</div>
@@ -948,6 +995,30 @@ function SetupPanel({entries,setup,postSeasonInputs,setPSI,handleStart,setCommis
           <div style={{padding:"10px 14px"}}><button onClick={addRow} style={{background:"transparent",border:"1px dashed #ccc",borderRadius:2,padding:"7px 14px",color:"#888",cursor:"pointer",fontSize:12,fontFamily:ff,fontWeight:600,width:"100%"}}>+ Add Player</button></div>
         </div>
       </Card>
+
+      {isLive&&permanentUsers.length>0&&<Card><CardHead bg="#1a3a6b">Season Rosters</CardHead>
+        <div style={{padding:"12px 14px"}}>
+          <div style={{fontSize:11,color:"#888",marginBottom:10,lineHeight:1.5}}>Set per-season name and team overrides. When you finalize a season, the next season will use these names/teams for each player.</div>
+          <div style={{display:"flex",alignItems:"center",gap:10,marginBottom:14}}>
+            <span style={{fontSize:12,color:"#555",fontWeight:700}}>Season:</span>
+            <select value={rosterSeason} onChange={e=>{setRosterSeason(Number(e.target.value));setRosterEdits({});}} style={{padding:"6px 10px",border:"1px solid #ccc",borderRadius:2,fontFamily:ff,fontSize:13,color:"#111",background:"#fff"}}>
+              {Array.from({length:season+5},(_, i)=>i+1).map(s=><option key={s} value={s}>Season {s}{s===season?" (current)":s===season+1?" (next)":""}</option>)}
+            </select>
+          </div>
+          <div style={{display:"grid",gridTemplateColumns:"auto 1fr 1fr",gap:0,border:"1px solid #eee",borderRadius:2,overflow:"hidden"}}>
+            <div style={{padding:"6px 10px",background:"#f5f5f5",fontSize:10,color:"#888",fontWeight:700,textTransform:"uppercase",borderBottom:"1px solid #eee"}}>Player</div>
+            <div style={{padding:"6px 10px",background:"#f5f5f5",fontSize:10,color:"#888",fontWeight:700,textTransform:"uppercase",borderBottom:"1px solid #eee",borderLeft:"1px solid #eee"}}>Name</div>
+            <div style={{padding:"6px 10px",background:"#f5f5f5",fontSize:10,color:"#888",fontWeight:700,textTransform:"uppercase",borderBottom:"1px solid #eee",borderLeft:"1px solid #eee"}}>Team</div>
+            {permanentUsers.map((u,i)=>{const entry=getRosterEntry(u.id);const isEdited=rosterEdits[u.id]!==undefined;return(<>
+              <div key={u.id+"n"} style={{padding:"8px 10px",borderBottom:i<permanentUsers.length-1?"1px solid #f0f0f0":"none",fontSize:12,color:"#555",fontWeight:600,display:"flex",alignItems:"center",background:isEdited?"#fffbf0":"#fff"}}>{u.defaultName}</div>
+              <input key={u.id+"un"} value={entry.userName||""} onChange={e=>setRosterField(u.id,"userName",e.target.value)} style={{padding:"8px 10px",border:"none",borderLeft:"1px solid #eee",borderBottom:i<permanentUsers.length-1?"1px solid #f0f0f0":"none",fontFamily:ff,fontSize:13,color:"#111",outline:"none",background:isEdited?"#fffbf0":"#fff"}}/>
+              <input key={u.id+"tn"} value={entry.teamName||""} onChange={e=>setRosterField(u.id,"teamName",e.target.value)} style={{padding:"8px 10px",border:"none",borderLeft:"1px solid #eee",borderBottom:i<permanentUsers.length-1?"1px solid #f0f0f0":"none",fontFamily:ff,fontSize:13,color:"#111",outline:"none",background:isEdited?"#fffbf0":"#fff"}}/>
+            </>);})}
+          </div>
+          <button onClick={saveSeasonRoster} style={{marginTop:10,background:rosterSaved?"#007a00":RED,color:"#fff",border:"none",borderRadius:2,padding:"9px 18px",cursor:"pointer",fontFamily:ff,fontSize:12,fontWeight:800,textTransform:"uppercase"}}>{rosterSaved?"✓ Saved":"Save Season Roster"}</button>
+        </div>
+      </Card>}
+
       {isLive&&setup?.rows?.length>0&&<Card><CardHead bg="#333">Active Teams</CardHead>
         <div style={{padding:"8px 0"}}>
           <div style={{padding:"4px 14px 8px",fontSize:11,color:"#888",lineHeight:1.5}}>Deactivated teams are hidden from current season standings, schedule, and results. They still appear in past season history and player profiles.</div>
@@ -1730,17 +1801,32 @@ export default function App() {
   useEffect(function() {
     dbLoad().then(function(row) {
       if (row) {
-        if (row.setup) setSetup(row.setup);
+        // Migration: add userIds to setup.rows and entries if missing
+        let migratedSetup = row.setup;
+        let migratedEntries = row.entries;
+        if (row.setup?.rows && !row.setup?.permanentUsers) {
+          const updatedRows = row.setup.rows.map(r => ({...r, userId: r.userId || genId()}));
+          const idByName = {};
+          updatedRows.forEach(r => { idByName[r.userName] = r.userId; });
+          if (row.entries?.length) {
+            migratedEntries = row.entries.map(e => ({...e, userId: e.userId || idByName[e.userName] || genId()}));
+          }
+          const permanentUsers = updatedRows.map(r => ({id: r.userId, defaultName: r.userName}));
+          migratedSetup = {...row.setup, rows: updatedRows, permanentUsers};
+          // Save migration back
+          setTimeout(() => dbSave({setup: migratedSetup, entries: migratedEntries}), 500);
+        }
+        if (migratedSetup) setSetup(migratedSetup);
         if (row.season) setSeason(row.season);
         if (row.week) setWeek(row.week);
-        if (row.entries) { if (row.entries.length) setEntries(row.entries); }
+        if (migratedEntries) { if (migratedEntries.length) setEntries(migratedEntries); }
         if (row.history) { if (row.history.length) setHistory(row.history); }
         if (row.post_season_inputs) setPSI(row.post_season_inputs);
         if (row.articles) { if (row.articles.length) setArticles(row.articles); }
         if (row.schedule) setSchedule(row.schedule);
-        const hasEntries = row.entries ? row.entries.length > 0 : false;
+        const hasEntries = migratedEntries ? migratedEntries.length > 0 : false;
         if (hasEntries) {
-          setWeekResults(row.entries.map(function(e) { return {teamName:e.teamName,userName:e.userName,result:"none",ranked25:false,ranked10:false}; }));
+          setWeekResults((migratedEntries||[]).map(function(e) { return {teamName:e.teamName,userName:e.userName,result:"none",ranked25:false,ranked10:false}; }));
         }
       }
       setDbLoading(false);
@@ -1770,8 +1856,15 @@ export default function App() {
   }
 
   function handleStart(leagueName,rows) {
-    const initial=rows.map(r=>INITIAL_ENTRY(r.userName.trim(),r.teamName.trim()));
-    const newSetup={leagueName,rows};
+    // Preserve existing userIds by matching on userName
+    const existingIdMap = {};
+    (setup?.rows||[]).forEach(r => { if(r.userId) existingIdMap[r.userName] = r.userId; });
+    // Also check permanentUsers by defaultName
+    (setup?.permanentUsers||[]).forEach(u => { if(!existingIdMap[u.defaultName]) existingIdMap[u.defaultName] = u.id; });
+    const rowsWithIds = rows.map(r => ({...r, userId: r.userId || existingIdMap[r.userName.trim()] || genId()}));
+    const permanentUsers = rowsWithIds.map(r => ({id: r.userId, defaultName: r.userName.trim()}));
+    const initial = rowsWithIds.map(r => INITIAL_ENTRY(r.userName.trim(), r.teamName.trim(), r.userId));
+    const newSetup = {leagueName, rows:rowsWithIds, permanentUsers, seasonRosters:setup?.seasonRosters||{}};
     const newPSI=FRESH_PSI(initial);
     setSetup(newSetup);setEntries(initial);setSeason(1);setWeek(1);
     setWeekResults(initial.map(e=>({teamName:e.teamName,userName:e.userName,result:"none",ranked25:false,ranked10:false})));
@@ -1895,14 +1988,23 @@ export default function App() {
     const year=START_YEAR+season-1;
     const fin=entries.map(e=>({...e}));
     const srt=[...fin].sort((a,b)=>calcTotal(b)-calcTotal(a));
-    setHistory(prev=>[...prev,{year,seasonNum:season,finalStandings:fin,champion:srt[0]?.userName||"",confChampion:postSeasonInputs?.confChamp.winner||"",heisman:postSeasonInputs?.heisman||""}]);
-    const fresh=entries.map(e=>INITIAL_ENTRY(e.userName,e.teamName));
-    setEntries(fresh);setWeek(1);setSeason(s=>s+1);
+    const histEntry={year,seasonNum:season,finalStandings:fin,champion:srt[0]?.userName||"",confChampion:postSeasonInputs?.confChamp?.winner||postSeasonInputs?.confChampGame?.winner||"",heisman:postSeasonInputs?.heisman||""};
+    const newSeason = season+1;
+    // Use season roster for the new season if set, otherwise keep current names/teams
+    const nextRoster = setup?.seasonRosters?.[newSeason];
+    const fresh=entries.map(e=>{
+      const override = nextRoster?.find(r=>r.userId===e.userId);
+      return INITIAL_ENTRY(override?.userName||e.userName, override?.teamName||e.teamName, e.userId);
+    });
+    setHistory(prev=>{
+      const next=[...prev,histEntry];
+      setTimeout(()=>dbSave({history:next,season:newSeason,week:1,entries:fresh,post_season_inputs:FRESH_PSI(fresh)}),100);
+      return next;
+    });
+    setEntries(fresh);setWeek(1);setSeason(newSeason);
     setWeekResults(fresh.map(e=>({teamName:e.teamName,userName:e.userName,result:"none",ranked25:false,ranked10:false})));
     const newPSI=FRESH_PSI(fresh);
     setPSI(newPSI);
-    const newSeason = season+1;
-    dbSave({season:newSeason, week:1, entries:fresh, post_season_inputs:newPSI});
   }
 
   function importHistoricalSeason(entry) {
@@ -2114,7 +2216,7 @@ export default function App() {
           </>)}
 
           {tab==="History"&&<HistoryTab history={history}/>}
-          {tab==="Profiles"&&<ProfileTab history={history} setupRows={setup?.rows||[]} currentEntries={entries} season={season}/>}
+          {tab==="Profiles"&&<ProfileTab history={history} setupRows={setup?.rows||[]} currentEntries={entries} season={season} permanentUsers={setup?.permanentUsers}/>}
           {tab==="Schedule"&&<ScheduleTab schedule={schedule} entries={activeEntries} week={week} season={season}/>}
           {tab==="Rules"&&<div style={{display:"grid",gridTemplateColumns:isMobile?"1fr":"repeat(auto-fill,minmax(250px,1fr))",gap:10}}>
             {[["🏈 Regular Season",[["Win","15 pts"],["Win vs Top 25","+5 bonus"],["Win vs Top 10","+10 bonus"],["Loss","0 pts"]]],["📊 Conference Standings",[["1st","50"],["2nd","43"],["3rd","36"],["4th","30"],["5th","24"],["6th","18"],["7th","14"],["8th","10"],["9th","7"],["10th","5"],["11th","3"],["12th","1"]]],["🏆 Conference Championship",[["Make the Game","10 pts"],["Win the Game","15 pts"]]],["🥣 Bowl & Playoff",[["Make a Bowl","5 pts"],["Win a Bowl","+10 pts"],["Playoff Round 1","15 pts"],["Win R1","+10 pts"],["Win Semifinal (R2)","+15 pts"],["Win National Championship","+25 pts"]]],["🎓 Recruiting (Top 5)",[["#1","15 pts"],["#2","10 pts"],["#3","7 pts"],["#4","5 pts"],["#5","3 pts"]]],["🏅 Dynasty Top 5",[["#1 in Dynasty","15 pts"],["#2 in Dynasty","10 pts"],["#3 in Dynasty","7 pts"],["#4 in Dynasty","5 pts"],["#5 in Dynasty","3 pts"]]],["⭐ Prestige & Awards",[["Gain a Prestige Star","10 pts"],["Reach Max Prestige","10 pts"],["Heisman Winner","15 pts"]]]].map(([title,rows])=><Card key={title} style={{overflow:"hidden"}}><CardHead bg={RED}>{title}</CardHead><table style={{width:"100%",borderCollapse:"collapse"}}><tbody>{rows.map(([l,p])=><tr key={l} style={{borderBottom:"1px solid #f0f0f0"}}><td style={{padding:"8px 12px",color:"#333",fontSize:13}}>{l}</td><td style={{padding:"8px 12px",textAlign:"right",color:RED,fontWeight:800,fontSize:13}}>{p}</td></tr>)}</tbody></table></Card>)}
@@ -2188,7 +2290,7 @@ export default function App() {
           {commTab==="Enter Results"&&<EnterResultsPanel entries={activeEntries} weekResults={weekResults} setWeekResults={setWeekResults} week={week} applyBulkResults={applyBulkResults} applyWeekResults={applyWeekResults} postSeasonInputs={postSeasonInputs} setPSI={setPSI} applyPostSeason={applyPostSeason} finalizeSeason={finalizeSeason} season={season} teamNames={teamNames} schedule={schedule} history={history} onImportHistory={importHistoricalSeason} setupRows={setup?.rows||[]}/>}
           {commTab==="Schedule"&&<SchedulePanel entries={activeEntries} schedule={schedule} setSchedule={setSchedule}/>}
           {commTab==="Content"&&<ContentHub sorted={sorted} entries={activeEntries} week={week} season={season} leagueName={leagueName} history={history} leader={leader} articles={articles} setArticles={setArticles} setActiveArticle={setActiveArticle} schedule={schedule}/>}
-          {commTab==="League Setup"&&<SetupPanel entries={entries} setup={setup} postSeasonInputs={postSeasonInputs} setPSI={setPSI} handleStart={handleStart} setCommissionerUnlocked={setCommUnlocked} season={season} setEntries={setEntries} setWeekResults={setWeekResults} setSetup={setSetup}/>}
+          {commTab==="League Setup"&&<SetupPanel entries={entries} setup={setup} postSeasonInputs={postSeasonInputs} setPSI={setPSI} handleStart={handleStart} setCommissionerUnlocked={setCommUnlocked} season={season} setEntries={setEntries} setWeekResults={setWeekResults} setSetup={setSetup} saveToDb={saveToDb}/>}
         </div>
       </div>}
     </div>
