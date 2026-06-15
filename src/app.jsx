@@ -56,6 +56,19 @@ const INITIAL_ENTRY = (userName, teamName) => ({
   h2h:{},
 });
 
+const FRESH_PSI = (entries) => ({
+  confStandings: entries.map((e,i)=>({teamName:e.teamName,rank:i+1})),
+  confChampGame: {teamA:"",teamB:"",winner:""},
+  bowlGames: [],
+  playoffR1: [],
+  playoffR2: [],
+  nattyGame: {teamA:"",teamB:"",winner:""},
+  recruiting: entries.map((e,i)=>({teamName:e.teamName,rank:i+1})),
+  heisman:"",
+  prestigeGains:[],
+  maxPrestige:[],
+});
+
 // schedule shape: { week: { teamName: "Opponent" | "CPU" | "BYE" } }
 // e.g. { 1: { Troy: "Georgia Southern", "Georgia Southern": "Troy", Toledo: "CPU", UNLV: "BYE" } }
 
@@ -1184,20 +1197,63 @@ function EnterResultsPanel({entries,weekResults,setWeekResults,week,applyBulkRes
         ))}
         <button onClick={()=>applyWeekResults(entryWeek)} style={{marginTop:14,background:RED,color:"#fff",border:"none",borderRadius:2,padding:"11px 22px",cursor:"pointer",fontFamily:ff,fontSize:14,fontWeight:800,textTransform:"uppercase"}}>Submit Week {entryWeek} →</button>
       </div></Card>}
-      {week>12&&postSeasonInputs&&<Card style={{borderTop:`3px solid ${RED}`}}><div style={{padding:16}}>
-        <SL>Post Season — {START_YEAR+season-1}</SL>
-        <div style={{marginBottom:14}}><div style={{fontSize:12,color:"#555",marginBottom:8,fontWeight:600}}>Final Conference Standings</div>{postSeasonInputs.confStandings.map((s,i)=><div key={s.teamName} style={{display:"flex",alignItems:"center",gap:8,marginBottom:5}}><span style={{color:i<3?RED:"#bbb",width:22,textAlign:"right",fontSize:12,fontWeight:800}}>{i+1}.</span><select value={s.teamName} onChange={e=>{const nv=e.target.value;const si=postSeasonInputs.confStandings.findIndex(x=>x.teamName===nv);setPSI(prev=>{const arr=[...prev.confStandings];[arr[i],arr[si]]=[arr[si],arr[i]];return{...prev,confStandings:arr};});}} style={{background:"#fff",color:"#111",border:"1px solid #ccc",borderRadius:2,padding:"5px 8px",fontFamily:ff,fontSize:12}}>{teamNames.map(t=><option key={t} value={t}>{t} ({entries.find(e=>e.teamName===t)?.userName})</option>)}</select><span style={{fontSize:11,color:"#007a00",fontWeight:700}}>+{CONF_STAND_PTS[i]}</span></div>)}</div>
-        <div style={{marginBottom:12}}><div style={{fontSize:12,color:"#555",marginBottom:6,fontWeight:600}}>Made Conference Championship</div><div style={{display:"flex",flexWrap:"wrap",gap:6}}>{teamNames.map(t=><button key={t} onClick={()=>setPSI(prev=>({...prev,confChamp:{...prev.confChamp,made:prev.confChamp.made.includes(t)?prev.confChamp.made.filter(x=>x!==t):[...prev.confChamp.made,t].slice(-2)}}))} style={{padding:"4px 10px",borderRadius:2,border:"1px solid",borderColor:postSeasonInputs.confChamp.made.includes(t)?RED:"#ddd",background:postSeasonInputs.confChamp.made.includes(t)?RED:"#fff",color:postSeasonInputs.confChamp.made.includes(t)?"#fff":"#888",cursor:"pointer",fontSize:12,fontFamily:ff,fontWeight:600}}>{t}</button>)}</div></div>
-        <div style={{marginBottom:12}}><div style={{fontSize:12,color:"#555",marginBottom:6,fontWeight:600}}>Conference Champion</div><select value={postSeasonInputs.confChamp.winner} onChange={e=>setPSI(prev=>({...prev,confChamp:{...prev.confChamp,winner:e.target.value}}))} style={{background:"#fff",color:"#111",border:"1px solid #ccc",borderRadius:2,padding:"6px 10px",fontFamily:ff,fontSize:13}}><option value="">-- Select --</option>{teamNames.map(t=><option key={t} value={t}>{t} ({entries.find(e=>e.teamName===t)?.userName})</option>)}</select></div>
-        <div style={{marginBottom:12}}><div style={{fontSize:12,color:"#555",marginBottom:6,fontWeight:600}}>Bowl & Playoff Results</div>{postSeasonInputs.bowls.map((b,i)=><div key={b.teamName} style={{display:"flex",alignItems:"center",gap:8,marginBottom:5}}><div style={{width:120}}><div style={{fontSize:12,color:"#111",fontWeight:600}}>{b.teamName}</div><div style={{fontSize:10,color:"#888"}}>{entries.find(e=>e.teamName===b.teamName)?.userName}</div></div><select value={b.bowl} onChange={e=>setPSI(prev=>({...prev,bowls:prev.bowls.map((x,xi)=>xi===i?{...x,bowl:e.target.value}:x)}))} style={{background:"#fff",color:"#111",border:"1px solid #ccc",borderRadius:2,padding:"4px 8px",fontFamily:ff,fontSize:12}}><option value="none">No Bowl</option><option value="made">Made Bowl (+5)</option><option value="won">Won Bowl (+15)</option><option value="cfp">Made CFP (+15)</option><option value="cfpwon">Won Natty (+40)</option></select></div>)}</div>
-        <div style={{marginBottom:12}}><div style={{fontSize:12,color:"#555",marginBottom:6,fontWeight:600}}>Recruiting (Top 5)</div>{postSeasonInputs.recruiting.map((r,i)=><div key={r.teamName} style={{display:"flex",alignItems:"center",gap:8,marginBottom:5}}><span style={{color:i<5?RED:"#bbb",width:22,textAlign:"right",fontSize:12,fontWeight:800}}>{i+1}.</span><select value={r.teamName} onChange={e=>{const nv=e.target.value;const si=postSeasonInputs.recruiting.findIndex(x=>x.teamName===nv);setPSI(prev=>{const arr=[...prev.recruiting];[arr[i],arr[si]]=[arr[si],arr[i]];return{...prev,recruiting:arr};});}} style={{background:"#fff",color:"#111",border:"1px solid #ccc",borderRadius:2,padding:"5px 8px",fontFamily:ff,fontSize:12}}>{teamNames.map(t=><option key={t} value={t}>{t}</option>)}</select>{i<5&&<span style={{fontSize:11,color:"#007a00",fontWeight:700}}>+{RECRUITING_PTS[i]}</span>}</div>)}</div>
-        <div style={{marginBottom:12}}><div style={{fontSize:12,color:"#555",marginBottom:6,fontWeight:600}}>Heisman Winner</div><select value={postSeasonInputs.heisman} onChange={e=>setPSI(prev=>({...prev,heisman:e.target.value}))} style={{background:"#fff",color:"#111",border:"1px solid #ccc",borderRadius:2,padding:"6px 10px",fontFamily:ff,fontSize:13}}><option value="">-- None --</option>{teamNames.map(t=><option key={t} value={t}>{t} ({entries.find(e=>e.teamName===t)?.userName})</option>)}</select></div>
-        <div style={{marginBottom:16}}><div style={{fontSize:12,color:"#555",marginBottom:6,fontWeight:600}}>Gained Prestige Star (+10)</div><div style={{display:"flex",flexWrap:"wrap",gap:6}}>{teamNames.map(t=><button key={t} onClick={()=>setPSI(prev=>({...prev,prestigeGains:prev.prestigeGains.includes(t)?prev.prestigeGains.filter(x=>x!==t):[...prev.prestigeGains,t]}))} style={{padding:"4px 10px",borderRadius:2,border:"1px solid",borderColor:postSeasonInputs.prestigeGains.includes(t)?"#007a00":"#ddd",background:postSeasonInputs.prestigeGains.includes(t)?"#f0f8f0":"#fff",color:postSeasonInputs.prestigeGains.includes(t)?"#007a00":"#888",cursor:"pointer",fontSize:12,fontFamily:ff,fontWeight:600}}>{t}</button>)}</div></div>
-        <div style={{display:"flex",gap:10,flexWrap:"wrap"}}>
-          <button onClick={applyPostSeason} style={{background:RED,color:"#fff",border:"none",borderRadius:2,padding:"11px 20px",cursor:"pointer",fontFamily:ff,fontSize:13,fontWeight:800,textTransform:"uppercase"}}>Apply Post Season Points</button>
-          <button onClick={finalizeSeason} style={{background:"#fff",color:"#007a00",border:"2px solid #007a00",borderRadius:2,padding:"11px 20px",cursor:"pointer",fontFamily:ff,fontSize:13,fontWeight:800,textTransform:"uppercase"}}>Finalize & Start Season {season+1} →</button>
-        </div>
-      </div></Card>}
+      {week>12&&postSeasonInputs&&(()=>{
+        const psi=postSeasonInputs;
+        const ff2="'Helvetica Neue',Arial,sans-serif";
+        const addGame=(field)=>setPSI(prev=>({...prev,[field]:[...(prev[field]||[]),{id:Date.now(),teamA:"",teamB:"",winner:""}]}));
+        const removeGame=(field,id)=>setPSI(prev=>({...prev,[field]:(prev[field]||[]).filter(g=>g.id!==id)}));
+        const setGame=(field,id,key,val)=>setPSI(prev=>({...prev,[field]:(prev[field]||[]).map(g=>g.id===id?{...g,[key]:val}:g)}));
+        const setTopGame=(field,key,val)=>setPSI(prev=>({...prev,[field]:{...prev[field],[key]:val}}));
+        const TeamSel=({value,onChange,exclude})=><select value={value} onChange={e=>onChange(e.target.value)} style={{background:"#fff",color:"#111",border:"1px solid #ccc",borderRadius:2,padding:"5px 8px",fontFamily:ff2,fontSize:12,maxWidth:140}}><option value="">-- Team --</option>{teamNames.filter(t=>t!==exclude).map(t=><option key={t} value={t}>{t}</option>)}</select>;
+        const WinBtns=({teamA,teamB,winner,onWin})=><div style={{display:"flex",gap:6,flexWrap:"wrap"}}>{[teamA,teamB].filter(Boolean).map(t=><button key={t} onClick={()=>onWin(winner===t?"":t)} style={{padding:"4px 10px",borderRadius:2,border:"1px solid",borderColor:winner===t?"#007a00":"#ddd",background:winner===t?"#f0f8f0":"#fff",color:winner===t?"#007a00":"#888",cursor:"pointer",fontSize:11,fontFamily:ff2,fontWeight:700}}>{winner===t?"✓ ":""}{t}</button>)}</div>;
+        const GameRow=({game,field,onRemove})=><div style={{display:"flex",alignItems:"center",gap:8,flexWrap:"wrap",padding:"8px 0",borderBottom:"1px solid #f5f5f5"}}><TeamSel value={game.teamA} onChange={v=>setGame(field,game.id,"teamA",v)} exclude={game.teamB}/><span style={{fontSize:11,color:"#aaa",fontWeight:700}}>VS</span><TeamSel value={game.teamB} onChange={v=>setGame(field,game.id,"teamB",v)} exclude={game.teamA}/>{(game.teamA||game.teamB)&&<><span style={{fontSize:11,color:"#555",marginLeft:4}}>Winner:</span><WinBtns teamA={game.teamA} teamB={game.teamB} winner={game.winner} onWin={v=>setGame(field,game.id,"winner",v)}/></>}{onRemove&&<button onClick={onRemove} style={{marginLeft:"auto",background:"none",border:"none",color:"#bbb",cursor:"pointer",fontSize:16,lineHeight:1}}>×</button>}</div>;
+        const SectionLabel=({children,pts})=><div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:10}}><div style={{fontSize:12,color:"#555",fontWeight:700}}>{children}</div><div style={{fontSize:11,color:"#007a00",fontWeight:700}}>{pts}</div></div>;
+        return(<>
+          <Card style={{borderTop:`3px solid ${RED}`}}><div style={{padding:16}}>
+            <SL>Post Season — {START_YEAR+season-1}</SL>
+            {/* Conf Standings */}
+            <div style={{marginBottom:18}}><SectionLabel pts="Appear +10 · Win +15">Conference Championship Game</SectionLabel>
+              <div style={{display:"flex",alignItems:"center",gap:8,flexWrap:"wrap",marginBottom:8}}><TeamSel value={psi.confChampGame?.teamA||""} onChange={v=>setTopGame("confChampGame","teamA",v)} exclude={psi.confChampGame?.teamB}/><span style={{fontSize:11,color:"#aaa",fontWeight:700}}>VS</span><TeamSel value={psi.confChampGame?.teamB||""} onChange={v=>setTopGame("confChampGame","teamB",v)} exclude={psi.confChampGame?.teamA}/></div>
+              {(psi.confChampGame?.teamA||psi.confChampGame?.teamB)&&<div style={{display:"flex",alignItems:"center",gap:8}}><span style={{fontSize:11,color:"#555"}}>Winner:</span><WinBtns teamA={psi.confChampGame?.teamA} teamB={psi.confChampGame?.teamB} winner={psi.confChampGame?.winner||""} onWin={v=>setTopGame("confChampGame","winner",v)}/></div>}
+            </div>
+            {/* Bowl Games */}
+            <div style={{marginBottom:18}}><SectionLabel pts="Appear +5 · Win +10">Bowl Games</SectionLabel>
+              {(psi.bowlGames||[]).map(g=><GameRow key={g.id} game={g} field="bowlGames" onRemove={()=>removeGame("bowlGames",g.id)}/>)}
+              <button onClick={()=>addGame("bowlGames")} style={{marginTop:6,background:"#f5f5f5",border:"1px dashed #ccc",borderRadius:2,padding:"5px 14px",cursor:"pointer",fontSize:12,color:"#555",fontFamily:ff2}}>+ Add Bowl Game</button>
+            </div>
+            {/* Playoff R1 */}
+            <div style={{marginBottom:18}}><SectionLabel pts="Appear +15 · Win +10">Playoff Round 1</SectionLabel>
+              {(psi.playoffR1||[]).map(g=><GameRow key={g.id} game={g} field="playoffR1" onRemove={()=>removeGame("playoffR1",g.id)}/>)}
+              <button onClick={()=>addGame("playoffR1")} style={{marginTop:6,background:"#f5f5f5",border:"1px dashed #ccc",borderRadius:2,padding:"5px 14px",cursor:"pointer",fontSize:12,color:"#555",fontFamily:ff2}}>+ Add R1 Game</button>
+            </div>
+            {/* Playoff R2 */}
+            <div style={{marginBottom:18}}><SectionLabel pts="Win +15">Playoff Round 2 (Semifinals)</SectionLabel>
+              {(psi.playoffR2||[]).map(g=><GameRow key={g.id} game={g} field="playoffR2" onRemove={()=>removeGame("playoffR2",g.id)}/>)}
+              <button onClick={()=>addGame("playoffR2")} style={{marginTop:6,background:"#f5f5f5",border:"1px dashed #ccc",borderRadius:2,padding:"5px 14px",cursor:"pointer",fontSize:12,color:"#555",fontFamily:ff2}}>+ Add R2 Game</button>
+            </div>
+            {/* National Championship */}
+            <div style={{marginBottom:18}}><SectionLabel pts="Win +25">National Championship</SectionLabel>
+              <div style={{display:"flex",alignItems:"center",gap:8,flexWrap:"wrap",marginBottom:8}}><TeamSel value={psi.nattyGame?.teamA||""} onChange={v=>setTopGame("nattyGame","teamA",v)} exclude={psi.nattyGame?.teamB}/><span style={{fontSize:11,color:"#aaa",fontWeight:700}}>VS</span><TeamSel value={psi.nattyGame?.teamB||""} onChange={v=>setTopGame("nattyGame","teamB",v)} exclude={psi.nattyGame?.teamA}/></div>
+              {(psi.nattyGame?.teamA||psi.nattyGame?.teamB)&&<div style={{display:"flex",alignItems:"center",gap:8}}><span style={{fontSize:11,color:"#555"}}>Winner:</span><WinBtns teamA={psi.nattyGame?.teamA} teamB={psi.nattyGame?.teamB} winner={psi.nattyGame?.winner||""} onWin={v=>setTopGame("nattyGame","winner",v)}/></div>}
+            </div>
+          </div></Card>
+          <Card style={{borderTop:`3px solid #333`}}><div style={{padding:16}}>
+            <SL>End of Season</SL>
+            {/* Final Conference Standings */}
+            <div style={{marginBottom:14}}><div style={{fontSize:12,color:"#555",marginBottom:8,fontWeight:600}}>Final Conference Standings</div>{psi.confStandings.map((s,i)=><div key={s.teamName} style={{display:"flex",alignItems:"center",gap:8,marginBottom:5}}><span style={{color:i<3?RED:"#bbb",width:22,textAlign:"right",fontSize:12,fontWeight:800}}>{i+1}.</span><select value={s.teamName} onChange={e=>{const nv=e.target.value;const si2=psi.confStandings.findIndex(x=>x.teamName===nv);setPSI(prev=>{const arr=[...prev.confStandings];[arr[i],arr[si2]]=[arr[si2],arr[i]];return{...prev,confStandings:arr};});}} style={{background:"#fff",color:"#111",border:"1px solid #ccc",borderRadius:2,padding:"5px 8px",fontFamily:ff2,fontSize:12}}>{teamNames.map(t=><option key={t} value={t}>{t} ({entries.find(e=>e.teamName===t)?.userName})</option>)}</select><span style={{fontSize:11,color:"#007a00",fontWeight:700}}>+{CONF_STAND_PTS[i]||0}</span></div>)}</div>
+            {/* Recruiting */}
+            <div style={{marginBottom:12}}><div style={{fontSize:12,color:"#555",marginBottom:6,fontWeight:600}}>Recruiting (Top 5)</div>{psi.recruiting.map((r,i)=><div key={r.teamName} style={{display:"flex",alignItems:"center",gap:8,marginBottom:5}}><span style={{color:i<5?RED:"#bbb",width:22,textAlign:"right",fontSize:12,fontWeight:800}}>{i+1}.</span><select value={r.teamName} onChange={e=>{const nv=e.target.value;const si2=psi.recruiting.findIndex(x=>x.teamName===nv);setPSI(prev=>{const arr=[...prev.recruiting];[arr[i],arr[si2]]=[arr[si2],arr[i]];return{...prev,recruiting:arr};});}} style={{background:"#fff",color:"#111",border:"1px solid #ccc",borderRadius:2,padding:"5px 8px",fontFamily:ff2,fontSize:12}}>{teamNames.map(t=><option key={t} value={t}>{t}</option>)}</select>{i<5&&<span style={{fontSize:11,color:"#007a00",fontWeight:700}}>+{RECRUITING_PTS[i]||0}</span>}</div>)}</div>
+            {/* Heisman */}
+            <div style={{marginBottom:12}}><div style={{fontSize:12,color:"#555",marginBottom:6,fontWeight:600}}>Heisman Winner (+15)</div><select value={psi.heisman} onChange={e=>setPSI(prev=>({...prev,heisman:e.target.value}))} style={{background:"#fff",color:"#111",border:"1px solid #ccc",borderRadius:2,padding:"6px 10px",fontFamily:ff2,fontSize:13}}><option value="">-- None --</option>{teamNames.map(t=><option key={t} value={t}>{t} ({entries.find(e=>e.teamName===t)?.userName})</option>)}</select></div>
+            {/* Prestige */}
+            <div style={{marginBottom:16}}><div style={{fontSize:12,color:"#555",marginBottom:6,fontWeight:600}}>Gained Prestige Star (+10)</div><div style={{display:"flex",flexWrap:"wrap",gap:6}}>{teamNames.map(t=><button key={t} onClick={()=>setPSI(prev=>({...prev,prestigeGains:prev.prestigeGains.includes(t)?prev.prestigeGains.filter(x=>x!==t):[...prev.prestigeGains,t]}))} style={{padding:"4px 10px",borderRadius:2,border:"1px solid",borderColor:psi.prestigeGains.includes(t)?"#007a00":"#ddd",background:psi.prestigeGains.includes(t)?"#f0f8f0":"#fff",color:psi.prestigeGains.includes(t)?"#007a00":"#888",cursor:"pointer",fontSize:12,fontFamily:ff2,fontWeight:600}}>{t}</button>)}</div></div>
+            <div style={{display:"flex",gap:10,flexWrap:"wrap"}}>
+              <button onClick={applyPostSeason} style={{background:RED,color:"#fff",border:"none",borderRadius:2,padding:"11px 20px",cursor:"pointer",fontFamily:ff2,fontSize:13,fontWeight:800,textTransform:"uppercase"}}>Apply All Post-Season Points</button>
+              <button onClick={finalizeSeason} style={{background:"#fff",color:"#007a00",border:"2px solid #007a00",borderRadius:2,padding:"11px 20px",cursor:"pointer",fontFamily:ff2,fontSize:13,fontWeight:800,textTransform:"uppercase"}}>Finalize & Start Season {season+1} →</button>
+            </div>
+          </div></Card>
+        </>);
+      })()}
     </div>
   );
 }
@@ -1473,7 +1529,7 @@ export default function App() {
   function handleStart(leagueName,rows) {
     const initial=rows.map(r=>INITIAL_ENTRY(r.userName.trim(),r.teamName.trim()));
     const newSetup={leagueName,rows};
-    const newPSI={confStandings:initial.map((e,i)=>({teamName:e.teamName,rank:i+1})),confChamp:{made:[],winner:""},bowls:initial.map(e=>({teamName:e.teamName,bowl:"none"})),recruiting:initial.map((e,i)=>({teamName:e.teamName,rank:i+1})),heisman:"",prestigeGains:[],maxPrestige:[]};
+    const newPSI=FRESH_PSI(initial);
     setSetup(newSetup);setEntries(initial);setSeason(1);setWeek(1);
     setWeekResults(initial.map(e=>({teamName:e.teamName,userName:e.userName,result:"none",ranked25:false,ranked10:false})));
     setPSI(newPSI);
@@ -1546,19 +1602,45 @@ export default function App() {
 
   function applyPostSeason() {
     if(!postSeasonInputs)return;
+    const psi=postSeasonInputs;
     setEntries(prev=>prev.map(entry=>{
-      const si=postSeasonInputs.confStandings.findIndex(s=>s.teamName===entry.teamName);
+      const t=entry.teamName;
+      // Conference standings
+      const si=psi.confStandings.findIndex(s=>s.teamName===t);
       const sp=si>=0?(CONF_STAND_PTS[si]||0):0;
-      let cc=0;if(postSeasonInputs.confChamp.made.includes(entry.teamName))cc+=10;if(postSeasonInputs.confChamp.winner===entry.teamName)cc+=15;
-      const be=postSeasonInputs.bowls.find(b=>b.teamName===entry.teamName);
-      let bp=0;if(be?.bowl==="made")bp=5;if(be?.bowl==="won")bp=15;if(be?.bowl==="cfp")bp=15;if(be?.bowl==="cfpwon")bp=40;
-      const ri=postSeasonInputs.recruiting.findIndex(r=>r.teamName===entry.teamName);
+      // Conf championship game — appear +10, win +15 additional
+      let cc=0;
+      if(psi.confChampGame){
+        if(psi.confChampGame.teamA===t||psi.confChampGame.teamB===t){cc+=10;if(psi.confChampGame.winner===t)cc+=15;}
+      } else if(psi.confChamp){
+        // backward compat with old format
+        if(psi.confChamp.made?.includes(t))cc+=10;if(psi.confChamp.winner===t)cc+=15;
+      }
+      // Bowl & playoff points
+      let bp=0;
+      if(psi.bowlGames){
+        // Bowl: appear +5, win +10 additional
+        (psi.bowlGames||[]).forEach(g=>{if(g.teamA===t||g.teamB===t){bp+=5;if(g.winner===t)bp+=10;}});
+        // Playoff R1: appear +15, win +10 additional
+        (psi.playoffR1||[]).forEach(g=>{if(g.teamA===t||g.teamB===t){bp+=15;if(g.winner===t)bp+=10;}});
+        // Playoff R2 (semis): win +15 additional (no appear bonus — already in R1)
+        (psi.playoffR2||[]).forEach(g=>{if(g.winner===t)bp+=15;});
+        // National Championship: win +25 additional
+        if(psi.nattyGame&&psi.nattyGame.winner===t)bp+=25;
+      } else if(psi.bowls){
+        // backward compat with old per-team bowl format
+        const be=psi.bowls.find(b=>b.teamName===t);
+        if(be?.bowl==="made")bp=5;if(be?.bowl==="won")bp=15;if(be?.bowl==="cfp")bp=15;if(be?.bowl==="cfpwon")bp=40;
+      }
+      // Recruiting
+      const ri=psi.recruiting.findIndex(r=>r.teamName===t);
       const rp=ri>=0?(RECRUITING_PTS[ri]||0):0;
-      let pp=0;if(postSeasonInputs.prestigeGains.includes(entry.teamName))pp+=10;
-      const hp=postSeasonInputs.heisman===entry.teamName?15:0;
+      // Prestige & Heisman
+      let pp=0;if(psi.prestigeGains.includes(t))pp+=10;if(psi.maxPrestige?.includes(t))pp+=10;
+      const hp=psi.heisman===t?15:0;
       return{...entry,confStandPts:entry.confStandPts+sp,confChampPts:entry.confChampPts+cc,bowlPts:entry.bowlPts+bp,recruitingPts:entry.recruitingPts+rp,prestigePts:entry.prestigePts+pp,heismanPts:entry.heismanPts+hp};
     }));
-    setTimeout(() => saveToDb(), 200);
+    setTimeout(()=>saveToDb(),200);
   }
 
   function finalizeSeason() {
@@ -1569,7 +1651,7 @@ export default function App() {
     const fresh=entries.map(e=>INITIAL_ENTRY(e.userName,e.teamName));
     setEntries(fresh);setWeek(1);setSeason(s=>s+1);
     setWeekResults(fresh.map(e=>({teamName:e.teamName,userName:e.userName,result:"none",ranked25:false,ranked10:false})));
-    const newPSI={confStandings:fresh.map((e,i)=>({teamName:e.teamName,rank:i+1})),confChamp:{made:[],winner:""},bowls:fresh.map(e=>({teamName:e.teamName,bowl:"none"})),recruiting:fresh.map((e,i)=>({teamName:e.teamName,rank:i+1})),heisman:"",prestigeGains:[],maxPrestige:[]};
+    const newPSI=FRESH_PSI(fresh);
     setPSI(newPSI);
     const newSeason = season+1;
     dbSave({season:newSeason, week:1, entries:fresh, post_season_inputs:newPSI});
@@ -1781,7 +1863,7 @@ export default function App() {
           {tab==="Profiles"&&<ProfileTab history={history} setupRows={setup?.rows||[]} currentEntries={entries} season={season}/>}
           {tab==="Schedule"&&<ScheduleTab schedule={schedule} entries={activeEntries} week={week} season={season}/>}
           {tab==="Rules"&&<div style={{display:"grid",gridTemplateColumns:isMobile?"1fr":"repeat(auto-fill,minmax(250px,1fr))",gap:10}}>
-            {[["🏈 Regular Season",[["Win","15 pts"],["Win vs Top 25","+5 bonus"],["Win vs Top 10","+10 bonus"],["Loss","0 pts"]]],["📊 Conference Standings",[["1st","50"],["2nd","43"],["3rd","36"],["4th","30"],["5th","24"],["6th","18"],["7th","14"],["8th","10"],["9th","7"],["10th","5"],["11th","3"],["12th","1"]]],["🏆 Conference Championship",[["Make the Game","10 pts"],["Win the Game","15 pts"]]],["🥣 Bowl & Playoff",[["Make a Bowl","5 pts"],["Win a Bowl","10 pts"],["Make the CFP","15 pts"],["Win National Championship","25 pts"]]],["🎓 Recruiting (Top 5)",[["#1","15 pts"],["#2","10 pts"],["#3","7 pts"],["#4","5 pts"],["#5","3 pts"]]],["⭐ Prestige & Awards",[["Gain a Prestige Star","10 pts"],["Reach Max Prestige","10 pts"],["Heisman Winner","15 pts"]]]].map(([title,rows])=><Card key={title} style={{overflow:"hidden"}}><CardHead bg={RED}>{title}</CardHead><table style={{width:"100%",borderCollapse:"collapse"}}><tbody>{rows.map(([l,p])=><tr key={l} style={{borderBottom:"1px solid #f0f0f0"}}><td style={{padding:"8px 12px",color:"#333",fontSize:13}}>{l}</td><td style={{padding:"8px 12px",textAlign:"right",color:RED,fontWeight:800,fontSize:13}}>{p}</td></tr>)}</tbody></table></Card>)}
+            {[["🏈 Regular Season",[["Win","15 pts"],["Win vs Top 25","+5 bonus"],["Win vs Top 10","+10 bonus"],["Loss","0 pts"]]],["📊 Conference Standings",[["1st","50"],["2nd","43"],["3rd","36"],["4th","30"],["5th","24"],["6th","18"],["7th","14"],["8th","10"],["9th","7"],["10th","5"],["11th","3"],["12th","1"]]],["🏆 Conference Championship",[["Make the Game","10 pts"],["Win the Game","15 pts"]]],["🥣 Bowl & Playoff",[["Make a Bowl","5 pts"],["Win a Bowl","+10 pts"],["Playoff Round 1","15 pts"],["Win R1","+10 pts"],["Win Semifinal (R2)","+15 pts"],["Win National Championship","+25 pts"]]],["🎓 Recruiting (Top 5)",[["#1","15 pts"],["#2","10 pts"],["#3","7 pts"],["#4","5 pts"],["#5","3 pts"]]],["⭐ Prestige & Awards",[["Gain a Prestige Star","10 pts"],["Reach Max Prestige","10 pts"],["Heisman Winner","15 pts"]]]].map(([title,rows])=><Card key={title} style={{overflow:"hidden"}}><CardHead bg={RED}>{title}</CardHead><table style={{width:"100%",borderCollapse:"collapse"}}><tbody>{rows.map(([l,p])=><tr key={l} style={{borderBottom:"1px solid #f0f0f0"}}><td style={{padding:"8px 12px",color:"#333",fontSize:13}}>{l}</td><td style={{padding:"8px 12px",textAlign:"right",color:RED,fontWeight:800,fontSize:13}}>{p}</td></tr>)}</tbody></table></Card>)}
           </div>}
         </div>
 
