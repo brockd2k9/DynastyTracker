@@ -783,7 +783,7 @@ function ProfileTab({history,setupRows,currentEntries,season}) {
           <div><div style={{fontSize:22,fontWeight:900,color:"#111"}}>{user.userName.toUpperCase()}</div><div style={{fontSize:12,color:"#888",marginTop:2}}>{user.teamName} · {profile.totalWins}W-{profile.totalLosses}L · {profile.winPct}%</div><div style={{display:"flex",gap:6,marginTop:8,flexWrap:"wrap"}}>{profile.championships>0&&<div style={{background:RED,borderRadius:2,padding:"2px 8px",fontSize:10,color:"#fff",fontWeight:700}}>🏆 {profile.championships}×</div>}{profile.confTitles>0&&<div style={{background:"#333",borderRadius:2,padding:"2px 8px",fontSize:10,color:"#fff",fontWeight:700}}>🏅 {profile.confTitles}×</div>}{profile.curStreak>1&&<div style={{background:profile.curStreakType==="win"?"#e8f5e8":"#fff0f0",border:`1px solid ${profile.curStreakType==="win"?"#007a00":RED}`,borderRadius:2,padding:"2px 8px",fontSize:10,color:profile.curStreakType==="win"?"#007a00":RED,fontWeight:700}}>{profile.curStreakType==="win"?"🔥":"❄️"} {profile.curStreak} STREAK</div>}</div></div>
         </div>
         <div style={{display:"flex",borderBottom:"1px solid #eee",background:"#fff",overflowX:"auto"}}>
-          {["overview","seasons","h2h","streaks","points"].map(t=><button key={t} onClick={()=>setPTab(t)} style={{padding:"10px 14px",background:"transparent",border:"none",borderBottom:pTab===t?`3px solid ${RED}`:"3px solid transparent",color:pTab===t?"#111":"#888",cursor:"pointer",fontSize:11,fontWeight:700,fontFamily:ff,textTransform:"uppercase",letterSpacing:0.5,whiteSpace:"nowrap"}}>{t==="h2h"?"H2H Records":t}</button>)}
+          {["overview","seasons","h2h","streaks","points"].map(t=><button key={t} onClick={()=>setPTab(t)} style={{padding:isMobile?"10px 10px":"10px 14px",background:"transparent",border:"none",borderBottom:pTab===t?`3px solid ${RED}`:"3px solid transparent",color:pTab===t?"#111":"#888",cursor:"pointer",fontSize:isMobile?10:11,fontWeight:700,fontFamily:ff,textTransform:"uppercase",letterSpacing:0.5,whiteSpace:"nowrap"}}>{isMobile?(t==="overview"?"OVR":t==="seasons"?"SEASONS":t==="h2h"?"H2H":t==="streaks"?"STREAKS":"PTS"):(t==="h2h"?"H2H Records":t)}</button>)}
         </div>
         <div style={{padding:isMobile?12:18}}>
           {pTab==="overview"&&<div style={{display:"flex",flexDirection:"column",gap:16}}>
@@ -1643,7 +1643,7 @@ export default function App() {
       )}
 
       {/* Main layout */}
-      <div style={{maxWidth:1180,margin:"0 auto",padding:isMobile?"12px 16px":"16px 12px",display:"grid",gridTemplateColumns:isMobile?"1fr":"200px 1fr 260px",gap:isMobile?12:16,alignItems:"start",boxSizing:"border-box"}}>
+      <div style={{maxWidth:1180,margin:"0 auto",padding:isMobile?"12px 16px":"16px 12px",display:"grid",gridTemplateColumns:isMobile?"minmax(0,1fr)":"200px 1fr 260px",gap:isMobile?12:16,alignItems:"start",boxSizing:"border-box"}}>
 
         {/* Left sidebar - desktop only */}
         {isMobile?null:<div style={{display:"flex",flexDirection:"column",gap:12}}>
