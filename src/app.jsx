@@ -49,7 +49,7 @@ const API_URL = "https://api.anthropic.com/v1/messages";
 const HEADERS = {"Content-Type":"application/json"};
 
 const INITIAL_ENTRY = (userName, teamName) => ({
-  userName, teamName, wins:0, losses:0,
+  userName, teamName, wins:0, losses:0, confWins:0, confLosses:0,
   gamePts:0, rankedBonusPts:0, confStandPts:0,
   confChampPts:0, bowlPts:0, recruitingPts:0,
   prestigePts:0, heismanPts:0, weekLog:[],
@@ -1241,7 +1241,7 @@ function EnterResultsPanel({entries,weekResults,setWeekResults,week,applyBulkRes
           <Card style={{borderTop:`3px solid #333`}}><div style={{padding:16}}>
             <SL>End of Season</SL>
             {/* Final Conference Standings */}
-            <div style={{marginBottom:14}}><div style={{fontSize:12,color:"#555",marginBottom:8,fontWeight:600}}>Final Conference Standings</div>{psi.confStandings.map((s,i)=><div key={s.teamName} style={{display:"flex",alignItems:"center",gap:8,marginBottom:5}}><span style={{color:i<3?RED:"#bbb",width:22,textAlign:"right",fontSize:12,fontWeight:800}}>{i+1}.</span><select value={s.teamName} onChange={e=>{const nv=e.target.value;const si2=psi.confStandings.findIndex(x=>x.teamName===nv);setPSI(prev=>{const arr=[...prev.confStandings];[arr[i],arr[si2]]=[arr[si2],arr[i]];return{...prev,confStandings:arr};});}} style={{background:"#fff",color:"#111",border:"1px solid #ccc",borderRadius:2,padding:"5px 8px",fontFamily:ff2,fontSize:12}}>{teamNames.map(t=><option key={t} value={t}>{t} ({entries.find(e=>e.teamName===t)?.userName})</option>)}</select><span style={{fontSize:11,color:"#007a00",fontWeight:700}}>+{CONF_STAND_PTS[i]||0}</span></div>)}</div>
+            <div style={{marginBottom:14}}><div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:8}}><div style={{fontSize:12,color:"#555",fontWeight:600}}>Final Conference Standings</div><button onClick={()=>{const sorted=[...entries].sort((a,b)=>{const aw=(a.confWins||0),al=(a.confLosses||0),bw=(b.confWins||0),bl=(b.confLosses||0);const apct=aw+al>0?aw/(aw+al):0,bpct=bw+bl>0?bw/(bw+bl):0;if(bpct!==apct)return bpct-apct;if(bw!==aw)return bw-aw;return(b.wins||0)-(a.wins||0);});setPSI(prev=>({...prev,confStandings:sorted.map((e,i)=>({teamName:e.teamName,rank:i+1}))}));}} style={{background:"#1a3a6b",color:"#fff",border:"none",borderRadius:2,padding:"4px 10px",cursor:"pointer",fontSize:11,fontFamily:"'Helvetica Neue',Arial,sans-serif",fontWeight:700}}>↕ Sort by Conf Record</button></div>{psi.confStandings.map((s,i)=><div key={s.teamName} style={{display:"flex",alignItems:"center",gap:8,marginBottom:5}}><span style={{color:i<3?RED:"#bbb",width:22,textAlign:"right",fontSize:12,fontWeight:800}}>{i+1}.</span><select value={s.teamName} onChange={e=>{const nv=e.target.value;const si2=psi.confStandings.findIndex(x=>x.teamName===nv);setPSI(prev=>{const arr=[...prev.confStandings];[arr[i],arr[si2]]=[arr[si2],arr[i]];return{...prev,confStandings:arr};});}} style={{background:"#fff",color:"#111",border:"1px solid #ccc",borderRadius:2,padding:"5px 8px",fontFamily:ff2,fontSize:12}}>{teamNames.map(t=><option key={t} value={t}>{t} ({entries.find(e=>e.teamName===t)?.userName})</option>)}</select><span style={{fontSize:11,color:"#007a00",fontWeight:700}}>+{CONF_STAND_PTS[i]||0}</span></div>)}</div>
             {/* Recruiting */}
             <div style={{marginBottom:12}}><div style={{fontSize:12,color:"#555",marginBottom:6,fontWeight:600}}>Recruiting (Top 5)</div>{psi.recruiting.map((r,i)=><div key={r.teamName} style={{display:"flex",alignItems:"center",gap:8,marginBottom:5}}><span style={{color:i<5?RED:"#bbb",width:22,textAlign:"right",fontSize:12,fontWeight:800}}>{i+1}.</span><select value={r.teamName} onChange={e=>{const nv=e.target.value;const si2=psi.recruiting.findIndex(x=>x.teamName===nv);setPSI(prev=>{const arr=[...prev.recruiting];[arr[i],arr[si2]]=[arr[si2],arr[i]];return{...prev,recruiting:arr};});}} style={{background:"#fff",color:"#111",border:"1px solid #ccc",borderRadius:2,padding:"5px 8px",fontFamily:ff2,fontSize:12}}>{teamNames.map(t=><option key={t} value={t}>{t}</option>)}</select>{i<5&&<span style={{fontSize:11,color:"#007a00",fontWeight:700}}>+{RECRUITING_PTS[i]||0}</span>}</div>)}</div>
             {/* Dynasty Top 5 */}
@@ -1576,7 +1576,8 @@ export default function App() {
           if(effectiveResult==="win")h2h[opp].wins++;
           else if(effectiveResult==="loss")h2h[opp].losses++;
         }
-        return{...entry,wins:effectiveResult==="win"?entry.wins+1:entry.wins,losses:effectiveResult==="loss"?entry.losses+1:entry.losses,gamePts:entry.gamePts+pts,rankedBonusPts:entry.rankedBonusPts+bonus,weekLog:[...(entry.weekLog||[]),log],h2h};
+        const isConfGame=opp&&opp!=="CPU"&&opp!=="BYE"&&opp!=="Unknown"&&teamNames.includes(opp);
+        return{...entry,wins:effectiveResult==="win"?entry.wins+1:entry.wins,losses:effectiveResult==="loss"?entry.losses+1:entry.losses,confWins:isConfGame&&effectiveResult==="win"?(entry.confWins||0)+1:(entry.confWins||0),confLosses:isConfGame&&effectiveResult==="loss"?(entry.confLosses||0)+1:(entry.confLosses||0),gamePts:entry.gamePts+pts,rankedBonusPts:entry.rankedBonusPts+bonus,weekLog:[...(entry.weekLog||[]),log],h2h};
       });
     });
     setWeekResults(prev=>prev.map(r=>({...r,result:"none",ranked25:false,ranked10:false})));
@@ -1595,12 +1596,12 @@ export default function App() {
       const log={week:targetWeek,result:r.result,ranked25:r.ranked25,ranked10:r.ranked10,pts:pts+bonus,opponent:opp,stats:r.stats};
       const h2h={...entry.h2h||{}};
       if(opp&&!["CPU","BYE","Unknown"].includes(opp)){if(!h2h[opp])h2h[opp]={wins:0,losses:0};if(r.result==="win")h2h[opp].wins++;else if(r.result==="loss")h2h[opp].losses++;}
-      return{...entry,wins:r.result==="win"?entry.wins+1:entry.wins,losses:r.result==="loss"?entry.losses+1:entry.losses,gamePts:entry.gamePts+pts,rankedBonusPts:entry.rankedBonusPts+bonus,weekLog:[...(entry.weekLog||[]),log],h2h};
+      const isConfGame=opp&&!["CPU","BYE","Unknown"].includes(opp)&&teamNames.includes(opp);
+      return{...entry,wins:r.result==="win"?entry.wins+1:entry.wins,losses:r.result==="loss"?entry.losses+1:entry.losses,confWins:isConfGame&&r.result==="win"?(entry.confWins||0)+1:(entry.confWins||0),confLosses:isConfGame&&r.result==="loss"?(entry.confLosses||0)+1:(entry.confLosses||0),gamePts:entry.gamePts+pts,rankedBonusPts:entry.rankedBonusPts+bonus,weekLog:[...(entry.weekLog||[]),log],h2h};
     }));
     setWeekResults(prev=>prev.map(r=>({...r,result:"none",ranked25:false,ranked10:false})));
     if(targetWeek>=week){const newWeek=targetWeek+1;setWeek(newWeek);setTimeout(()=>saveToDb({week:newWeek}),100);}
     else{setTimeout(()=>saveToDb({}),100);}
-    setTimeout(()=>saveToDb({week:newWeek}),100);
   }
 
   function applyPostSeason() {
@@ -1760,7 +1761,7 @@ export default function App() {
               <div style={{overflowX:"auto"}}>
                 <table style={{width:"100%",borderCollapse:"collapse",fontSize:13}}>
                   <thead><tr style={{background:"#f7f7f7",borderBottom:`2px solid ${RED}`}}>
-                    {["RK","SCHOOL","PTS","BACK","W","L"].map(h=><th key={h} style={{padding:"8px 8px",textAlign:h==="SCHOOL"?"left":"center",color:"#555",fontSize:8,letterSpacing:1,textTransform:"uppercase",fontWeight:800,whiteSpace:"nowrap"}}>{h}</th>)}
+                    {["RK","SCHOOL","PTS","BACK","OVR","CONF"].map(h=><th key={h} style={{padding:"8px 8px",textAlign:h==="SCHOOL"?"left":"center",color:"#555",fontSize:8,letterSpacing:1,textTransform:"uppercase",fontWeight:800,whiteSpace:"nowrap"}}>{h}</th>)}
                   </tr></thead>
                   <tbody>{sorted.map((t,i)=>{const tot=calcTotal(t);const beh=leader-tot;return(
                     <tr key={t.teamName} style={{borderBottom:"1px solid #eee",background:i===0?"#fff8f8":i%2===0?"#fafafa":"#fff"}}>
@@ -1768,8 +1769,8 @@ export default function App() {
                       <td style={{padding:"9px 8px",fontWeight:i===0?800:600,color:"#111",whiteSpace:"nowrap"}}>{t.teamName}</td>
                       <td style={{padding:"9px 8px",textAlign:"center",fontWeight:900,color:i===0?RED:"#111",fontSize:15}}>{tot}</td>
                       <td style={{padding:"9px 8px",textAlign:"center",color:beh===0?"#007a00":RED,fontWeight:700}}>{beh===0?"-":`-${beh}`}</td>
-                      <td style={{padding:"9px 8px",textAlign:"center",color:"#007a00",fontWeight:700}}>{t.wins}</td>
-                      <td style={{padding:"9px 8px",textAlign:"center",color:RED,fontWeight:700}}>{t.losses}</td>
+                      <td style={{padding:"9px 8px",textAlign:"center",color:"#555",fontWeight:600,fontSize:12}}>{t.wins}-{t.losses}</td>
+                      <td style={{padding:"9px 8px",textAlign:"center",color:"#1a3a6b",fontWeight:700,fontSize:12}}>{(t.confWins||0)}-{(t.confLosses||0)}</td>
                     </tr>);})}</tbody>
                 </table>
               </div>}
@@ -1817,8 +1818,8 @@ export default function App() {
                 :<div style={{overflowX:"auto"}}>
                   <table style={{width:"100%",borderCollapse:"collapse",fontSize:isMobile?12:13}}>
                     <thead><tr style={{background:"#f7f7f7",borderBottom:`2px solid ${RED}`}}>
-                      {(isMobile?["RK","SCHOOL","PTS","BACK","W","L"]:["RK","SCHOOL","PTS","BACK","W","L","GAME","BONUS","CONF","CC","BOWL","REC","AWD"]).map(h=>(
-                        <th key={h} style={{padding:isMobile?"8px 6px":"9px 7px",textAlign:h==="SCHOOL"?"left":"center",color:"#555",fontSize:8,letterSpacing:1,textTransform:"uppercase",fontWeight:800,whiteSpace:"nowrap",borderRight:"1px solid #eee"}}>{h}</th>
+                      {(isMobile?["RK","SCHOOL","PTS","BACK","OVR","CONF"]:["RK","SCHOOL","PTS","BACK","OVR","CONF","GAME","BONUS","CSTAND","CC","BOWL","REC","AWD"]).map(h=>(
+                        <th key={h} style={{padding:isMobile?"8px 6px":"9px 7px",textAlign:h==="SCHOOL"?"left":"center",color:h==="CONF"?"#1a3a6b":"#555",fontSize:8,letterSpacing:1,textTransform:"uppercase",fontWeight:800,whiteSpace:"nowrap",borderRight:"1px solid #eee"}}>{h}</th>
                       ))}
                     </tr></thead>
                     <tbody>{sorted.map((t,i)=>{const tot=calcTotal(t);const beh=leader-tot;return(
@@ -1826,18 +1827,16 @@ export default function App() {
                         <td style={{padding:isMobile?"8px 6px":"10px 7px",textAlign:"center",fontWeight:900,fontSize:isMobile?13:14,color:i===0?RED:"#bbb",borderRight:"1px solid #eee"}}>{i+1}</td>
                         <td style={{padding:isMobile?"8px 6px":"10px 7px",fontWeight:i===0?800:600,color:"#111",whiteSpace:"nowrap",borderRight:"1px solid #eee",maxWidth:isMobile?90:140,overflow:"hidden",textOverflow:"ellipsis"}}>{t.teamName}</td>
                         <td style={{padding:isMobile?"8px 6px":"10px 7px",textAlign:"center",fontWeight:900,color:i===0?RED:"#111",fontSize:isMobile?14:16,background:i===0?"#fff0f0":"transparent",borderRight:"2px solid #ddd"}}>{tot}</td>
-                        <td style={{padding:isMobile?"8px 6px":"10px 7px",textAlign:"center",color:beh===0?"#007a00":RED,fontWeight:700,fontSize:isMobile?11:12,borderRight:isMobile?"none":"2px solid #ddd",whiteSpace:"nowrap"}}>{beh===0?"-":isMobile?`-${beh}`:`-${beh}`}</td>
-                        {isMobile?null:<><td style={{padding:"10px 7px",textAlign:"center",color:"#007a00",fontWeight:700,borderRight:"1px solid #eee"}}>{t.wins}</td>
-                        <td style={{padding:"10px 7px",textAlign:"center",color:RED,fontWeight:700,borderRight:"1px solid #eee"}}>{t.losses}</td>
-                        <td style={{padding:"10px 7px",textAlign:"center",borderRight:"1px solid #eee"}}>{t.gamePts}</td>
+                        <td style={{padding:isMobile?"8px 6px":"10px 7px",textAlign:"center",color:beh===0?"#007a00":RED,fontWeight:700,fontSize:isMobile?11:12,borderRight:"2px solid #ddd",whiteSpace:"nowrap"}}>{beh===0?"-":`-${beh}`}</td>
+                        <td style={{padding:isMobile?"8px 6px":"10px 7px",textAlign:"center",color:"#555",fontWeight:600,fontSize:isMobile?11:12,borderRight:"1px solid #eee",whiteSpace:"nowrap"}}>{t.wins}-{t.losses}</td>
+                        <td style={{padding:isMobile?"8px 6px":"10px 7px",textAlign:"center",color:"#1a3a6b",fontWeight:700,fontSize:isMobile?11:12,borderRight:isMobile?"none":"2px solid #ddd",whiteSpace:"nowrap"}}>{(t.confWins||0)}-{(t.confLosses||0)}</td>
+                        {isMobile?null:<><td style={{padding:"10px 7px",textAlign:"center",borderRight:"1px solid #eee"}}>{t.gamePts}</td>
                         <td style={{padding:"10px 7px",textAlign:"center",color:"#cc7700",fontWeight:700,borderRight:"1px solid #eee"}}>{t.rankedBonusPts>0?`+${t.rankedBonusPts}`:"—"}</td>
                         <td style={{padding:"10px 7px",textAlign:"center",borderRight:"1px solid #eee"}}>{t.confStandPts}</td>
                         <td style={{padding:"10px 7px",textAlign:"center",borderRight:"1px solid #eee"}}>{t.confChampPts}</td>
                         <td style={{padding:"10px 7px",textAlign:"center",borderRight:"1px solid #eee"}}>{t.bowlPts}</td>
                         <td style={{padding:"10px 7px",textAlign:"center",borderRight:"1px solid #eee"}}>{t.recruitingPts}</td>
                         <td style={{padding:"10px 7px",textAlign:"center"}}>{t.prestigePts+t.heismanPts}</td></>}
-                        {isMobile&&<><td style={{padding:"8px 6px",textAlign:"center",color:"#007a00",fontWeight:700}}>{t.wins}</td>
-                        <td style={{padding:"8px 6px",textAlign:"center",color:RED,fontWeight:700}}>{t.losses}</td></>}
                       </tr>
                     );})}</tbody>
                   </table>
