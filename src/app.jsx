@@ -506,10 +506,11 @@ function ScheduleTab({schedule,entries,week,season}) {
     const {logA, logB, statsA, statsB, scoreA, scoreB, winner} = result;
     const wA = logA?.result==="win", wB = logB?.result==="win";
     const rows = [
-      ["Passing Yds", statsA?.passing_yards, statsB?.passing_yards],
-      ["Rushing Yds", statsA?.rushing_yards, statsB?.rushing_yards],
-      ["Total Yds",   statsA?.total_yards,   statsB?.total_yards],
-      ["Turnovers",  statsA?.turnovers,      statsB?.turnovers],
+      ["Passing Yds",    statsA?.passing_yards, statsB?.passing_yards],
+      ["Rushing Yds",    statsA?.rushing_yards, statsB?.rushing_yards],
+      ["Total Yds",      statsA?.total_yards,   statsB?.total_yards],
+      ["Turnovers",      statsA?.turnovers,     statsB?.turnovers],
+      ["Interceptions",  statsA?.interceptions, statsB?.interceptions],
     ];
     const hasStats = statsA || statsB;
     return (
@@ -538,8 +539,9 @@ function ScheduleTab({schedule,entries,week,season}) {
           <tbody>{rows.map(([label,valA,valB])=>{
             const hasStat=valA!=null||valB!=null;
             if(!hasStat)return null;
-            const aWins=label==="Turnovers"?(valA!=null&&valB!=null&&valA<valB):(valA!=null&&valB!=null&&valA>valB);
-            const bWins=label==="Turnovers"?(valB!=null&&valA!=null&&valB<valA):(valB!=null&&valA!=null&&valB>valA);
+            const lowerBetter=label==="Turnovers"||label==="Interceptions";
+            const aWins=lowerBetter?(valA!=null&&valB!=null&&valA<valB):(valA!=null&&valB!=null&&valA>valB);
+            const bWins=lowerBetter?(valB!=null&&valA!=null&&valB<valA):(valB!=null&&valA!=null&&valB>valA);
             return(<tr key={label} style={{borderTop:"1px solid #222"}}>
               <td style={{padding:"7px 14px",textAlign:"right",fontWeight:aWins?800:400,color:aWins?"#fff":"#888",fontSize:13}}>{valA??"-"}</td>
               <td style={{padding:"7px 8px",textAlign:"center",color:"#444",fontSize:9,fontWeight:700,textTransform:"uppercase",letterSpacing:1,whiteSpace:"nowrap"}}>{label}</td>
@@ -947,7 +949,6 @@ function BulkResultsUploader({entries,week,teamNames,onConfirm}) {
   const [gameRows,setGameRows]=useState([]);
   const [successInfo,setSuccessInfo]=useState(null);
 
-  const SCOREBOARD_PROMPT='You are parsing a College Football 27 video game scoreboard screenshot. Extract the following and return ONLY a valid JSON object with no extra text or markdown: { "home_team": "", "away_team": "", "home_score": 0, "away_score": 0, "home_stats": { "passing_yards": 0, "rushing_yards": 0, "total_yards": 0, "turnovers": 0 }, "away_stats": { "passing_yards": 0, "rushing_yards": 0, "total_yards": 0, "turnovers": 0 } }';
 
   function handleFileChange(e) {
     const chosen=Array.from(e.target.files).slice(0,16);
@@ -981,7 +982,7 @@ function BulkResultsUploader({entries,week,teamNames,onConfirm}) {
     const rows=allGames.map((g,idx)=>{
       const hm=fuzzyMatchTeam(g.home_team,teamNames);
       const am=fuzzyMatchTeam(g.away_team,teamNames);
-      return{id:idx,homeRaw:g.home_team||"",awayRaw:g.away_team||"",homeTeam:hm.team,awayTeam:am.team,homeConf:hm.confidence,awayConf:am.confidence,homeScore:parseInt(g.home_score)||0,awayScore:parseInt(g.away_score)||0,homeStats:g.home_stats||{passing_yards:0,rushing_yards:0,total_yards:0,turnovers:0},awayStats:g.away_stats||{passing_yards:0,rushing_yards:0,total_yards:0,turnovers:0},ranked25:false,ranked10:false};
+      return{id:idx,homeRaw:g.home_team||"",awayRaw:g.away_team||"",homeTeam:hm.team,awayTeam:am.team,homeConf:hm.confidence,awayConf:am.confidence,homeScore:parseInt(g.home_score)||0,awayScore:parseInt(g.away_score)||0,homeStats:g.home_stats||{passing_yards:0,rushing_yards:0,total_yards:0,turnovers:0,interceptions:0},awayStats:g.away_stats||{passing_yards:0,rushing_yards:0,total_yards:0,turnovers:0,interceptions:0},ranked25:false,ranked10:false};
     });
     setGameRows(rows);
     setPhase("review");

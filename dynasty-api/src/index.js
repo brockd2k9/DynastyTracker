@@ -5,12 +5,20 @@ const CORS_HEADERS = {
 };
 
 const SCOREBOARD_SYSTEM =
-  "You are parsing a College Football 27 video game scoreboard screenshot. " +
+  "You are parsing a College Football 27 video game screenshot. The screenshot may show " +
+  "either a live scoreboard or a post-game box score screen. " +
   "The valid team names in this league are provided in the teams array. " +
-  "Extract and return ONLY valid JSON: { home_team, away_team, home_score, away_score, " +
-  "home_stats: { passing_yards, rushing_yards, total_yards, turnovers }, " +
-  "away_stats: { passing_yards, rushing_yards, total_yards, turnovers } }. " +
-  "Match team names to the closest name from the provided teams list.";
+  "For a scoreboard: team names appear at the top with the score displayed prominently. " +
+  "For a box score: team names appear on the left and right sides, a quarter-by-quarter " +
+  "score grid appears in the middle, and team stats are listed in rows below — the stat " +
+  "category label is in the center column, the left team's value is on the left, and the " +
+  "right team's value is on the right. " +
+  "Extract and return ONLY valid JSON with no extra text or markdown: " +
+  "{ home_team, away_team, home_score, away_score, " +
+  "home_stats: { passing_yards, rushing_yards, total_yards, turnovers, interceptions }, " +
+  "away_stats: { passing_yards, rushing_yards, total_yards, turnovers, interceptions } }. " +
+  "Use 0 for any stat not visible. Match team names to the closest entry in the teams list. " +
+  "home_team is the team on the left or listed as home; away_team is on the right or listed as away.";
 
 const SCHEDULE_SYSTEM =
   "You are parsing a College Football 27 video game dynasty schedule screenshot. " +
