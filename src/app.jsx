@@ -1141,13 +1141,39 @@ function BulkResultsUploader({entries,week,teamNames,onConfirm}) {
 
 // ── EnterResultsPanel ─────────────────────────────────────────────────────
 function EnterResultsPanel({entries,weekResults,setWeekResults,week,applyBulkResults,applyWeekResults,postSeasonInputs,setPSI,applyPostSeason,finalizeSeason,season,teamNames,schedule}) {
+  const [entryWeek,setEntryWeek] = useState(week);
   const setWR=(i,f,v)=>setWeekResults(prev=>prev.map((r,idx)=>idx===i?{...r,[f]:v}:r));
-  const thisWeekSchedule = schedule?.[week]||{};
+  const thisWeekSchedule = schedule?.[entryWeek]||{};
+  const entryYear = START_YEAR + season - 1;
+
   return (
     <div style={{display:"flex",flexDirection:"column",gap:16}}>
-      <BulkResultsUploader entries={entries} week={week} teamNames={teamNames} onConfirm={applyBulkResults}/>
-      {week<=12&&<Card><div style={{padding:16}}>
-        <SL>Manual Entry — Week {week}</SL>
+
+      {/* Week / Season / Year selector */}
+      <Card>
+        <CardHead>Entry Context</CardHead>
+        <div style={{padding:"14px 16px",display:"flex",flexWrap:"wrap",gap:20,alignItems:"flex-end"}}>
+          <div>
+            <div style={{fontSize:10,fontWeight:700,color:"#888",textTransform:"uppercase",letterSpacing:1,marginBottom:6}}>Season</div>
+            <div style={{fontSize:16,fontWeight:900,color:"#111",padding:"8px 12px",background:"#f7f7f7",border:"1px solid #ddd",borderRadius:2,minWidth:60,textAlign:"center"}}>S{season}</div>
+          </div>
+          <div>
+            <div style={{fontSize:10,fontWeight:700,color:"#888",textTransform:"uppercase",letterSpacing:1,marginBottom:6}}>Year</div>
+            <div style={{fontSize:16,fontWeight:900,color:"#111",padding:"8px 12px",background:"#f7f7f7",border:"1px solid #ddd",borderRadius:2,minWidth:70,textAlign:"center"}}>{entryYear}</div>
+          </div>
+          <div>
+            <div style={{fontSize:10,fontWeight:700,color:"#888",textTransform:"uppercase",letterSpacing:1,marginBottom:6}}>Week</div>
+            <select value={entryWeek} onChange={e=>setEntryWeek(Number(e.target.value))} style={{fontSize:16,fontWeight:700,color:"#111",padding:"8px 12px",background:"#fff",border:`2px solid #cc0000`,borderRadius:2,cursor:"pointer",fontFamily:"'Helvetica Neue',Arial,sans-serif",minWidth:80}}>
+              {Array.from({length:12},(_,i)=>i+1).map(w=><option key={w} value={w}>Week {w}{w===week?" (current)":""}</option>)}
+            </select>
+          </div>
+          {entryWeek!==week&&<div style={{padding:"6px 12px",background:"#fffbf0",border:"1px solid #f0c040",borderRadius:2,fontSize:12,color:"#886600",fontWeight:600}}>⚠ Entering results for a past week — global week will not advance</div>}
+        </div>
+      </Card>
+
+      <BulkResultsUploader entries={entries} week={entryWeek} teamNames={teamNames} onConfirm={(results)=>applyBulkResults(results,entryWeek)}/>
+      {entryWeek<=12&&<Card><div style={{padding:16}}>
+        <SL>Manual Entry — Week {entryWeek}{entryWeek!==week?` (S${season} · ${entryYear})`:""}</SL>
         {Object.keys(thisWeekSchedule).length>0&&<div style={{background:"#f0f8f0",border:"1px solid #cce5cc",borderRadius:2,padding:"8px 12px",fontSize:12,color:"#555",marginBottom:12}}>✓ Schedule loaded — entering one team's result automatically updates their opponent's record.</div>}
         {weekResults.map((wr,i)=>(
           <div key={wr.teamName} style={{display:"flex",alignItems:"center",gap:8,flexWrap:"wrap",padding:"9px 0",borderBottom:"1px solid #f0f0f0"}}>
@@ -1156,7 +1182,7 @@ function EnterResultsPanel({entries,weekResults,setWeekResults,week,applyBulkRes
             {wr.result==="win"&&<div style={{display:"flex",gap:10}}><label style={{display:"flex",alignItems:"center",gap:4,fontSize:11,color:"#888",cursor:"pointer"}}><input type="checkbox" checked={wr.ranked25} onChange={e=>setWR(i,"ranked25",e.target.checked)}/> vs Top 25</label><label style={{display:"flex",alignItems:"center",gap:4,fontSize:11,color:RED,cursor:"pointer",fontWeight:700}}><input type="checkbox" checked={wr.ranked10} onChange={e=>setWR(i,"ranked10",e.target.checked)}/> vs Top 10</label></div>}
           </div>
         ))}
-        <button onClick={applyWeekResults} style={{marginTop:14,background:RED,color:"#fff",border:"none",borderRadius:2,padding:"11px 22px",cursor:"pointer",fontFamily:ff,fontSize:14,fontWeight:800,textTransform:"uppercase"}}>Submit Week {week} →</button>
+        <button onClick={()=>applyWeekResults(entryWeek)} style={{marginTop:14,background:RED,color:"#fff",border:"none",borderRadius:2,padding:"11px 22px",cursor:"pointer",fontFamily:ff,fontSize:14,fontWeight:800,textTransform:"uppercase"}}>Submit Week {entryWeek} →</button>
       </div></Card>}
       {week>12&&postSeasonInputs&&<Card style={{borderTop:`3px solid ${RED}`}}><div style={{padding:16}}>
         <SL>Post Season — {START_YEAR+season-1}</SL>
@@ -1461,8 +1487,8 @@ export default function App() {
   const teamNames=activeEntries.map(e=>e.teamName);
   const leagueName=setup?.leagueName||"Dynasty Central";
 
-  function applyWeekResults() {
-    const thisWeekSchedule = schedule[week] || {};
+  function applyWeekResults(targetWeek=week) {
+    const thisWeekSchedule = schedule[targetWeek] || {};
     setEntries(prev=>{
       // Build a map of results entered this week
       const resultsMap = {};
@@ -1483,7 +1509,7 @@ export default function App() {
         if(!effectiveResult)return entry;
         let pts=0,bonus=0;
         if(effectiveResult==="win"){pts=15;bonus=effectiveR10?10:effectiveR25?5:0;}
-        const log={week,result:effectiveResult,ranked25:effectiveR25,ranked10:effectiveR10,pts:pts+bonus,opponent:opp||"Unknown"};
+        const log={week:targetWeek,result:effectiveResult,ranked25:effectiveR25,ranked10:effectiveR10,pts:pts+bonus,opponent:opp||"Unknown"};
         // Update H2H if opponent is a dynasty member
         const h2h={...entry.h2h||{}};
         if(opp&&opp!=="CPU"&&opp!=="BYE"){
@@ -1495,27 +1521,26 @@ export default function App() {
       });
     });
     setWeekResults(prev=>prev.map(r=>({...r,result:"none",ranked25:false,ranked10:false})));
-    const newWeek=week+1;
-    setWeek(newWeek);
-    setTimeout(()=>saveToDb({week:newWeek}),100);
+    if(targetWeek>=week){const newWeek=targetWeek+1;setWeek(newWeek);setTimeout(()=>saveToDb({week:newWeek}),100);}
+    else{setTimeout(()=>saveToDb({}),100);}
   }
 
-  function applyBulkResults(results) {
-    const thisWeekSchedule=schedule[week]||{};
+  function applyBulkResults(results, targetWeek=week) {
+    const thisWeekSchedule=schedule[targetWeek]||{};
     setEntries(prev=>prev.map(entry=>{
       const r=results.find(x=>x.leagueTeam===entry.teamName);
       if(!r)return entry;
       let pts=0,bonus=0;
       if(r.result==="win"){pts=15;bonus=r.ranked10?10:r.ranked25?5:0;}
       const opp=thisWeekSchedule[entry.teamName]||r.opponent;
-      const log={week,result:r.result,ranked25:r.ranked25,ranked10:r.ranked10,pts:pts+bonus,opponent:opp,stats:r.stats};
+      const log={week:targetWeek,result:r.result,ranked25:r.ranked25,ranked10:r.ranked10,pts:pts+bonus,opponent:opp,stats:r.stats};
       const h2h={...entry.h2h||{}};
       if(opp&&!["CPU","BYE","Unknown"].includes(opp)){if(!h2h[opp])h2h[opp]={wins:0,losses:0};if(r.result==="win")h2h[opp].wins++;else if(r.result==="loss")h2h[opp].losses++;}
       return{...entry,wins:r.result==="win"?entry.wins+1:entry.wins,losses:r.result==="loss"?entry.losses+1:entry.losses,gamePts:entry.gamePts+pts,rankedBonusPts:entry.rankedBonusPts+bonus,weekLog:[...(entry.weekLog||[]),log],h2h};
     }));
     setWeekResults(prev=>prev.map(r=>({...r,result:"none",ranked25:false,ranked10:false})));
-    const newWeek=week+1;
-    setWeek(newWeek);
+    if(targetWeek>=week){const newWeek=targetWeek+1;setWeek(newWeek);setTimeout(()=>saveToDb({week:newWeek}),100);}
+    else{setTimeout(()=>saveToDb({}),100);}
     setTimeout(()=>saveToDb({week:newWeek}),100);
   }
 
