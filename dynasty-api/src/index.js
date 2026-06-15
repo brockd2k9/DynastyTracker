@@ -4,6 +4,26 @@ const CORS_HEADERS = {
   "Access-Control-Allow-Headers": "Content-Type",
 };
 
+const SCOREBOARD_SYSTEM =
+  "You are parsing a College Football 27 video game scoreboard screenshot. " +
+  "The valid team names in this league are provided in the teams array. " +
+  "Extract and return ONLY valid JSON: { home_team, away_team, home_score, away_score, " +
+  "home_stats: { passing_yards, rushing_yards, total_yards, turnovers }, " +
+  "away_stats: { passing_yards, rushing_yards, total_yards, turnovers } }. " +
+  "Match team names to the closest name from the provided teams list.";
+
+const SCHEDULE_SYSTEM =
+  "You are parsing a College Football 27 video game dynasty schedule screenshot. " +
+  "The valid dynasty team names are provided in the teams array. " +
+  "Extract every visible week and its matchups. For each week, identify every dynasty team " +
+  "and their opponent. If the opponent is another dynasty team, use their exact name from " +
+  "the teams list. If the opponent is a non-dynasty CPU-controlled team, write 'CPU'. " +
+  "If it is a bye week, write 'BYE'. " +
+  "Return ONLY valid JSON in exactly this format with no extra text or markdown: " +
+  "{\"1\":{\"TeamA\":\"TeamB\",\"TeamB\":\"TeamA\"},\"2\":{\"TeamA\":\"CPU\"},\"3\":{\"TeamA\":\"BYE\"}} " +
+  "Use only week numbers as keys (integers as strings). Only include weeks and teams " +
+  "visible in the image. Match all team names to the closest entry in the teams list.";
+
 export default {
   async fetch(request, env) {
     if (request.method === "OPTIONS") {
@@ -26,7 +46,7 @@ export default {
       return json({ error: "Invalid JSON body" }, 400);
     }
 
-    const { image, mediaType, teams } = body;
+    const { image, mediaType, teams, type = "scoreboard" } = body;
     if (!image || !mediaType || !Array.isArray(teams)) {
       return json({ error: "Missing required fields: image, mediaType, teams" }, 400);
     }
@@ -35,17 +55,13 @@ export default {
       return json({ error: "ANTHROPIC_API_KEY not configured" }, 500);
     }
 
-    const systemPrompt =
-      "You are parsing a College Football 27 video game scoreboard screenshot. " +
-      "The valid team names in this league are provided in the teams array. " +
-      "Extract and return ONLY valid JSON: { home_team, away_team, home_score, away_score, " +
-      "home_stats: { passing_yards, rushing_yards, total_yards, turnovers }, " +
-      "away_stats: { passing_yards, rushing_yards, total_yards, turnovers } }. " +
-      "Match team names to the closest name from the provided teams list.";
-
-    const teamsText = teams.length > 0
-      ? `\n\nValid team names: ${teams.join(", ")}`
-      : "";
+    const isSchedule = type === "schedule";
+    const systemPrompt = isSchedule ? SCHEDULE_SYSTEM : SCOREBOARD_SYSTEM;
+    const teamsText = teams.length > 0 ? `\n\nValid team names: ${teams.join(", ")}` : "";
+    const userText = isSchedule
+      ? `Parse this schedule screenshot and return JSON.${teamsText}`
+      : `Parse this scoreboard screenshot and return JSON.${teamsText}`;
+    const maxTokens = isSchedule ? 2000 : 512;
 
     const anthropicRes = await fetch("https://api.anthropic.com/v1/messages", {
       method: "POST",
@@ -56,20 +72,14 @@ export default {
       },
       body: JSON.stringify({
         model: "claude-sonnet-4-6",
-        max_tokens: 512,
+        max_tokens: maxTokens,
         system: systemPrompt,
         messages: [
           {
             role: "user",
             content: [
-              {
-                type: "image",
-                source: { type: "base64", media_type: mediaType, data: image },
-              },
-              {
-                type: "text",
-                text: `Parse this scoreboard screenshot and return JSON.${teamsText}`,
-              },
+              { type: "image", source: { type: "base64", media_type: mediaType, data: image } },
+              { type: "text", text: userText },
             ],
           },
         ],
@@ -87,9 +97,12 @@ export default {
     // Strip markdown code fences if present
     const cleaned = rawText.replace(/^```(?:json)?\s*/i, "").replace(/\s*```$/, "").trim();
 
+    // For schedule, extract just the outermost JSON object in case of extra text
+    const toparse = isSchedule ? (cleaned.match(/\{[\s\S]*\}/)?.[0] ?? cleaned) : cleaned;
+
     let parsed;
     try {
-      parsed = JSON.parse(cleaned);
+      parsed = JSON.parse(toparse);
     } catch {
       return json({ error: "Failed to parse model response as JSON", raw: rawText }, 502);
     }

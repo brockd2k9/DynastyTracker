@@ -291,35 +291,14 @@ function SchedulePanel({entries,schedule,setSchedule}) {
     setSchedParsing(true);
     setSchedResult("");
     try {
-      const apiKey = import.meta.env.VITE_ANTHROPIC_KEY;
-      if (!apiKey) throw new Error("VITE_ANTHROPIC_KEY not set.");
-      const reader = new FileReader();
-      const b64 = await new Promise((res,rej)=>{reader.onload=e=>res(e.target.result.split(",")[1]);reader.onerror=rej;reader.readAsDataURL(schedImg);});
-      const prompt = "This is a screenshot of a college football game schedule from a video game dynasty mode. " +
-        "The dynasty teams are: " + teamNames.join(", ") + ". " +
-        "Parse ALL visible weeks and matchups. For each week, list every dynasty team and their opponent. " +
-        "If the opponent is another dynasty team, use their exact name. If the opponent is a non-dynasty CPU team, write 'CPU'. If it's a bye week, write 'BYE'. " +
-        "Return ONLY a JSON object in this exact format with no extra text or markdown:\n" +
-        "{\"1\":{\"TeamA\":\"TeamB\",\"TeamB\":\"TeamA\"},\"2\":{\"TeamA\":\"CPU\"},\"3\":{\"TeamA\":\"BYE\"},...}\n" +
-        "Only include weeks and teams visible in the image. Use the dynasty team names exactly as listed above.";
-      const r = await fetch("https://api.anthropic.com/v1/messages", {
+      const b64 = await new Promise((res,rej)=>{const reader=new FileReader();reader.onload=e=>res(e.target.result.split(",")[1]);reader.onerror=rej;reader.readAsDataURL(schedImg);});
+      const resp = await fetch("https://dynasty-api.brockdrury.workers.dev/api/parse-screenshot", {
         method: "POST",
-        headers: {"Content-Type":"application/json","x-api-key":apiKey,"anthropic-version":"2023-06-01","anthropic-dangerous-direct-browser-access":"true"},
-        body: JSON.stringify({
-          model: "claude-haiku-4-5-20251001",
-          max_tokens: 2000,
-          messages: [{role:"user",content:[
-            {type:"image",source:{type:"base64",media_type:schedImg.type||"image/jpeg",data:b64}},
-            {type:"text",text:prompt}
-          ]}],
-        }),
+        headers: {"Content-Type":"application/json"},
+        body: JSON.stringify({image:b64, mediaType:schedImg.type||"image/jpeg", teams:teamNames, type:"schedule"}),
       });
-      if (!r.ok) { const e=await r.json().catch(()=>({})); throw new Error(e?.error?.message||`API error ${r.status}`); }
-      const d = await r.json();
-      const raw = d.content?.[0]?.text || "";
-      const jsonMatch = raw.match(/\{[\s\S]*\}/);
-      if (!jsonMatch) throw new Error("Could not parse schedule from image. Try a clearer screenshot.");
-      const parsed = JSON.parse(jsonMatch[0]);
+      if (!resp.ok) { const e=await resp.json().catch(()=>({})); throw new Error(e?.error||`API error ${resp.status}`); }
+      const parsed = await resp.json();
       let filled = 0;
       setSchedule(prev => {
         const ns = {...prev};
