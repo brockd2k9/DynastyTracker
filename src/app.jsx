@@ -1382,12 +1382,24 @@ function HistoricalImportPanel({setupRows, history, onImport}) {
 // ── EnterResultsPanel ─────────────────────────────────────────────────────
 function EnterResultsPanel({entries,weekResults,setWeekResults,week,applyBulkResults,applyWeekResults,postSeasonInputs,setPSI,applyPostSeason,finalizeSeason,season,teamNames,schedule,history,onImportHistory,setupRows}) {
   const [entryWeek,setEntryWeek] = useState(week);
+  const [resultsTab,setResultsTab] = useState("weekly");
   const setWR=(i,f,v)=>setWeekResults(prev=>prev.map((r,idx)=>idx===i?{...r,[f]:v}:r));
   const thisWeekSchedule = schedule?.[entryWeek]||{};
   const entryYear = START_YEAR + season - 1;
 
   return (
     <div style={{display:"flex",flexDirection:"column",gap:16}}>
+
+      {/* Internal tab switcher */}
+      <Card style={{overflow:"hidden"}}>
+        <div style={{display:"flex",borderBottom:"2px solid #eee"}}>
+          <button onClick={()=>setResultsTab("weekly")} style={{flex:1,padding:"12px 16px",background:"transparent",border:"none",borderBottom:resultsTab==="weekly"?`3px solid ${RED}`:"3px solid transparent",color:resultsTab==="weekly"?"#111":"#888",cursor:"pointer",fontSize:12,fontWeight:800,fontFamily:ff,textTransform:"uppercase",letterSpacing:0.5}}>📋 Week Entry</button>
+          <button onClick={()=>setResultsTab("historical")} style={{flex:1,padding:"12px 16px",background:"transparent",border:"none",borderBottom:resultsTab==="historical"?`3px solid #333`:"3px solid transparent",color:resultsTab==="historical"?"#111":"#888",cursor:"pointer",fontSize:12,fontWeight:800,fontFamily:ff,textTransform:"uppercase",letterSpacing:0.5}}>📥 Historical Import</button>
+        </div>
+      </Card>
+
+      {resultsTab==="historical"&&<HistoricalImportPanel setupRows={setupRows} history={history||[]} onImport={onImportHistory}/>}
+      {resultsTab==="weekly"&&<>
 
       {/* Week / Season / Year selector */}
       <Card>
@@ -1484,7 +1496,7 @@ function EnterResultsPanel({entries,weekResults,setWeekResults,week,applyBulkRes
         </>);
       })()}
 
-      <HistoricalImportPanel setupRows={setupRows} history={history||[]} onImport={onImportHistory}/>
+      </>}
     </div>
   );
 }
