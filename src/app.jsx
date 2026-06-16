@@ -1364,7 +1364,7 @@ function SetupPanel({entries,setup,postSeasonInputs,setPSI,handleStart,setCommis
             </div>
           ))}
           <div style={{padding:"10px 14px"}}><button onClick={addRow} style={{background:"transparent",border:"1px dashed #ccc",borderRadius:2,padding:"7px 14px",color:"#888",cursor:"pointer",fontSize:12,fontFamily:ff,fontWeight:600,width:"100%"}}>+ Add Player</button></div>
-          {isLive&&<div style={{padding:"0 14px 12px"}}><button onClick={savePermNames} style={{background:permSaved?"#007a00":"#333",color:"#fff",border:"none",borderRadius:2,padding:"8px 16px",cursor:"pointer",fontFamily:ff,fontSize:12,fontWeight:800,textTransform:"uppercase"}}>{permSaved?"✓ Saved":"Save Permanent Names"}</button></div>}
+          <div style={{padding:"0 14px 12px"}}><button onClick={savePermNames} style={{background:permSaved?"#007a00":"#333",color:"#fff",border:"none",borderRadius:2,padding:"8px 16px",cursor:"pointer",fontFamily:ff,fontSize:12,fontWeight:800,textTransform:"uppercase"}}>{permSaved?"✓ Saved":"Save Permanent Names"}</button></div>
         </div>
       </Card>
 
