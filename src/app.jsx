@@ -523,7 +523,9 @@ function HistoryTab({history}) {
         {sel!==null&&(()=>{
           const s=sortedHistory.find((_,i)=>sel===_.year+"-"+i)||null;
           if(!s)return null;
-          const srt=[...s.finalStandings].sort((a,b)=>calcTotal(b)-calcTotal(a));
+          // Only show teams that actually played (have wins, losses, or non-zero pts)
+          const active=s.finalStandings.filter(t=>t.wins>0||t.losses>0||calcTotal(t)>0);
+          const srt=[...(active.length?active:s.finalStandings)].sort((a,b)=>calcTotal(b)-calcTotal(a));
           const top=calcTotal(srt[0]);
           return(
             <div style={{padding:"0 14px 14px"}}>
