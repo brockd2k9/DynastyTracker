@@ -1255,7 +1255,7 @@ function ProfileTab({history,setupRows,currentEntries,season,year,permanentUsers
 }
 
 // ── SetupPanel ────────────────────────────────────────────────────────────
-function SetupPanel({entries,setup,postSeasonInputs,setPSI,handleStart,setCommissionerUnlocked,season,year,setEntries,setWeekResults,setSetup,saveToDb}) {
+function SetupPanel({entries,setup,postSeasonInputs,setPSI,handleStart,setCommissionerUnlocked,season,year,setEntries,setWeekResults,setSetup,saveToDb,history,setHistory}) {
   const [setupRows,setSetupRows] = useState(setup?.rows?.length?setup.rows.map(r=>({userId:r.userId||"",userName:r.userName,teamName:r.teamName})):Array.from({length:4},()=>({userId:"",userName:"",teamName:""})));
   useEffect(()=>{if(setup?.rows?.length)setSetupRows(setup.rows.map(r=>({userId:r.userId||"",userName:r.userName,teamName:r.teamName})));},[setup?.rows]);
   const [setupLeague,setSetupLeague] = useState(setup?.leagueName||"");
@@ -1271,11 +1271,24 @@ function SetupPanel({entries,setup,postSeasonInputs,setPSI,handleStart,setCommis
   function savePermNames(){
     const valid=setupRows.filter(r=>r.userName.trim());
     if(valid.length<2)return alert("Need at least 2 users.");
-    const updatedRows=(setup?.rows||[]).map(r=>{const sr=valid.find(s=>s.userId===r.userId);return sr?{...r,userName:sr.userName.trim(),teamName:sr.teamName.trim()}:r;});
-    const updatedPerm=(setup?.permanentUsers||[]).map(p=>{const sr=valid.find(s=>s.userId===p.id);return sr?{...p,defaultName:sr.userName.trim()}:p;});
+    // Build userId→newName map for renaming
+    const nameMap={};
+    (setup?.permanentUsers||[]).forEach(p=>{const sr=valid.find(s=>s.userId===p.id);if(sr&&sr.userName.trim()!==p.defaultName)nameMap[p.id]=sr.userName.trim();});
+    const updatedRows=(setup?.rows||[]).map(r=>{const newName=nameMap[r.userId];return newName?{...r,userName:newName}:r;});
+    const updatedPerm=(setup?.permanentUsers||[]).map(p=>{const newName=nameMap[p.id];return newName?{...p,defaultName:newName}:p;});
     const updated={...setup,rows:updatedRows,permanentUsers:updatedPerm};
     setSetup(updated);
-    saveToDb({setup:updated});
+    // Propagate renames to live entries
+    const updatedEntries=entries.map(e=>{const newName=nameMap[e.userId];return newName?{...e,userName:newName}:e;});
+    if(updatedEntries!==entries)setEntries(updatedEntries);
+    // Propagate renames to all historical seasons
+    if(history?.length&&Object.keys(nameMap).length){
+      const updatedHistory=history.map(s=>({...s,finalStandings:s.finalStandings.map(t=>{const newName=nameMap[t.userId];return newName?{...t,userName:newName}:t;})}));
+      setHistory(updatedHistory);
+      saveToDb({setup:updated,entries:updatedEntries,history:updatedHistory});
+    } else {
+      saveToDb({setup:updated,entries:updatedEntries});
+    }
     setPermSaved(true);
     setTimeout(()=>setPermSaved(false),2000);
   }
@@ -2705,7 +2718,7 @@ export default function App() {
           {commTab==="Enter Results"&&<EnterResultsPanel entries={activeEntries} weekResults={weekResults} setWeekResults={setWeekResults} week={week} setWeek={setWeek} applyBulkResults={applyBulkResults} applyWeekResults={applyWeekResults} postSeasonInputs={postSeasonInputs} setPSI={setPSI} applyPostSeason={applyPostSeason} finalizeSeason={finalizeSeason} season={season} setSeason={setSeason} year={year} setYear={setYear} teamNames={teamNames} schedule={schedule} history={history} onImportHistory={importHistoricalSeason} setupRows={setup?.rows||[]} saveToDb={saveToDb}/>}
           {commTab==="Schedule"&&<SchedulePanel entries={activeEntries} schedule={schedule} setSchedule={setSchedule}/>}
           {commTab==="Content"&&<ContentHub sorted={sorted} entries={activeEntries} week={week} season={season} leagueName={leagueName} history={history} leader={leader} articles={articles} setArticles={setArticles} setActiveArticle={setActiveArticle} schedule={schedule}/>}
-          {commTab==="League Setup"&&<SetupPanel entries={entries} setup={setup} postSeasonInputs={postSeasonInputs} setPSI={setPSI} handleStart={handleStart} setCommissionerUnlocked={setCommUnlocked} season={season} year={year} setEntries={setEntries} setWeekResults={setWeekResults} setSetup={setSetup} saveToDb={saveToDb}/>}
+          {commTab==="League Setup"&&<SetupPanel entries={entries} setup={setup} postSeasonInputs={postSeasonInputs} setPSI={setPSI} handleStart={handleStart} setCommissionerUnlocked={setCommUnlocked} season={season} year={year} setEntries={setEntries} setWeekResults={setWeekResults} setSetup={setSetup} saveToDb={saveToDb} history={history} setHistory={setHistory}/>}
         </div>
       </div>}
     </div>
