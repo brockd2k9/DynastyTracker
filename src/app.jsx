@@ -1,5 +1,12 @@
 
-import { useState, useEffect, useCallback } from "react";
+import { useState, useEffect, useCallback, useContext, createContext } from "react";
+
+const NavCtx = createContext(null);
+function Name({children, userId, userName, style={}}) {
+  const nav = useContext(NavCtx);
+  if (!nav) return <span style={style}>{children}</span>;
+  return <span onClick={()=>nav(userId, userName)} style={{cursor:"pointer",textDecoration:"underline dotted",textUnderlineOffset:2,...style}} title={`View ${children}'s profile`}>{children}</span>;
+}
 
 function useIsMobile() {
   const [isMobile, setIsMobile] = useState(window.innerWidth < 768);
@@ -782,8 +789,8 @@ function HistoryTab({history, setHistory, saveToDb, commUnlocked, entries, setEn
                   return(
                   <tr key={t.teamName||t.userName} style={{borderBottom:"1px solid #eee",background:i===0?"#fff8f8":"transparent"}}>
                     <td style={{padding:"6px 4px",textAlign:"center",color:i===0?RED:"#bbb",fontWeight:800,fontSize:12}}>{i+1}</td>
-                    <td style={{padding:"6px 4px",color:"#111",fontWeight:i===0?800:400,whiteSpace:"nowrap"}}>{t.userName}</td>
-                    <td style={{padding:"6px 4px",color:"#888",fontSize:11,whiteSpace:"nowrap"}}>{t.teamName}</td>
+                    <td style={{padding:"6px 4px",color:"#111",fontWeight:i===0?800:400,whiteSpace:"nowrap"}}><Name userId={t.userId} userName={t.userName}>{t.userName}</Name></td>
+                    <td style={{padding:"6px 4px",color:"#888",fontSize:11,whiteSpace:"nowrap"}}><Name userId={t.userId} userName={t.userName}>{t.teamName}</Name></td>
                     {isEditing?(
                       <>
                         <td style={{padding:"3px 2px"}}>{numInp(t.wins||0,v=>setEditTeam(t.teamName,"wins",v),40)}</td>
@@ -1050,10 +1057,8 @@ function ScheduleTab({schedule,entries,week,season}) {
   );
 }
 
-function ProfileTab({history,setupRows,currentEntries,season,year,permanentUsers}) {
+function ProfileTab({history,setupRows,currentEntries,season,year,permanentUsers,sel,setSel,pTab,setPTab}) {
   const isMobile = useIsMobile();
-  const [sel,setSel] = useState(null);
-  const [pTab,setPTab] = useState("overview");
   const [expandedSeasons,setExpandedSeasons] = useState({});
   // Use permanentUsers if available, otherwise fall back to setupRows
   const allUsers = (permanentUsers?.length ? permanentUsers.map(u=>({userId:u.id,userName:u.defaultName,teamName:(setupRows||[]).find(r=>r.userId===u.id)?.teamName||u.teamName||""})) : setupRows)||[];
@@ -2206,7 +2211,7 @@ function RightRail({sorted,articles,entries,week,season,leader,setActiveArticle}
           </div></Card>
           <Card><CardHead bg={RED}>Full Standings</CardHead><div style={{padding:"4px 0"}}>
             {sorted.length===0&&<div style={{padding:"12px",fontSize:12,color:"#888",fontStyle:"italic"}}>No standings yet.</div>}
-            {sorted.map((t,i)=><div key={t.teamName} style={{display:"flex",alignItems:"center",gap:8,padding:"6px 12px",borderBottom:"1px solid #f5f5f5"}}><span style={{fontSize:12,fontWeight:800,color:i===0?RED:"#bbb",width:18,textAlign:"right"}}>{i+1}</span><div style={{flex:1,minWidth:0}}><div style={{fontSize:12,fontWeight:700,color:"#111",whiteSpace:"nowrap",overflow:"hidden",textOverflow:"ellipsis"}}>{t.teamName}</div></div><span style={{fontSize:13,fontWeight:900,color:i===0?RED:"#333",flexShrink:0}}>{calcT(t)}</span></div>)}
+            {sorted.map((t,i)=><div key={t.teamName} style={{display:"flex",alignItems:"center",gap:8,padding:"6px 12px",borderBottom:"1px solid #f5f5f5"}}><span style={{fontSize:12,fontWeight:800,color:i===0?RED:"#bbb",width:18,textAlign:"right"}}>{i+1}</span><div style={{flex:1,minWidth:0}}><Name userId={t.userId} userName={t.userName} style={{fontSize:12,fontWeight:700,color:"#111",whiteSpace:"nowrap",overflow:"hidden",textOverflow:"ellipsis",display:"block"}}>{t.teamName}</Name></div><span style={{fontSize:13,fontWeight:900,color:i===0?RED:"#333",flexShrink:0}}>{calcT(t)}</span></div>)}
           </div></Card>
     </div>
   );
@@ -2216,6 +2221,14 @@ function RightRail({sorted,articles,entries,week,season,leader,setActiveArticle}
 export default function App() {
   const [setup,setSetup] = useState(null);
   const [tab,setTab] = useState("Home");
+  const [profileSel,setProfileSel] = useState(null);
+  const [profilePTab,setProfilePTab] = useState("overview");
+  const goToProfile = useCallback((userId, userName)=>{
+    const key = userId || userName;
+    setProfileSel(key);
+    setProfilePTab("overview");
+    setTab("Profiles");
+  },[]);
   const [season,setSeason] = useState(1);
   const [year,setYear] = useState(2024);
   const [week,setWeek] = useState(1);
@@ -2485,6 +2498,7 @@ export default function App() {
   );
 
   return (
+    <NavCtx.Provider value={goToProfile}>
     <div style={{minHeight:"100vh",background:"#f0f0f0",color:"#111",fontFamily:ff,overflowX:"hidden",maxWidth:"100%",boxSizing:"border-box"}}>
       {/* Top black bar */}
       <div style={{background:"#111",padding:"0 12px",height:44,display:"flex",alignItems:"center",gap:10,position:"sticky",top:0,zIndex:200}}>
@@ -2565,7 +2579,7 @@ export default function App() {
                   <tbody>{sorted.map((t,i)=>{const tot=calcTotal(t);const beh=leader-tot;return(
                     <tr key={t.teamName} style={{borderBottom:"1px solid #eee",background:i===0?"#fff8f8":i%2===0?"#fafafa":"#fff"}}>
                       <td style={{padding:"9px 8px",textAlign:"center",fontWeight:900,color:i===0?RED:"#bbb"}}>{i+1}</td>
-                      <td style={{padding:"9px 8px",fontWeight:i===0?800:600,color:"#111",whiteSpace:"nowrap"}}>{t.teamName}</td>
+                      <td style={{padding:"9px 8px",fontWeight:i===0?800:600,color:"#111",whiteSpace:"nowrap"}}><Name userId={t.userId} userName={t.userName}>{t.teamName}</Name><div style={{fontSize:10,color:"#888"}}>{t.userName}</div></td>
                       <td style={{padding:"9px 8px",textAlign:"center",fontWeight:900,color:i===0?RED:"#111",fontSize:15}}>{tot}</td>
                       <td style={{padding:"9px 8px",textAlign:"center",color:beh===0?"#007a00":RED,fontWeight:700}}>{beh===0?"-":`-${beh}`}</td>
                       <td style={{padding:"9px 8px",textAlign:"center",color:"#555",fontWeight:600,fontSize:12}}>{t.wins}-{t.losses}</td>
@@ -2624,7 +2638,7 @@ export default function App() {
                     <tbody>{sorted.map((t,i)=>{const tot=calcTotal(t);const beh=leader-tot;return(
                       <tr key={t.teamName} style={{borderBottom:"1px solid #eee",background:i===0?"#fff8f8":i%2===0?"#fafafa":"#fff"}}>
                         <td style={{padding:isMobile?"8px 6px":"10px 7px",textAlign:"center",fontWeight:900,fontSize:isMobile?13:14,color:i===0?RED:"#bbb",borderRight:"1px solid #eee"}}>{i+1}</td>
-                        <td style={{padding:isMobile?"8px 6px":"10px 7px",fontWeight:i===0?800:600,color:"#111",whiteSpace:"nowrap",borderRight:"1px solid #eee",maxWidth:isMobile?90:140,overflow:"hidden",textOverflow:"ellipsis"}}>{t.teamName}</td>
+                        <td style={{padding:isMobile?"8px 6px":"10px 7px",fontWeight:i===0?800:600,color:"#111",whiteSpace:"nowrap",borderRight:"1px solid #eee",maxWidth:isMobile?90:140,overflow:"hidden",textOverflow:"ellipsis"}}><Name userId={t.userId} userName={t.userName}>{t.teamName}</Name>{!isMobile&&<div style={{fontSize:10,color:"#888",fontWeight:400}}>{t.userName}</div>}</td>
                         <td style={{padding:isMobile?"8px 6px":"10px 7px",textAlign:"center",fontWeight:900,color:i===0?RED:"#111",fontSize:isMobile?14:16,background:i===0?"#fff0f0":"transparent",borderRight:"2px solid #ddd"}}>{tot}</td>
                         <td style={{padding:isMobile?"8px 6px":"10px 7px",textAlign:"center",color:beh===0?"#007a00":RED,fontWeight:700,fontSize:isMobile?11:12,borderRight:"2px solid #ddd",whiteSpace:"nowrap"}}>{beh===0?"-":`-${beh}`}</td>
                         <td style={{padding:isMobile?"8px 6px":"10px 7px",textAlign:"center",color:"#555",fontWeight:600,fontSize:isMobile?11:12,borderRight:"1px solid #eee",whiteSpace:"nowrap"}}>{t.wins}-{t.losses}</td>
@@ -2665,7 +2679,7 @@ export default function App() {
           </>)}
 
           {tab==="History"&&<HistoryTab history={history} setHistory={setHistory} saveToDb={saveToDb} commUnlocked={commUnlocked} yearRosters={setup?.yearRosters} permanentUsers={setup?.permanentUsers}/>}
-          {tab==="Profiles"&&<ProfileTab history={history} setupRows={setup?.rows||[]} currentEntries={entries} season={season} year={year} permanentUsers={setup?.permanentUsers}/>}
+          {tab==="Profiles"&&<ProfileTab history={history} setupRows={setup?.rows||[]} currentEntries={entries} season={season} year={year} permanentUsers={setup?.permanentUsers} sel={profileSel} setSel={setProfileSel} pTab={profilePTab} setPTab={setProfilePTab}/>}
           {tab==="Schedule"&&<ScheduleTab schedule={schedule} entries={activeEntries} week={week} season={season}/>}
           {tab==="Rules"&&<div style={{display:"grid",gridTemplateColumns:isMobile?"1fr":"repeat(auto-fill,minmax(250px,1fr))",gap:10}}>
             {[["🏈 Regular Season",[["Win","15 pts"],["Win vs Top 25","+5 bonus"],["Win vs Top 10","+10 bonus"],["Loss","0 pts"]]],["📊 Conference Standings",[["1st","50"],["2nd","43"],["3rd","36"],["4th","30"],["5th","24"],["6th","18"],["7th","14"],["8th","10"],["9th","7"],["10th","5"],["11th","3"],["12th","1"]]],["🏆 Conference Championship",[["Make the Game","10 pts"],["Win the Game","15 pts"]]],["🥣 Bowl & Playoff",[["Make a Bowl","5 pts"],["Win a Bowl","+10 pts"],["Make CFP","15 pts"],["Win National Championship","+25 pts"]]],["🎓 Recruiting (Top 5 Users)",[["#1","15 pts"],["#2","10 pts"],["#3","7 pts"],["#4","5 pts"],["#5","3 pts"]]],["🏅 Dynasty Top 5",[["#1 in Dynasty","15 pts"],["#2 in Dynasty","10 pts"],["#3 in Dynasty","7 pts"],["#4 in Dynasty","5 pts"],["#5 in Dynasty","3 pts"]]],["⭐ Prestige & Awards",[["Gain a Prestige Star","10 pts"],["Reach Max Prestige","10 pts"],["Heisman Winner","15 pts"]]]].map(([title,rows])=><Card key={title} style={{overflow:"hidden"}}><CardHead bg={RED}>{title}</CardHead><table style={{width:"100%",borderCollapse:"collapse"}}><tbody>{rows.map(([l,p])=><tr key={l} style={{borderBottom:"1px solid #f0f0f0"}}><td style={{padding:"8px 12px",color:"#333",fontSize:13}}>{l}</td><td style={{padding:"8px 12px",textAlign:"right",color:RED,fontWeight:800,fontSize:13}}>{p}</td></tr>)}</tbody></table></Card>)}
@@ -2744,5 +2758,6 @@ export default function App() {
         </div>
       </div>}
     </div>
+    </NavCtx.Provider>
   );
 }
