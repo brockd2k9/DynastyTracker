@@ -1697,7 +1697,7 @@ function HistoricalImportPanel({setupRows, history, onImport}) {
 }
 
 // ── EnterResultsPanel ─────────────────────────────────────────────────────
-function EnterResultsPanel({entries,weekResults,setWeekResults,week,applyBulkResults,applyWeekResults,postSeasonInputs,setPSI,applyPostSeason,finalizeSeason,season,teamNames,schedule,history,onImportHistory,setupRows}) {
+function EnterResultsPanel({entries,weekResults,setWeekResults,week,setWeek,applyBulkResults,applyWeekResults,postSeasonInputs,setPSI,applyPostSeason,finalizeSeason,season,setSeason,teamNames,schedule,history,onImportHistory,setupRows,saveToDb}) {
   const [entryWeek,setEntryWeek] = useState(week);
   const [resultsTab,setResultsTab] = useState("weekly");
   const setWR=(i,f,v)=>setWeekResults(prev=>prev.map((r,idx)=>idx===i?{...r,[f]:v}:r));
@@ -1724,7 +1724,9 @@ function EnterResultsPanel({entries,weekResults,setWeekResults,week,applyBulkRes
         <div style={{padding:"14px 16px",display:"flex",flexWrap:"wrap",gap:20,alignItems:"flex-end"}}>
           <div>
             <div style={{fontSize:10,fontWeight:700,color:"#888",textTransform:"uppercase",letterSpacing:1,marginBottom:6}}>Season</div>
-            <div style={{fontSize:16,fontWeight:900,color:"#111",padding:"8px 12px",background:"#f7f7f7",border:"1px solid #ddd",borderRadius:2,minWidth:60,textAlign:"center"}}>S{season}</div>
+            <select value={season} onChange={e=>{const s=Number(e.target.value);setSeason(s);setEntryWeek(week);if(saveToDb)saveToDb({season:s});}} style={{fontSize:16,fontWeight:700,color:"#111",padding:"8px 12px",background:"#fff",border:`2px solid #cc0000`,borderRadius:2,cursor:"pointer",fontFamily:"'Helvetica Neue',Arial,sans-serif",minWidth:60}}>
+              {Array.from({length:20},(_,i)=>i+1).map(s=><option key={s} value={s}>S{s}</option>)}
+            </select>
           </div>
           <div>
             <div style={{fontSize:10,fontWeight:700,color:"#888",textTransform:"uppercase",letterSpacing:1,marginBottom:6}}>Year</div>
@@ -1732,8 +1734,8 @@ function EnterResultsPanel({entries,weekResults,setWeekResults,week,applyBulkRes
           </div>
           <div>
             <div style={{fontSize:10,fontWeight:700,color:"#888",textTransform:"uppercase",letterSpacing:1,marginBottom:6}}>Week</div>
-            <select value={entryWeek} onChange={e=>setEntryWeek(Number(e.target.value))} style={{fontSize:16,fontWeight:700,color:"#111",padding:"8px 12px",background:"#fff",border:`2px solid #cc0000`,borderRadius:2,cursor:"pointer",fontFamily:"'Helvetica Neue',Arial,sans-serif",minWidth:80}}>
-              {Array.from({length:12},(_,i)=>i+1).map(w=><option key={w} value={w}>Week {w}{w===week?" (current)":""}</option>)}
+            <select value={entryWeek} onChange={e=>{const w=Number(e.target.value);setEntryWeek(w);}} style={{fontSize:16,fontWeight:700,color:"#111",padding:"8px 12px",background:"#fff",border:`2px solid #cc0000`,borderRadius:2,cursor:"pointer",fontFamily:"'Helvetica Neue',Arial,sans-serif",minWidth:80}}>
+              {Array.from({length:16},(_,i)=>i+1).map(w=><option key={w} value={w}>Week {w}{w===week?" (current)":""}</option>)}
             </select>
           </div>
           {entryWeek!==week&&<div style={{padding:"6px 12px",background:"#fffbf0",border:"1px solid #f0c040",borderRadius:2,fontSize:12,color:"#886600",fontWeight:600}}>⚠ Entering results for a past week — global week will not advance</div>}
@@ -2534,7 +2536,7 @@ export default function App() {
         </div>
         <div style={{maxWidth:800,margin:"0 auto",padding:"20px 14px"}}>
           {commTab==="Season History"&&<HistoryTab history={history} setHistory={setHistory} saveToDb={saveToDb} commUnlocked={true}/>}
-          {commTab==="Enter Results"&&<EnterResultsPanel entries={activeEntries} weekResults={weekResults} setWeekResults={setWeekResults} week={week} applyBulkResults={applyBulkResults} applyWeekResults={applyWeekResults} postSeasonInputs={postSeasonInputs} setPSI={setPSI} applyPostSeason={applyPostSeason} finalizeSeason={finalizeSeason} season={season} teamNames={teamNames} schedule={schedule} history={history} onImportHistory={importHistoricalSeason} setupRows={setup?.rows||[]}/>}
+          {commTab==="Enter Results"&&<EnterResultsPanel entries={activeEntries} weekResults={weekResults} setWeekResults={setWeekResults} week={week} setWeek={setWeek} applyBulkResults={applyBulkResults} applyWeekResults={applyWeekResults} postSeasonInputs={postSeasonInputs} setPSI={setPSI} applyPostSeason={applyPostSeason} finalizeSeason={finalizeSeason} season={season} setSeason={setSeason} teamNames={teamNames} schedule={schedule} history={history} onImportHistory={importHistoricalSeason} setupRows={setup?.rows||[]} saveToDb={saveToDb}/>}
           {commTab==="Schedule"&&<SchedulePanel entries={activeEntries} schedule={schedule} setSchedule={setSchedule}/>}
           {commTab==="Content"&&<ContentHub sorted={sorted} entries={activeEntries} week={week} season={season} leagueName={leagueName} history={history} leader={leader} articles={articles} setArticles={setArticles} setActiveArticle={setActiveArticle} schedule={schedule}/>}
           {commTab==="League Setup"&&<SetupPanel entries={entries} setup={setup} postSeasonInputs={postSeasonInputs} setPSI={setPSI} handleStart={handleStart} setCommissionerUnlocked={setCommUnlocked} season={season} setEntries={setEntries} setWeekResults={setWeekResults} setSetup={setSetup} saveToDb={saveToDb}/>}
