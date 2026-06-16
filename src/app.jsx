@@ -2060,6 +2060,7 @@ function ContentHub({sorted,entries,week,season,year,leagueName,history,leader,a
   const [contentType,setContentType] = useState("powerrankings");
   const [breakingSubject,setBreakingSubject] = useState("");
   const [breakingGuidance,setBreakingGuidance] = useState("");
+  const [articleLength,setArticleLength] = useState("medium");
   const [draftArticle,setDraftArticle] = useState(null);
   const [draftText,setDraftText] = useState("");
   const [revisionNote,setRevisionNote] = useState("");
@@ -2184,18 +2185,20 @@ function ContentHub({sorted,entries,week,season,year,leagueName,history,leader,a
     const subjectRecord = subjectEntry ? ` (currently ${subjectEntry.wins}W-${subjectEntry.losses}L, ${calcTotal(subjectEntry)} pts)` : "";
 
     const scheduleContext = upcomingSchedule ? `\n\nUPCOMING SCHEDULE:\n${upcomingSchedule}` : "";
+    const lengthMap = {short:"150-200 words",medium:"350-450 words",long:"650-800 words"};
+    const wordTarget = lengthMap[articleLength]||"350-450 words";
     const prompts = {
-      powerrankings: `${byline}Write weekly power rankings after Season ${season} Week ${week-1}.\n\nCurrent points standings:\n${standingsText}\n\nLast week's matchups:\n${lastWeekMatchups}${scheduleContext}\n\nRank all ${entries.length} teams 1-${entries.length} with a punchy 2-3 sentence blurb each. Reference actual matchups and upcoming schedules. Rankings can differ from points based on momentum and schedule difficulty. Be opinionated. Format as:\n1. [Team] — [blurb]\n2. etc.`,
+      powerrankings: `${byline}Write weekly power rankings after Season ${season} Week ${week-1}.\n\nCurrent points standings:\n${standingsText}\n\nLast week's matchups:\n${lastWeekMatchups}${scheduleContext}\n\nTarget length: ${wordTarget}. Rank all ${entries.length} teams 1-${entries.length} with punchy blurbs. Reference actual matchups and upcoming schedules. Rankings can differ from points based on momentum and schedule difficulty. Be opinionated. Format as:\n1. [Team] — [blurb]\n2. etc.`,
 
-      preview: `${byline}Write a Week ${week} game preview article for the "${leagueName}" dynasty, Season ${season}.\n\nCurrent standings:\n${standingsText}\n\nTHIS WEEK'S ACTUAL MATCHUPS:\n${thisWeekMatchups}\n\nWrite 400 words previewing the actual scheduled matchups above. Discuss storylines, what's at stake for each team, who has the edge. Reference the real games — do not make up different matchups. Write in your distinct voice.`,
+      preview: `${byline}Write a Week ${week} game preview article for the "${leagueName}" dynasty, Season ${season}.\n\nCurrent standings:\n${standingsText}\n\nTHIS WEEK'S ACTUAL MATCHUPS:\n${thisWeekMatchups}\n\nTarget length: ${wordTarget}. Preview the actual scheduled matchups. Discuss storylines, what's at stake for each team, who has the edge. Reference the real games — do not make up different matchups. Write in your distinct voice.`,
 
-      recap: `${byline}Write a dramatic weekly recap for Season ${season} Week ${week-1} of the "${leagueName}" dynasty.\n\nStandings after this week:\n${standingsText}\n\nLast week's matchups:\n${lastWeekMatchups}\n\nWrite 400 words recapping last week's actual games. Make up exciting scores and game details for the real matchups listed above. Highlight upsets, dominant performances, and dynasty implications. Write in your distinct voice.`,
+      recap: `${byline}Write a dramatic weekly recap for Season ${season} Week ${week-1} of the "${leagueName}" dynasty.\n\nStandings after this week:\n${standingsText}\n\nLast week's matchups:\n${lastWeekMatchups}\n\nTarget length: ${wordTarget}. Recap last week's actual games. Make up exciting scores and game details for the real matchups listed above. Highlight upsets, dominant performances, and dynasty implications. Write in your distinct voice.`,
 
-      seasonpreview: `${byline}Write a Season ${season} (${year}) preview for the "${leagueName}" dynasty.\n\nTeams:\n${entries.map(e=>e.teamName).join("\n")}\n${history.length>0?`\nDefending champion: ${history[history.length-1].champion}`:"This is the inaugural season."}\n${upcomingSchedule?`\nEarly schedule:\n${upcomingSchedule}`:""}\n\nWrite 450 words previewing the season. Give each team a one-line outlook, predict a champion, name dark horses and sleepers, and build excitement. Write in your distinct voice.`,
+      seasonpreview: `${byline}Write a Season ${season} (${year}) preview for the "${leagueName}" dynasty.\n\nTeams:\n${entries.map(e=>e.teamName).join("\n")}\n${history.length>0?`\nDefending champion: ${history[history.length-1].champion}`:"This is the inaugural season."}\n${upcomingSchedule?`\nEarly schedule:\n${upcomingSchedule}`:""}\n\nTarget length: ${wordTarget}. Give each team a one-line outlook, predict a champion, name dark horses and sleepers, and build excitement. Write in your distinct voice.`,
 
-      hotakes: `${byline}Write a spicy hot takes column for Season ${season} Week ${week-1} of the "${leagueName}" dynasty.\n\nStandings:\n${standingsText}\n\nLast week's matchups:\n${lastWeekMatchups}\n\nWrite 5 bold, controversial hot takes. Reference real matchups and team names. Each take 2-3 sentences, provocative and specific. Number 1-5. Write in your distinct voice.`,
+      hotakes: `${byline}Write a spicy hot takes column for Season ${season} Week ${week-1} of the "${leagueName}" dynasty.\n\nStandings:\n${standingsText}\n\nLast week's matchups:\n${lastWeekMatchups}\n\nTarget length: ${wordTarget}. Write bold, controversial hot takes. Reference real matchups and team names. Each take 2-3 sentences, provocative and specific. Number them. Write in your distinct voice.`,
 
-      breaking: `${byline}Write a BREAKING NEWS article for the "${leagueName}" dynasty, Season ${season} Week ${week}.${subjectContext}\n\nSUBJECT: ${breakingSubject}${subjectRecord}\nBREAKING NEWS ANGLE: ${breakingGuidance}\n\nCurrent standings context:\n${standingsText}\n\nWrite 300-400 words in a breathless breaking-news style — urgent, dramatic, with a punchy headline. Lead with the headline (ALL CAPS), then the story. Let the subject's personality and known traits color the narrative heavily. Be wild, irreverent, and entertaining. Reference their standing in the league and what this news means for the dynasty season. Make it feel like a legitimate sports scandal or bombshell dropped mid-season. Write in your distinct voice.`,
+      breaking: `${byline}Write a BREAKING NEWS article for the "${leagueName}" dynasty, Season ${season} Week ${week}.${subjectContext}\n\nSUBJECT: ${breakingSubject}${subjectRecord}\nBREAKING NEWS ANGLE: ${breakingGuidance}\n\nCurrent standings context:\n${standingsText}\n\nTarget length: ${wordTarget}. Write in a breathless breaking-news style — urgent, dramatic, with a punchy headline in ALL CAPS. Let the subject's personality and known traits color the narrative heavily. Be wild, irreverent, and entertaining. Reference their standing in the league and what this news means for the dynasty season. Make it feel like a legitimate sports scandal or bombshell dropped mid-season. Write in your distinct voice.`,
     };
 
     try {
@@ -2265,6 +2268,13 @@ function ContentHub({sorted,entries,week,season,year,leagueName,history,leader,a
           </div>
         )}
 
+        <div style={{display:"flex",alignItems:"center",gap:8,marginBottom:12}}>
+          <span style={{fontSize:11,fontWeight:700,color:"#555",textTransform:"uppercase",letterSpacing:0.5}}>Length:</span>
+          {[["short","Short","~175 words"],["medium","Medium","~400 words"],["long","Long","~700 words"]].map(([val,label,hint])=>(
+            <button key={val} onClick={()=>setArticleLength(val)} title={hint} style={{padding:"5px 12px",borderRadius:2,border:"1px solid",borderColor:articleLength===val?(contentType==="breaking"?RED:reporter.color):"#ddd",background:articleLength===val?(contentType==="breaking"?RED:reporter.color):"#fff",color:articleLength===val?"#fff":"#666",cursor:"pointer",fontSize:11,fontFamily:ff,fontWeight:700,textTransform:"uppercase"}}>{label}</button>
+          ))}
+          <span style={{fontSize:10,color:"#aaa"}}>{articleLength==="short"?"~175 words":articleLength==="long"?"~700 words":"~400 words"}</span>
+        </div>
         {genError&&<div style={{background:"#fff0f0",border:"1px solid #ffcccc",borderRadius:2,padding:"10px 14px",fontSize:12,color:RED,marginBottom:4}}><strong>Error:</strong> {genError}</div>}
         <button onClick={()=>generate(contentType)} disabled={!!generating} style={{background:generating?"#ccc":contentType==="breaking"?RED:reporter.color,color:"#fff",border:"none",borderRadius:2,padding:"11px 22px",cursor:generating?"not-allowed":"pointer",fontFamily:ff,fontSize:13,fontWeight:800,textTransform:"uppercase",display:"flex",alignItems:"center",gap:8}}>
           {generating?<>Generating...</>:contentType==="breaking"?<>🚨 Break the Story</>:<><span style={{background:"rgba(255,255,255,0.2)",borderRadius:"50%",width:22,height:22,display:"flex",alignItems:"center",justifyContent:"center",fontSize:10,fontWeight:800}}>{reporter.avatar}</span> Generate as {reporter.name.split(" ")[0]}</>}
