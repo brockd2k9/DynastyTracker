@@ -2053,13 +2053,36 @@ const REPORTERS = [
 ];
 
 // ── Content Hub Tab ───────────────────────────────────────────────────────
-function ContentHub({sorted,entries,week,season,year,leagueName,history,leader,articles,setArticles,setActiveArticle,schedule}) {
+function ContentHub({sorted,entries,week,season,year,leagueName,history,leader,articles,setArticles,setActiveArticle,schedule,setup,setSetup,saveToDb}) {
   const [generating,setGenerating] = useState(null);
   const [genError,setGenError] = useState(null);
   const [selectedReporter,setSelectedReporter] = useState(0);
   const [contentType,setContentType] = useState("powerrankings");
   const [draftArticle,setDraftArticle] = useState(null);
   const [draftText,setDraftText] = useState("");
+  const [bibleProfiles,setBibleProfiles] = useState(()=>(setup?.leagueBible?.profiles||[]).length>0?setup.leagueBible.profiles:entries.map(e=>({name:e.userName||e.teamName,bio:""})));
+  const [bibleStorylines,setBibleStorylines] = useState(setup?.leagueBible?.storylines||"");
+  const [bibleSaved,setBibleSaved] = useState(false);
+  useEffect(()=>{if(setup?.leagueBible?.profiles?.length)setBibleProfiles(setup.leagueBible.profiles);if(setup?.leagueBible?.storylines!==undefined)setBibleStorylines(setup.leagueBible.storylines);},[setup?.leagueBible]);
+
+  function saveBible(){
+    const bible={profiles:bibleProfiles,storylines:bibleStorylines};
+    const updatedSetup={...setup,leagueBible:bible};
+    setSetup(updatedSetup);
+    saveToDb({setup:updatedSetup});
+    setBibleSaved(true);
+    setTimeout(()=>setBibleSaved(false),2000);
+  }
+
+  const bibleContext = (()=>{
+    const profiles=(setup?.leagueBible?.profiles||[]).filter(p=>p.bio?.trim());
+    const storylines=(setup?.leagueBible?.storylines||"").trim();
+    if(!profiles.length&&!storylines)return "";
+    let ctx="";
+    if(profiles.length){ctx+=`\n\nLEAGUE PERSONALITIES — use these character details to add color, storylines, and personality to your writing. Reference them naturally and with humor where appropriate:\n${profiles.map(p=>`${p.name}: ${p.bio}`).join("\n")}`;}
+    if(storylines){ctx+=`\n\nLEAGUE STORYLINES — weave these season narratives into your writing naturally:\n${storylines}`;}
+    return ctx;
+  })();
 
   const standingsText = sorted.map((t,i)=>{const tot=calcTotal(t);return `${i+1}. ${t.teamName} — ${t.wins}W ${t.losses}L — ${tot} pts${i===0?" [LEADER]":` (-${leader-tot})`}`;}).join("\n");
 
@@ -2097,7 +2120,7 @@ function ContentHub({sorted,entries,week,season,year,leagueName,history,leader,a
     const r = reporter;
     const leagueAge = history.length > 0 ? `This is year ${year} of the league (its ${year===2024?"1st":year===2025?"2nd":year===2026?"3rd":year===2027?"4th":year===2028?"5th":(year-2023)+"th"} year of existence, founded in 2024). ` : "";
     const pastChamps = history.length > 0 ? `Past dynasty champions: ${[...history].reverse().slice(0,5).map(s=>`${s.year} S${s.seasonNum||"?"}: ${s.champion}`).join(", ")}. ` : "";
-    const byline = `You are ${r.name}, ${r.title} for Dynasty Central covering the "${leagueName}" dynasty. Your writing style is ${r.style}\n\n${leagueAge}${pastChamps}This is NOT the inaugural season — the league has history and established rivalries.\n\nAlways sign your articles with your name and title at the end.\n\n`;
+    const byline = `You are ${r.name}, ${r.title} for Dynasty Central covering the "${leagueName}" dynasty. Your writing style is ${r.style}\n\n${leagueAge}${pastChamps}This is NOT the inaugural season — the league has history and established rivalries.${bibleContext}\n\nAlways sign your articles with your name and title at the end.\n\n`;
 
     const scheduleContext = upcomingSchedule ? `\n\nUPCOMING SCHEDULE:\n${upcomingSchedule}` : "";
     const prompts = {
@@ -2165,6 +2188,36 @@ function ContentHub({sorted,entries,week,season,year,leagueName,history,leader,a
         <button onClick={()=>generate(contentType)} disabled={!!generating} style={{background:generating?"#ccc":reporter.color,color:"#fff",border:"none",borderRadius:2,padding:"11px 22px",cursor:generating?"not-allowed":"pointer",fontFamily:ff,fontSize:13,fontWeight:800,textTransform:"uppercase",display:"flex",alignItems:"center",gap:8}}>
           {generating?<>Generating...</>:<><span style={{background:"rgba(255,255,255,0.2)",borderRadius:"50%",width:22,height:22,display:"flex",alignItems:"center",justifyContent:"center",fontSize:10,fontWeight:800}}>{reporter.avatar}</span> Generate as {reporter.name.split(" ")[0]}</>}
         </button>
+      </Card>
+
+      {/* League Bible */}
+      <Card style={{overflow:"hidden"}}>
+        <CardHead bg="#1a3a6b">League Bible</CardHead>
+        <div style={{padding:14,display:"flex",flexDirection:"column",gap:14}}>
+          <div style={{fontSize:12,color:"#666",lineHeight:1.5}}>Character profiles and storylines are injected into every AI writer's system prompt automatically. The more detail you add, the better the articles.</div>
+
+          <div>
+            <div style={{fontSize:11,fontWeight:800,textTransform:"uppercase",letterSpacing:0.5,color:"#333",marginBottom:8}}>Character Profiles</div>
+            <div style={{display:"flex",flexDirection:"column",gap:8}}>
+              {bibleProfiles.map((p,i)=>(
+                <div key={i} style={{display:"grid",gridTemplateColumns:"160px 1fr auto",gap:8,alignItems:"start"}}>
+                  <input value={p.name} onChange={e=>{const next=[...bibleProfiles];next[i]={...next[i],name:e.target.value};setBibleProfiles(next);}} placeholder="Name" style={{padding:"7px 10px",border:"1px solid #ddd",borderRadius:2,fontSize:12,fontFamily:ff,color:"#111"}}/>
+                  <input value={p.bio} onChange={e=>{const next=[...bibleProfiles];next[i]={...next[i],bio:e.target.value};setBibleProfiles(next);}} placeholder="Personality, backstory, traits, quirks…" style={{padding:"7px 10px",border:"1px solid #ddd",borderRadius:2,fontSize:12,fontFamily:ff,color:"#111"}}/>
+                  <button onClick={()=>setBibleProfiles(bibleProfiles.filter((_,j)=>j!==i))} style={{background:"transparent",border:"1px solid #ddd",borderRadius:2,padding:"7px 10px",cursor:"pointer",fontSize:13,color:"#aaa",fontFamily:ff}}>×</button>
+                </div>
+              ))}
+              <button onClick={()=>setBibleProfiles([...bibleProfiles,{name:"",bio:""}])} style={{alignSelf:"flex-start",background:"#f5f5f5",border:"1px solid #ddd",borderRadius:2,padding:"7px 14px",cursor:"pointer",fontSize:12,fontFamily:ff,fontWeight:700,color:"#555",textTransform:"uppercase"}}>+ Add Character</button>
+            </div>
+          </div>
+
+          <div>
+            <div style={{fontSize:11,fontWeight:800,textTransform:"uppercase",letterSpacing:0.5,color:"#333",marginBottom:6}}>League Storylines</div>
+            <div style={{fontSize:11,color:"#888",marginBottom:6}}>Season-wide narratives — rivalries, vendettas, redemption arcs, ongoing drama.</div>
+            <textarea value={bibleStorylines} onChange={e=>setBibleStorylines(e.target.value)} placeholder="e.g. Jeff Fisher and Dirt McSquirt have an ongoing rivalry after the controversial Week 4 game last season. Jelly Roll is on a redemption arc after his dynasty collapse in 2025…" style={{width:"100%",minHeight:100,padding:"9px 11px",border:"1px solid #ddd",borderRadius:2,fontSize:12,fontFamily:ff,lineHeight:1.6,resize:"vertical",boxSizing:"border-box",color:"#222"}}/>
+          </div>
+
+          <button onClick={saveBible} style={{alignSelf:"flex-start",background:bibleSaved?"#007a00":"#1a3a6b",color:"#fff",border:"none",borderRadius:2,padding:"10px 20px",cursor:"pointer",fontFamily:ff,fontSize:12,fontWeight:800,textTransform:"uppercase",transition:"background 0.2s"}}>{bibleSaved?"✓ Saved":"Save League Bible"}</button>
+        </div>
       </Card>
 
       {/* Draft preview */}
@@ -2784,7 +2837,7 @@ export default function App() {
           {commTab==="Season History"&&<HistoryTab history={history} setHistory={setHistory} saveToDb={saveToDb} commUnlocked={true} entries={entries} setEntries={setEntries} season={season} week={week} setWeek={setWeek} yearRosters={setup?.yearRosters} permanentUsers={setup?.permanentUsers}/>}
           {commTab==="Enter Results"&&<EnterResultsPanel entries={activeEntries} weekResults={weekResults} setWeekResults={setWeekResults} week={week} setWeek={setWeek} applyBulkResults={applyBulkResults} applyWeekResults={applyWeekResults} postSeasonInputs={postSeasonInputs} setPSI={setPSI} applyPostSeason={applyPostSeason} finalizeSeason={finalizeSeason} season={season} setSeason={setSeason} year={year} setYear={setYear} teamNames={teamNames} schedule={schedule} history={history} onImportHistory={importHistoricalSeason} setupRows={setup?.rows||[]} saveToDb={saveToDb}/>}
           {commTab==="Schedule"&&<SchedulePanel entries={activeEntries} schedule={schedule} setSchedule={setSchedule}/>}
-          {commTab==="Content"&&<ContentHub sorted={sorted} entries={activeEntries} week={week} season={season} year={year} leagueName={leagueName} history={history} leader={leader} articles={articles} setArticles={setArticles} setActiveArticle={setActiveArticle} schedule={schedule}/>}
+          {commTab==="Content"&&<ContentHub sorted={sorted} entries={activeEntries} week={week} season={season} year={year} leagueName={leagueName} history={history} leader={leader} articles={articles} setArticles={setArticles} setActiveArticle={setActiveArticle} schedule={schedule} setup={setup} setSetup={setSetup} saveToDb={saveToDb}/>}
           {commTab==="League Setup"&&<SetupPanel entries={entries} setup={setup} postSeasonInputs={postSeasonInputs} setPSI={setPSI} handleStart={handleStart} setCommissionerUnlocked={setCommUnlocked} season={season} year={year} setEntries={setEntries} setWeekResults={setWeekResults} setSetup={setSetup} saveToDb={saveToDb} history={history} setHistory={setHistory}/>}
         </div>
       </div>}
