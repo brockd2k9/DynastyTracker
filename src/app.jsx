@@ -2058,6 +2058,8 @@ function ContentHub({sorted,entries,week,season,year,leagueName,history,leader,a
   const [genError,setGenError] = useState(null);
   const [selectedReporter,setSelectedReporter] = useState(0);
   const [contentType,setContentType] = useState("powerrankings");
+  const [draftArticle,setDraftArticle] = useState(null);
+  const [draftText,setDraftText] = useState("");
 
   const standingsText = sorted.map((t,i)=>{const tot=calcTotal(t);return `${i+1}. ${t.teamName} — ${t.wins}W ${t.losses}L — ${tot} pts${i===0?" [LEADER]":` (-${leader-tot})`}`;}).join("\n");
 
@@ -2114,9 +2116,9 @@ function ContentHub({sorted,entries,week,season,year,leagueName,history,leader,a
       const text = cleanArticle(await callClaude(prompts[type]));
       const labels = {powerrankings:"📊 Power Rankings",preview:"🔭 Week Preview",recap:"📰 Weekly Recap",seasonpreview:"🏈 Season Preview",hotakes:"🔥 Hot Takes"};
       const label = labels[type]||"📰 Article";
-      const newArticles = [{id:Date.now(),type,label,week,season,text,reporter:r.name,reporterColor:r.color,reporterAvatar:r.avatar},...articles].slice(0,30);
-      setArticles(newArticles);
-      dbSave({articles:newArticles});
+      const draft = {id:Date.now(),type,label,week,season,text,reporter:r.name,reporterColor:r.color,reporterAvatar:r.avatar};
+      setDraftArticle(draft);
+      setDraftText(text);
     } catch(e) {
       setGenError(e.message);
     } finally {
@@ -2164,6 +2166,29 @@ function ContentHub({sorted,entries,week,season,year,leagueName,history,leader,a
           {generating?<>Generating...</>:<><span style={{background:"rgba(255,255,255,0.2)",borderRadius:"50%",width:22,height:22,display:"flex",alignItems:"center",justifyContent:"center",fontSize:10,fontWeight:800}}>{reporter.avatar}</span> Generate as {reporter.name.split(" ")[0]}</>}
         </button>
       </Card>
+
+      {/* Draft preview */}
+      {draftArticle&&(
+        <Card style={{overflow:"hidden",border:`2px solid ${reporter.color}`}}>
+          <div style={{background:draftArticle.reporterColor||"#111",padding:"10px 16px",display:"flex",justifyContent:"space-between",alignItems:"center"}}>
+            <div style={{display:"flex",alignItems:"center",gap:10}}>
+              <div style={{width:30,height:30,borderRadius:"50%",background:"rgba(255,255,255,0.2)",display:"flex",alignItems:"center",justifyContent:"center",fontSize:11,fontWeight:800,color:"#fff"}}>{draftArticle.reporterAvatar}</div>
+              <div>
+                <div style={{fontSize:12,fontWeight:800,color:"#fff"}}>{draftArticle.reporter}</div>
+                <div style={{fontSize:10,color:"rgba(255,255,255,0.7)"}}>{draftArticle.label} · S{draftArticle.season} Wk{draftArticle.week} · DRAFT PREVIEW</div>
+              </div>
+            </div>
+          </div>
+          <div style={{padding:14}}>
+            <div style={{fontSize:11,color:"#888",fontWeight:700,textTransform:"uppercase",letterSpacing:0.5,marginBottom:8}}>Review &amp; Edit Before Publishing</div>
+            <textarea value={draftText} onChange={e=>setDraftText(e.target.value)} style={{width:"100%",minHeight:300,fontSize:13,fontFamily:"Georgia,serif",lineHeight:1.7,padding:12,border:"1px solid #ddd",borderRadius:2,resize:"vertical",boxSizing:"border-box",color:"#222"}}/>
+            <div style={{display:"flex",gap:10,marginTop:10}}>
+              <button onClick={()=>{const finalArticle={...draftArticle,text:draftText};const newArticles=[finalArticle,...articles].slice(0,30);setArticles(newArticles);dbSave({articles:newArticles});setDraftArticle(null);setDraftText("");}} style={{background:draftArticle.reporterColor||"#111",color:"#fff",border:"none",borderRadius:2,padding:"10px 20px",cursor:"pointer",fontFamily:ff,fontSize:13,fontWeight:800,textTransform:"uppercase"}}>Publish</button>
+              <button onClick={()=>{setDraftArticle(null);setDraftText("");}} style={{background:"#fff",color:"#666",border:"1px solid #ccc",borderRadius:2,padding:"10px 20px",cursor:"pointer",fontFamily:ff,fontSize:13,fontWeight:700,textTransform:"uppercase"}}>Discard</button>
+            </div>
+          </div>
+        </Card>
+      )}
 
       {/* Articles */}
       {articles.length===0&&<Card style={{padding:"32px 20px",textAlign:"center"}}><div style={{fontSize:28,marginBottom:10}}>📰</div><div style={{fontSize:14,color:"#888"}}>No articles yet. Select a reporter and article type above.</div></Card>}
