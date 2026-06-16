@@ -1700,9 +1700,9 @@ function HistoricalImportPanel({setupRows, history, onImport}) {
 function EnterResultsPanel({entries,weekResults,setWeekResults,week,setWeek,applyBulkResults,applyWeekResults,postSeasonInputs,setPSI,applyPostSeason,finalizeSeason,season,setSeason,teamNames,schedule,history,onImportHistory,setupRows,saveToDb}) {
   const [entryWeek,setEntryWeek] = useState(week);
   const [resultsTab,setResultsTab] = useState("weekly");
+  const [entryYear,setEntryYear] = useState(START_YEAR + season - 1);
   const setWR=(i,f,v)=>setWeekResults(prev=>prev.map((r,idx)=>idx===i?{...r,[f]:v}:r));
   const thisWeekSchedule = schedule?.[entryWeek]||{};
-  const entryYear = START_YEAR + season - 1;
 
   return (
     <div style={{display:"flex",flexDirection:"column",gap:16}}>
@@ -1724,13 +1724,15 @@ function EnterResultsPanel({entries,weekResults,setWeekResults,week,setWeek,appl
         <div style={{padding:"14px 16px",display:"flex",flexWrap:"wrap",gap:20,alignItems:"flex-end"}}>
           <div>
             <div style={{fontSize:10,fontWeight:700,color:"#888",textTransform:"uppercase",letterSpacing:1,marginBottom:6}}>Season</div>
-            <select value={season} onChange={e=>{const s=Number(e.target.value);setSeason(s);setEntryWeek(week);if(saveToDb)saveToDb({season:s});}} style={{fontSize:16,fontWeight:700,color:"#111",padding:"8px 12px",background:"#fff",border:`2px solid #cc0000`,borderRadius:2,cursor:"pointer",fontFamily:"'Helvetica Neue',Arial,sans-serif",minWidth:60}}>
+            <select value={season} onChange={e=>{const s=Number(e.target.value);setSeason(s);setEntryYear(START_YEAR+s-1);setEntryWeek(week);if(saveToDb)saveToDb({season:s});}} style={{fontSize:16,fontWeight:700,color:"#111",padding:"8px 12px",background:"#fff",border:`2px solid #cc0000`,borderRadius:2,cursor:"pointer",fontFamily:"'Helvetica Neue',Arial,sans-serif",minWidth:60}}>
               {Array.from({length:20},(_,i)=>i+1).map(s=><option key={s} value={s}>S{s}</option>)}
             </select>
           </div>
           <div>
             <div style={{fontSize:10,fontWeight:700,color:"#888",textTransform:"uppercase",letterSpacing:1,marginBottom:6}}>Year</div>
-            <div style={{fontSize:16,fontWeight:900,color:"#111",padding:"8px 12px",background:"#f7f7f7",border:"1px solid #ddd",borderRadius:2,minWidth:70,textAlign:"center"}}>{entryYear}</div>
+            <select value={entryYear} onChange={e=>setEntryYear(Number(e.target.value))} style={{fontSize:16,fontWeight:700,color:"#111",padding:"8px 12px",background:"#fff",border:`2px solid #cc0000`,borderRadius:2,cursor:"pointer",fontFamily:"'Helvetica Neue',Arial,sans-serif",minWidth:80}}>
+              {Array.from({length:20},(_,i)=>2020+i).map(y=><option key={y} value={y}>{y}</option>)}
+            </select>
           </div>
           <div>
             <div style={{fontSize:10,fontWeight:700,color:"#888",textTransform:"uppercase",letterSpacing:1,marginBottom:6}}>Week</div>
