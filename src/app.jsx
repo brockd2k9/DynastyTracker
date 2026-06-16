@@ -461,12 +461,14 @@ function SchedulePanel({entries,schedule,setSchedule}) {
 }
 
 // ── History Tab ───────────────────────────────────────────────────────────
-function HistoryTab({history, setHistory, saveToDb, commUnlocked}) {
+function HistoryTab({history, setHistory, saveToDb, commUnlocked, entries, setEntries, season, week, setWeek}) {
   const isMobile = useIsMobile();
   const [sel,setSel] = useState(null);
   const [editing,setEditing] = useState(null);
   const [editData,setEditData] = useState(null);
   const [expandTeam,setExpandTeam] = useState({});
+  const [liveEdit,setLiveEdit] = useState(false);
+  const [liveData,setLiveData] = useState(null);
   if (!history.length) return <Card style={{padding:20}}><div style={{color:"#888",fontSize:14,textAlign:"center"}}>No completed seasons yet.</div></Card>;
 
   // Aggregate all-time stats
@@ -492,8 +494,68 @@ function HistoryTab({history, setHistory, saveToDb, commUnlocked}) {
   // Sort history by year descending
   const sortedHistory=[...history].sort((a,b)=>(b.year||0)-(a.year||0));
 
+  const numI=(val,onChange,w=52)=><input type="number" min="0" value={val??""} onChange={e=>onChange(e.target.value)}
+    style={{width:w,padding:"3px 5px",border:"1px solid #ddd",borderRadius:2,fontSize:12,fontWeight:700,textAlign:"center",fontFamily:ff}}/>;
+
   return (
     <div style={{display:"flex",flexDirection:"column",gap:14}}>
+
+      {/* Live Season Editor */}
+      {commUnlocked&&entries?.length>0&&<Card style={{borderTop:`3px solid ${RED}`,overflow:"hidden"}}>
+        <div style={{background:"#111",padding:"10px 16px",display:"flex",justifyContent:"space-between",alignItems:"center"}}>
+          <div>
+            <span style={{fontSize:13,fontWeight:900,color:"#fff",letterSpacing:1}}>CURRENT SEASON</span>
+            <span style={{fontSize:11,color:"#888",marginLeft:10}}>S{season} · Week {week}</span>
+          </div>
+          <div style={{display:"flex",gap:8}}>
+            {!liveEdit&&<button onClick={()=>{setLiveEdit(true);setLiveData(JSON.parse(JSON.stringify(entries)));}} style={{padding:"4px 12px",background:"#1a3a6b",color:"#fff",border:"none",borderRadius:2,cursor:"pointer",fontSize:11,fontWeight:800,fontFamily:ff}}>✏️ Edit</button>}
+            {liveEdit&&<button onClick={()=>{
+              setEntries(liveData);
+              saveToDb({entries:liveData});
+              setLiveEdit(false);setLiveData(null);
+            }} style={{padding:"4px 12px",background:"#007a00",color:"#fff",border:"none",borderRadius:2,cursor:"pointer",fontSize:11,fontWeight:800,fontFamily:ff}}>✓ Save</button>}
+            {liveEdit&&<button onClick={()=>{setLiveEdit(false);setLiveData(null);}} style={{padding:"4px 12px",background:"#888",color:"#fff",border:"none",borderRadius:2,cursor:"pointer",fontSize:11,fontWeight:800,fontFamily:ff}}>Cancel</button>}
+            {liveEdit&&<button onClick={()=>{if(!window.confirm("Reset all current season stats to zero? This cannot be undone."))return;const blank=liveData.map(e=>({...e,wins:0,losses:0,confWins:0,confLosses:0,gamePts:0,rankedBonusPts:0,confStandPts:0,confChampPts:0,bowlPts:0,recruitingPts:0,prestigePts:0,heismanPts:0,weekLog:[],h2h:{}}));setLiveData(blank);}} style={{padding:"4px 12px",background:RED,color:"#fff",border:"none",borderRadius:2,cursor:"pointer",fontSize:11,fontWeight:800,fontFamily:ff}}>🗑 Reset Season</button>}
+          </div>
+        </div>
+        {liveEdit&&<div style={{padding:"8px 14px",background:"#fffbf0",fontSize:11,color:"#886600",fontWeight:600,borderBottom:"1px solid #f0c040"}}>
+          Editing week directly also: <select value={week} onChange={e=>{const w=Number(e.target.value);setWeek(w);saveToDb({week:w});}} style={{fontFamily:ff,fontSize:11,padding:"2px 6px",border:"1px solid #ddd",borderRadius:2}}>
+            {Array.from({length:20},(_,i)=>i+1).map(w=><option key={w} value={w}>Week {w}</option>)}
+          </select>
+        </div>}
+        <div style={{overflowX:"auto"}}>
+          <table style={{width:"100%",borderCollapse:"collapse",fontSize:isMobile?11:12}}>
+            <thead><tr style={{borderBottom:`2px solid ${RED}`,background:"#f7f7f7"}}>
+              {["User","Team","W","L","Game","Ranked","Conf St","Conf Ch","Bowl","Recruit","Prestige","Heisman","Total"].map(h=><th key={h} style={{padding:"6px 5px",textAlign:h==="User"||h==="Team"?"left":"center",color:"#555",fontSize:9,letterSpacing:0.5,textTransform:"uppercase",fontWeight:800,whiteSpace:"nowrap"}}>{h}</th>)}
+            </tr></thead>
+            <tbody>{(liveEdit?liveData:entries).map((t,i)=>{
+              const tot=calcTotal(t);
+              const setF=(field,val)=>setLiveData(prev=>prev.map((e,j)=>j===i?{...e,[field]:parseInt(val)||0}:e));
+              return(<tr key={t.teamName} style={{borderBottom:"1px solid #eee",background:i%2===0?"#fff":"#fafafa"}}>
+                <td style={{padding:"6px 5px",fontWeight:700,color:"#111",whiteSpace:"nowrap"}}>{t.userName}</td>
+                <td style={{padding:"6px 5px",color:"#888",fontSize:11,whiteSpace:"nowrap"}}>{t.teamName}</td>
+                {liveEdit?(<>
+                  <td style={{padding:"3px 2px"}}>{numI(t.wins,v=>setF("wins",v),38)}</td>
+                  <td style={{padding:"3px 2px"}}>{numI(t.losses,v=>setF("losses",v),38)}</td>
+                  <td style={{padding:"3px 2px"}}>{numI(t.gamePts,v=>setF("gamePts",v),44)}</td>
+                  <td style={{padding:"3px 2px"}}>{numI(t.rankedBonusPts,v=>setF("rankedBonusPts",v),44)}</td>
+                  <td style={{padding:"3px 2px"}}>{numI(t.confStandPts,v=>setF("confStandPts",v),44)}</td>
+                  <td style={{padding:"3px 2px"}}>{numI(t.confChampPts,v=>setF("confChampPts",v),44)}</td>
+                  <td style={{padding:"3px 2px"}}>{numI(t.bowlPts,v=>setF("bowlPts",v),44)}</td>
+                  <td style={{padding:"3px 2px"}}>{numI(t.recruitingPts,v=>setF("recruitingPts",v),44)}</td>
+                  <td style={{padding:"3px 2px"}}>{numI(t.prestigePts,v=>setF("prestigePts",v),44)}</td>
+                  <td style={{padding:"3px 2px"}}>{numI(t.heismanPts,v=>setF("heismanPts",v),44)}</td>
+                  <td style={{padding:"6px 5px",textAlign:"center",fontWeight:900,color:RED,fontSize:13}}>{calcTotal(t)}</td>
+                </>):(
+                  [t.wins,t.losses,t.gamePts,t.rankedBonusPts,t.confStandPts,t.confChampPts,t.bowlPts,t.recruitingPts,t.prestigePts,t.heismanPts].map((v,j)=><td key={j} style={{padding:"6px 5px",textAlign:"center",color:j===0?"#007a00":j===1?RED:"#555"}}>{v||0}</td>)
+                  .concat(<td key="tot" style={{padding:"6px 5px",textAlign:"center",fontWeight:900,color:RED,fontSize:13}}>{tot}</td>)
+                )}
+              </tr>);
+            })}</tbody>
+          </table>
+        </div>
+      </Card>}
+
       {/* All-Time Leaders */}
       <div style={{display:"grid",gridTemplateColumns:isMobile?"1fr":"1fr 1fr 1fr",gap:14}}>
         <Card><CardHead bg={RED}>All-Time Wins</CardHead><div style={{padding:"4px 0"}}>
@@ -2542,7 +2604,7 @@ export default function App() {
           {["Enter Results","Season History","Schedule","Content","League Setup"].map(t=><button key={t} onClick={()=>setCommTab(t)} style={{padding:"11px 18px",background:"transparent",border:"none",borderBottom:commTab===t?`3px solid ${RED}`:"3px solid transparent",color:commTab===t?"#fff":"#888",cursor:"pointer",fontSize:12,fontWeight:700,fontFamily:ff,textTransform:"uppercase",letterSpacing:0.5,whiteSpace:"nowrap"}}>{t}</button>)}
         </div>
         <div style={{maxWidth:800,margin:"0 auto",padding:"20px 14px"}}>
-          {commTab==="Season History"&&<HistoryTab history={history} setHistory={setHistory} saveToDb={saveToDb} commUnlocked={true}/>}
+          {commTab==="Season History"&&<HistoryTab history={history} setHistory={setHistory} saveToDb={saveToDb} commUnlocked={true} entries={entries} setEntries={setEntries} season={season} week={week} setWeek={setWeek}/>}
           {commTab==="Enter Results"&&<EnterResultsPanel entries={activeEntries} weekResults={weekResults} setWeekResults={setWeekResults} week={week} setWeek={setWeek} applyBulkResults={applyBulkResults} applyWeekResults={applyWeekResults} postSeasonInputs={postSeasonInputs} setPSI={setPSI} applyPostSeason={applyPostSeason} finalizeSeason={finalizeSeason} season={season} setSeason={setSeason} teamNames={teamNames} schedule={schedule} history={history} onImportHistory={importHistoricalSeason} setupRows={setup?.rows||[]} saveToDb={saveToDb}/>}
           {commTab==="Schedule"&&<SchedulePanel entries={activeEntries} schedule={schedule} setSchedule={setSchedule}/>}
           {commTab==="Content"&&<ContentHub sorted={sorted} entries={activeEntries} week={week} season={season} leagueName={leagueName} history={history} leader={leader} articles={articles} setArticles={setArticles} setActiveArticle={setActiveArticle} schedule={schedule}/>}
