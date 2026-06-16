@@ -1269,7 +1269,7 @@ function ProfileTab({history,setupRows,currentEntries,season,year,permanentUsers
 }
 
 // ── SetupPanel ────────────────────────────────────────────────────────────
-function SetupPanel({entries,setup,postSeasonInputs,setPSI,handleStart,setCommissionerUnlocked,season,setEntries,setWeekResults,setSetup,saveToDb}) {
+function SetupPanel({entries,setup,postSeasonInputs,setPSI,handleStart,setCommissionerUnlocked,season,year,setEntries,setWeekResults,setSetup,saveToDb}) {
   const [setupRows,setSetupRows] = useState(setup?.rows?.length?setup.rows.map(r=>({userId:r.userId||"",userName:r.userName,teamName:r.teamName})):Array.from({length:4},()=>({userId:"",userName:"",teamName:""})));
   const [setupLeague,setSetupLeague] = useState(setup?.leagueName||"");
   const [rosterSeason,setRosterSeason] = useState(season+1);
@@ -1360,7 +1360,7 @@ function SetupPanel({entries,setup,postSeasonInputs,setPSI,handleStart,setCommis
           <div style={{display:"flex",alignItems:"center",gap:10,marginBottom:14}}>
             <span style={{fontSize:12,color:"#555",fontWeight:700}}>Year:</span>
             <select value={rosterSeason} onChange={e=>{setRosterSeason(Number(e.target.value));setRosterEdits({});}} style={{padding:"6px 10px",border:"1px solid #ccc",borderRadius:2,fontFamily:ff,fontSize:13,color:"#111",background:"#fff"}}>
-              {(()=>{const FIRST_YEAR=2020;const startS=FIRST_YEAR-START_YEAR+1;const endS=season+5;const arr=[];for(let s=startS;s<=endS;s++)arr.push(s);return arr;})().map(s=><option key={s} value={s}>{START_YEAR+s-1}{s===season?" (current)":s===season+1?" (next)":""}</option>)}
+              {(()=>{const FIRST_YEAR=2020;const startS=FIRST_YEAR-START_YEAR+1;const endS=season+5;const arr=[];for(let s=startS;s<=endS;s++)arr.push(s);return arr;})().map(s=>{const dispYear=START_YEAR+s-1;const curYear=year||START_YEAR+season-1;return(<option key={s} value={s}>{dispYear}{dispYear===curYear?" (current)":dispYear===curYear+1?" (next)":""}</option>);})}
             </select>
           </div>
           <div style={{display:"grid",gridTemplateColumns:"auto 1fr 1fr",gap:0,border:"1px solid #eee",borderRadius:2,overflow:"hidden"}}>
@@ -2713,7 +2713,7 @@ export default function App() {
           {commTab==="Enter Results"&&<EnterResultsPanel entries={activeEntries} weekResults={weekResults} setWeekResults={setWeekResults} week={week} setWeek={setWeek} applyBulkResults={applyBulkResults} applyWeekResults={applyWeekResults} postSeasonInputs={postSeasonInputs} setPSI={setPSI} applyPostSeason={applyPostSeason} finalizeSeason={finalizeSeason} season={season} setSeason={setSeason} year={year} setYear={setYear} teamNames={teamNames} schedule={schedule} history={history} onImportHistory={importHistoricalSeason} setupRows={setup?.rows||[]} saveToDb={saveToDb}/>}
           {commTab==="Schedule"&&<SchedulePanel entries={activeEntries} schedule={schedule} setSchedule={setSchedule}/>}
           {commTab==="Content"&&<ContentHub sorted={sorted} entries={activeEntries} week={week} season={season} leagueName={leagueName} history={history} leader={leader} articles={articles} setArticles={setArticles} setActiveArticle={setActiveArticle} schedule={schedule}/>}
-          {commTab==="League Setup"&&<SetupPanel entries={entries} setup={setup} postSeasonInputs={postSeasonInputs} setPSI={setPSI} handleStart={handleStart} setCommissionerUnlocked={setCommUnlocked} season={season} setEntries={setEntries} setWeekResults={setWeekResults} setSetup={setSetup} saveToDb={saveToDb}/>}
+          {commTab==="League Setup"&&<SetupPanel entries={entries} setup={setup} postSeasonInputs={postSeasonInputs} setPSI={setPSI} handleStart={handleStart} setCommissionerUnlocked={setCommUnlocked} season={season} year={year} setEntries={setEntries} setWeekResults={setWeekResults} setSetup={setSetup} saveToDb={saveToDb}/>}
         </div>
       </div>}
     </div>
