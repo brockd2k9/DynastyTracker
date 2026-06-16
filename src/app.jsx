@@ -90,7 +90,7 @@ function calcTotal(t) {
   return (t.gamePts||0)+(t.rankedBonusPts||0)+(t.confStandPts||0)+(t.confChampPts||0)+(t.bowlPts||0)+(t.recruitingPts||0)+(t.prestigePts||0)+(t.heismanPts||0);
 }
 
-function cleanArticle(text, maxChars=1000) {
+function cleanArticle(text) {
   return text
     .replace(/#{1,6}\s*/g, "")        // remove # headings
     .replace(/\*\*([^*]+)\*\*/g, "$1") // remove **bold**
@@ -105,8 +105,7 @@ function cleanArticle(text, maxChars=1000) {
     .replace(/–/g, "-")                // en dash to hyphen
     .replace(/[""]/g, '"')             // smart quotes to straight
     .replace(/['']/g, "'")             // smart apostrophes to straight
-    .trim()
-    .slice(0, maxChars);
+    .trim();
 }
 
 function articleHeadline(text) {
@@ -126,7 +125,7 @@ async function callClaude(prompt) {
       "anthropic-version":"2023-06-01",
       "anthropic-dangerous-direct-browser-access":"true",
     },
-    body:JSON.stringify({model:"claude-haiku-4-5-20251001",max_tokens:1200,messages:[{role:"user",content:prompt}]}),
+    body:JSON.stringify({model:"claude-haiku-4-5-20251001",max_tokens:4096,messages:[{role:"user",content:prompt}]}),
   });
   console.log("[callClaude] fetch started");
   const r = await Promise.race([req, timeout]);
