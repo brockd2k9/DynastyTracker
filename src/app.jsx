@@ -1271,25 +1271,30 @@ function SetupPanel({entries,setup,postSeasonInputs,setPSI,handleStart,setCommis
   function savePermNames(){
     const valid=setupRows.filter(r=>r.userName.trim());
     if(valid.length<2)return alert("Need at least 2 users.");
-    // Build userId→newName AND oldName→newName maps (oldName fallback for history entries without userId)
-    const nameMap={}, oldNameMap={};
+    // Map userId→canonicalName for ALL permanent users (not just changed ones)
+    // Also map oldDefaultName→newName for entries that have no userId
+    const userIdToName={}, oldNameMap={};
     (setup?.permanentUsers||[]).forEach(p=>{
       const sr=valid.find(s=>s.userId===p.id);
-      const newName=sr?.userName.trim();
-      if(newName){nameMap[p.id]=newName; if(newName!==p.defaultName)oldNameMap[p.defaultName]=newName;}
+      const newName=sr?.userName.trim()||p.defaultName;
+      userIdToName[p.id]=newName;
+      if(newName!==p.defaultName) oldNameMap[p.defaultName]=newName;
     });
-    const updatedRows=(setup?.rows||[]).map(r=>{const newName=nameMap[r.userId];return newName?{...r,userName:newName}:r;});
-    const updatedPerm=(setup?.permanentUsers||[]).map(p=>{const newName=nameMap[p.id];return newName?{...p,defaultName:newName}:p;});
+    const updatedRows=(setup?.rows||[]).map(r=>{const n=userIdToName[r.userId];return n?{...r,userName:n}:r;});
+    const updatedPerm=(setup?.permanentUsers||[]).map(p=>{const n=userIdToName[p.id];return n?{...p,defaultName:n}:p;});
     const updated={...setup,rows:updatedRows,permanentUsers:updatedPerm};
     setSetup(updated);
-    // Propagate renames to live entries
-    const updatedEntries=entries.map(e=>{const newName=nameMap[e.userId]||oldNameMap[e.userName];return newName?{...e,userName:newName}:e;});
+    // Normalize live entries: fix any entry whose userId is known but userName doesn't match canonical name
+    const updatedEntries=entries.map(e=>{
+      const n=userIdToName[e.userId]||oldNameMap[e.userName];
+      return n&&n!==e.userName?{...e,userName:n}:e;
+    });
     setEntries(updatedEntries);
-    // Propagate renames to all historical seasons (match by userId first, fall back to old userName)
+    // Normalize all historical seasons: fix by userId (catches mismatches) then fall back to old name
     if(history?.length){
       const updatedHistory=history.map(s=>({...s,finalStandings:s.finalStandings.map(t=>{
-        const newName=nameMap[t.userId]||oldNameMap[t.userName];
-        return newName?{...t,userName:newName}:t;
+        const n=userIdToName[t.userId]||oldNameMap[t.userName];
+        return n&&n!==t.userName?{...t,userName:n}:t;
       })}));
       setHistory(updatedHistory);
       saveToDb({setup:updated,entries:updatedEntries,history:updatedHistory});
