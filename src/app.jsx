@@ -519,81 +519,46 @@ function SchedulePanel({entries,schedule,setSchedule}) {
 
 // ── History Tab ───────────────────────────────────────────────────────────
 function HistoryTab({history, setHistory, saveToDb, commUnlocked, entries, setEntries, season, week, setWeek, yearRosters, permanentUsers}) {
-  // Apply per-year name/team overrides from yearRosters to a standings array
+  // Apply per-year team overrides from yearRosters to a standings array (username never changes)
   function applyRoster(standings, yr) {
     const roster = yearRosters?.[yr];
     if(!roster?.length) return standings;
     return standings.map(t=>{
-      // Match by userId first
       let ov = roster.find(r=>r.userId && r.userId===t.userId);
-      // Fall back: find permanent user whose defaultName matches this entry's userName, then match roster by that userId
       if(!ov && permanentUsers?.length) {
         const pu = permanentUsers.find(u=>u.defaultName===t.userName);
         if(pu) ov = roster.find(r=>r.userId===pu.id);
       }
       if(!ov) return t;
-      return {...t, userName:ov.userName||t.userName, teamName:ov.teamName||t.teamName};
+      return {...t, teamName:ov.teamName||t.teamName};
     });
   }
   const isMobile = useIsMobile();
   const [sel,setSel] = useState(null);
-  // Resolve a seasonal userName to permanent defaultName using yearRosters
-  function permName(userName, yr) {
-    const roster = yearRosters?.[yr];
-    if (roster?.length) {
-      const entry = roster.find(r => r.userName === userName);
-      if (entry?.userId) {
-        const pu = permanentUsers?.find(p => p.id === entry.userId);
-        if (pu) return pu.defaultName;
-      }
-    }
-    return userName;
-  }
-
   const [editing,setEditing] = useState(null);
   const [editData,setEditData] = useState(null);
   const [expandTeam,setExpandTeam] = useState({});
   const [liveEdit,setLiveEdit] = useState(false);
   const [liveData,setLiveData] = useState(null);
-  // Aggregate all-time stats
+  // Aggregate all-time stats — userName is permanent, only teamName changes per season
   const allWins={}, confT={}, nattyT={};
   history.forEach(s=>{
-    const yr = s.year;
-    // teamName → userName lookup for this season
     const nameMap={};
     s.finalStandings.forEach(t=>{ nameMap[t.teamName]=t.userName; });
-
-    // Track which users already got titles from per-team data this season
     const gotNatty=new Set(), gotConf=new Set();
-
     s.finalStandings.forEach(t=>{
-      const pn = permName(t.userName, yr);
-      allWins[pn]=(allWins[pn]||0)+(t.wins||0);
-      // National titles: prefer new count field, fall back to boolean flag
-      if((t.nattyWins||0)>0){
-        nattyT[pn]=(nattyT[pn]||0)+t.nattyWins;
-        gotNatty.add(pn);
-      } else if(t.nattyWinner===true){
-        nattyT[pn]=(nattyT[pn]||0)+1;
-        gotNatty.add(pn);
-      }
-      // Conf titles: prefer new count field, fall back to boolean flag
-      if((t.confChampWins||0)>0){
-        confT[pn]=(confT[pn]||0)+t.confChampWins;
-        gotConf.add(pn);
-      } else if(t.confChampion===true){
-        confT[pn]=(confT[pn]||0)+1;
-        gotConf.add(pn);
-      }
+      allWins[t.userName]=(allWins[t.userName]||0)+(t.wins||0);
+      if((t.nattyWins||0)>0){nattyT[t.userName]=(nattyT[t.userName]||0)+t.nattyWins;gotNatty.add(t.userName);}
+      else if(t.nattyWinner===true){nattyT[t.userName]=(nattyT[t.userName]||0)+1;gotNatty.add(t.userName);}
+      if((t.confChampWins||0)>0){confT[t.userName]=(confT[t.userName]||0)+t.confChampWins;gotConf.add(t.userName);}
+      else if(t.confChampion===true){confT[t.userName]=(confT[t.userName]||0)+1;gotConf.add(t.userName);}
     });
-
-    // Fall back to season-level strings only for users not yet counted from per-team data
     if(s.nattyWinner){s.nattyWinner.split(", ").filter(Boolean).forEach(tn=>{
-      const un=permName(nameMap[tn]||tn, yr);
+      const un=nameMap[tn]||tn;
       if(!gotNatty.has(un)){nattyT[un]=(nattyT[un]||0)+1;}
     });}
     if(s.confChampion){s.confChampion.split(", ").filter(Boolean).forEach(tn=>{
-      const un=permName(nameMap[tn]||tn, yr);
+      const un=nameMap[tn]||tn;
       if(!gotConf.has(un)){confT[un]=(confT[un]||0)+1;}
     });}
   });
@@ -1332,7 +1297,7 @@ function SetupPanel({entries,setup,postSeasonInputs,setPSI,handleStart,setCommis
     setRosterSaved(false);
   }
   function saveSeasonRoster(){
-    const roster = permanentUsers.map(u=>getRosterEntry(u.id)).filter(r=>r.userName||r.teamName);
+    const roster = permanentUsers.map(u=>({userId:u.id,userName:u.defaultName,teamName:getRosterEntry(u.id).teamName||""})).filter(r=>r.teamName);
     const rosterYear = START_YEAR + rosterSeason - 1;
     const updated = {
       ...setup,
@@ -1340,12 +1305,12 @@ function SetupPanel({entries,setup,postSeasonInputs,setPSI,handleStart,setCommis
       yearRosters:{...(setup?.yearRosters||{}), [rosterYear]:roster},
     };
     setSetup(updated);
-    // If saving for the current season, also update live entries (but NOT setup.rows — permanent names must stay permanent)
+    // If saving for the current season, also update live entries with new team names (username stays permanent)
     if(rosterSeason===season && entries.length>0){
       const updatedEntries = entries.map(e=>{
         const override = roster.find(r=>r.userId===e.userId);
         if(!override)return e;
-        return {...e, userName:override.userName||e.userName, teamName:override.teamName||e.teamName};
+        return {...e, teamName:override.teamName||e.teamName};
       });
       setEntries(updatedEntries);
       setSetup(updated);
@@ -1385,21 +1350,19 @@ function SetupPanel({entries,setup,postSeasonInputs,setPSI,handleStart,setCommis
 
       {isLive&&permanentUsers.length>0&&<Card><CardHead bg="#1a3a6b">Season Rosters</CardHead>
         <div style={{padding:"12px 14px"}}>
-          <div style={{fontSize:11,color:"#888",marginBottom:10,lineHeight:1.5}}>Set per-season name and team overrides. When you finalize a season, the next season will use these names/teams for each player.</div>
+          <div style={{fontSize:11,color:"#888",marginBottom:10,lineHeight:1.5}}>Set each player's team for this season. Usernames stay permanent — only teams change year to year.</div>
           <div style={{display:"flex",alignItems:"center",gap:10,marginBottom:14}}>
             <span style={{fontSize:12,color:"#555",fontWeight:700}}>Year:</span>
             <select value={rosterSeason} onChange={e=>{setRosterSeason(Number(e.target.value));setRosterEdits({});}} style={{padding:"6px 10px",border:"1px solid #ccc",borderRadius:2,fontFamily:ff,fontSize:13,color:"#111",background:"#fff"}}>
               {(()=>{const FIRST_YEAR=2020;const startS=FIRST_YEAR-START_YEAR+1;const endS=season+5;const arr=[];for(let s=startS;s<=endS;s++)arr.push(s);return arr;})().map(s=>{const dispYear=START_YEAR+s-1;const curYear=year||START_YEAR+season-1;return(<option key={s} value={s}>{dispYear}{dispYear===curYear?" (current)":dispYear===curYear+1?" (next)":""}</option>);})}
             </select>
           </div>
-          <div style={{display:"grid",gridTemplateColumns:"auto 1fr 1fr",gap:0,border:"1px solid #eee",borderRadius:2,overflow:"hidden"}}>
+          <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:0,border:"1px solid #eee",borderRadius:2,overflow:"hidden"}}>
             <div style={{padding:"6px 10px",background:"#f5f5f5",fontSize:10,color:"#888",fontWeight:700,textTransform:"uppercase",borderBottom:"1px solid #eee"}}>Player</div>
-            <div style={{padding:"6px 10px",background:"#f5f5f5",fontSize:10,color:"#888",fontWeight:700,textTransform:"uppercase",borderBottom:"1px solid #eee",borderLeft:"1px solid #eee"}}>Name</div>
             <div style={{padding:"6px 10px",background:"#f5f5f5",fontSize:10,color:"#888",fontWeight:700,textTransform:"uppercase",borderBottom:"1px solid #eee",borderLeft:"1px solid #eee"}}>Team</div>
             {permanentUsers.map((u,i)=>{const entry=getRosterEntry(u.id);const isEdited=rosterEdits[u.id]!==undefined;return(<>
               <div key={u.id+"n"} style={{padding:"8px 10px",borderBottom:i<permanentUsers.length-1?"1px solid #f0f0f0":"none",fontSize:12,color:"#555",fontWeight:600,display:"flex",alignItems:"center",background:isEdited?"#fffbf0":"#fff"}}>{u.defaultName}</div>
-              <input key={u.id+"un"} value={entry.userName||""} onChange={e=>setRosterField(u.id,"userName",e.target.value)} style={{padding:"8px 10px",border:"none",borderLeft:"1px solid #eee",borderBottom:i<permanentUsers.length-1?"1px solid #f0f0f0":"none",fontFamily:ff,fontSize:13,color:"#111",outline:"none",background:isEdited?"#fffbf0":"#fff"}}/>
-              <input key={u.id+"tn"} value={entry.teamName||""} onChange={e=>setRosterField(u.id,"teamName",e.target.value)} style={{padding:"8px 10px",border:"none",borderLeft:"1px solid #eee",borderBottom:i<permanentUsers.length-1?"1px solid #f0f0f0":"none",fontFamily:ff,fontSize:13,color:"#111",outline:"none",background:isEdited?"#fffbf0":"#fff"}}/>
+              <input key={u.id+"tn"} value={entry.teamName||""} onChange={e=>setRosterField(u.id,"teamName",e.target.value)} placeholder="e.g. Troy" style={{padding:"8px 10px",border:"none",borderLeft:"1px solid #eee",borderBottom:i<permanentUsers.length-1?"1px solid #f0f0f0":"none",fontFamily:ff,fontSize:13,color:"#111",outline:"none",background:isEdited?"#fffbf0":"#fff"}}/>
             </>);})}
           </div>
           <button onClick={saveSeasonRoster} style={{marginTop:10,background:rosterSaved?"#007a00":RED,color:"#fff",border:"none",borderRadius:2,padding:"9px 18px",cursor:"pointer",fontFamily:ff,fontSize:12,fontWeight:800,textTransform:"uppercase"}}>{rosterSaved?"✓ Saved":"Save Season Roster"}</button>
