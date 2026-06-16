@@ -2214,7 +2214,7 @@ export default function App() {
         }
         if (migratedSetup) setSetup(migratedSetup);
         if (row.season) setSeason(row.season);
-        if (row.year) setYear(row.year);
+        if (row.setup?.currentYear) setYear(row.setup.currentYear);
         if (row.week) setWeek(row.week);
         if (migratedEntries) { if (migratedEntries.length) setEntries(migratedEntries); }
         if (row.history) { if (row.history.length) setHistory(row.history); }
@@ -2240,10 +2240,13 @@ export default function App() {
     // Never save while DB is still loading — could overwrite real data with empty state
     if (dbLoading) return;
     var ovr = overrides || {};
+    // Embed year into setup.currentYear so it persists in existing JSONB column
+    const currentYear = ovr.year !== undefined ? ovr.year : stateRef.year;
+    const baseSetup = ovr.setup !== undefined ? ovr.setup : stateRef.setup;
+    const setupWithYear = baseSetup ? {...baseSetup, currentYear} : {currentYear};
     var data = {
-      setup: ovr.setup !== undefined ? ovr.setup : stateRef.setup,
+      setup: setupWithYear,
       season: ovr.season !== undefined ? ovr.season : stateRef.season,
-      year: ovr.year !== undefined ? ovr.year : stateRef.year,
       week: ovr.week !== undefined ? ovr.week : stateRef.week,
       entries: ovr.entries !== undefined ? ovr.entries : stateRef.entries,
       // Never overwrite history with empty array unless explicitly passing an empty array via override
