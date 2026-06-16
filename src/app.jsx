@@ -286,6 +286,7 @@ function SchedulePanel({entries,schedule,setSchedule}) {
   const isMobile = useIsMobile();
   const [editWeek,setEditWeek] = useState(1);
   const [saved,setSaved] = useState(false);
+  const [showClear,setShowClear] = useState(false);
   const [schedImg,setSchedImg] = useState(null);
   const [schedImgPreview,setSchedImgPreview] = useState(null);
   const [schedParsing,setSchedParsing] = useState(false);
@@ -349,6 +350,34 @@ function SchedulePanel({entries,schedule,setSchedule}) {
       if(opp!=="BYE"&&opp!=="CPU"&&teamNames.includes(opp))ns[wk][opp]=team;
       return ns;
     });
+    setSaved(false);
+  }
+
+  function clearWeek(wk) {
+    if(!window.confirm(`Clear all matchups for Week ${wk}?`))return;
+    setSchedule(prev=>{const ns={...prev};delete ns[wk];return ns;});
+    setSaved(false);
+  }
+
+  function clearTeam(team) {
+    if(!window.confirm(`Clear all matchups for ${team}?`))return;
+    setSchedule(prev=>{
+      const ns={};
+      Object.entries(prev).forEach(([w,wk])=>{
+        const nwk={...wk};
+        // remove team's entry and unset them as opponent for others
+        delete nwk[team];
+        Object.keys(nwk).forEach(t=>{if(nwk[t]===team)delete nwk[t];});
+        if(Object.keys(nwk).length)ns[w]=nwk;
+      });
+      return ns;
+    });
+    setSaved(false);
+  }
+
+  function clearAll() {
+    if(!window.confirm("Clear the ENTIRE schedule? This cannot be undone."))return;
+    setSchedule({});
     setSaved(false);
   }
 
@@ -425,10 +454,38 @@ function SchedulePanel({entries,schedule,setSchedule}) {
             })}
           </div>
         </div>
-        <div style={{display:"flex",gap:10,alignItems:"center"}}>
+        <div style={{display:"flex",gap:10,alignItems:"center",flexWrap:"wrap",marginBottom:14}}>
           <button onClick={saveSchedule} style={{background:RED,color:"#fff",border:"none",borderRadius:2,padding:"11px 22px",cursor:"pointer",fontFamily:ff,fontSize:13,fontWeight:800,textTransform:"uppercase"}}>💾 Save Schedule</button>
           {saved&&<div style={{fontSize:12,color:"#007a00",fontWeight:700}}>✓ Saved!</div>}
+          <button onClick={()=>setShowClear(p=>!p)} style={{background:"#f5f5f5",color:"#555",border:"1px solid #ddd",borderRadius:2,padding:"11px 16px",cursor:"pointer",fontFamily:ff,fontSize:12,fontWeight:700}}>{showClear?"▲ Hide":"🗑 Clear Options"}</button>
         </div>
+        {showClear&&<div style={{background:"#fff8f8",border:"1px solid #fcc",borderRadius:3,padding:14,marginBottom:14}}>
+          <div style={{fontSize:11,fontWeight:800,color:RED,textTransform:"uppercase",letterSpacing:1,marginBottom:10}}>Clear Schedule</div>
+          <div style={{display:"flex",flexDirection:"column",gap:10}}>
+            <div>
+              <div style={{fontSize:11,color:"#555",fontWeight:700,marginBottom:6}}>Clear Entire Schedule</div>
+              <button onClick={clearAll} style={{background:RED,color:"#fff",border:"none",borderRadius:2,padding:"7px 16px",cursor:"pointer",fontFamily:ff,fontSize:12,fontWeight:800}}>🗑 Clear All Weeks</button>
+            </div>
+            <div>
+              <div style={{fontSize:11,color:"#555",fontWeight:700,marginBottom:6}}>Clear by Week</div>
+              <div style={{display:"flex",gap:6,flexWrap:"wrap"}}>
+                {WEEKS.map(w=>{
+                  const set=teamNames.filter(t=>schedule[w]?.[t]).length;
+                  return set>0?<button key={w} onClick={()=>clearWeek(w)} style={{padding:"4px 10px",borderRadius:2,border:"1px solid #fcc",background:"#fff",color:RED,cursor:"pointer",fontSize:11,fontFamily:ff,fontWeight:700}}>Wk {w}</button>:null;
+                })}
+              </div>
+            </div>
+            <div>
+              <div style={{fontSize:11,color:"#555",fontWeight:700,marginBottom:6}}>Clear by Team</div>
+              <div style={{display:"flex",gap:6,flexWrap:"wrap"}}>
+                {teamNames.map(t=>(
+                  <button key={t} onClick={()=>clearTeam(t)} style={{padding:"4px 10px",borderRadius:2,border:"1px solid #fcc",background:"#fff",color:RED,cursor:"pointer",fontSize:11,fontFamily:ff,fontWeight:700}}>{t}</button>
+                ))}
+              </div>
+            </div>
+          </div>
+          <div style={{fontSize:10,color:"#aaa",marginTop:10}}>Remember to Save Schedule after clearing.</div>
+        </div>}
       </Card>
       {!isMobile&&teamNames.length>0&&Object.keys(schedule).length>0&&(
         <Card style={{overflow:"hidden"}}>
