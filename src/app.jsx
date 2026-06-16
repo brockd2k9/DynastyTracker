@@ -1277,6 +1277,7 @@ function ProfileTab({history,setupRows,currentEntries,season,year,permanentUsers
 // ── SetupPanel ────────────────────────────────────────────────────────────
 function SetupPanel({entries,setup,postSeasonInputs,setPSI,handleStart,setCommissionerUnlocked,season,year,setEntries,setWeekResults,setSetup,saveToDb}) {
   const [setupRows,setSetupRows] = useState(setup?.rows?.length?setup.rows.map(r=>({userId:r.userId||"",userName:r.userName,teamName:r.teamName})):Array.from({length:4},()=>({userId:"",userName:"",teamName:""})));
+  useEffect(()=>{if(setup?.rows?.length)setSetupRows(setup.rows.map(r=>({userId:r.userId||"",userName:r.userName,teamName:r.teamName})));},[setup?.rows]);
   const [setupLeague,setSetupLeague] = useState(setup?.leagueName||"");
   const [rosterSeason,setRosterSeason] = useState(season+1);
   const [rosterEdits,setRosterEdits] = useState({});
