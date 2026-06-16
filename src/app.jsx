@@ -1067,8 +1067,8 @@ function ProfileTab({history,setupRows,currentEntries,season,year,permanentUsers
       if(!entry)return null;
       const rank=srt.findIndex(t=>(userId&&t.userId===userId)||(t.userName===fallbackUserName))+1;
       const userName=entry.userName;
-      const nattyWin=entry.nattyWinner||(s.nattyWinners?.includes(entry.teamName))||(s.nattyWinner&&s.nattyWinner.split(", ").includes(entry.teamName));
-      const confChamp=entry.confChampion||(s.confWinners?.includes(entry.teamName))||(s.confChampion&&s.confChampion.split(", ").includes(entry.teamName))||s.confChampion===entry.teamName||s.confChampion===userName;
+      const nattyWin=(entry.nattyWinner||((entry.nattyWins||0)>0))||(s.nattyWinners?.includes(entry.teamName))||(s.nattyWinner&&s.nattyWinner.split(", ").includes(entry.teamName));
+      const confChamp=(entry.confChampion||((entry.confChampWins||0)>0))||(s.confWinners?.includes(entry.teamName))||(s.confChampion&&s.confChampion.split(", ").includes(entry.teamName))||s.confChampion===entry.teamName||s.confChampion===userName;
       return{year:s.year,seasonNum:s.seasonNum,rank,total:calcTotal(entry),wins:entry.wins,losses:entry.losses,teamName:entry.teamName,userName,champion:s.champion===userName,confChamp,nattyWin,heisman:s.heisman===entry.teamName||s.heisman===userName,weekLog:entry.weekLog||[],gamePts:entry.gamePts||0,rankedBonusPts:entry.rankedBonusPts||0,confStandPts:entry.confStandPts||0,confChampPts:entry.confChampPts||0,bowlPts:entry.bowlPts||0,recruitingPts:entry.recruitingPts||0,prestigePts:entry.prestigePts||0,heismanPts:entry.heismanPts||0,h2h:entry.h2h||{},playoffWins:entry.playoffWins||0,playoffLosses:entry.playoffLosses||0,bowlResult:entry.bowlResult||"none",bowlOpponent:entry.bowlOpponent||"",top25Wins:entry.top25Wins||0,top25Losses:entry.top25Losses||0,top10Wins:entry.top10Wins||0,top10Losses:entry.top10Losses||0,isHistorical:s.isHistorical||false};
     }).filter(Boolean);
     const cur=currentEntries.find(e=>(userId&&e.userId===userId)||(e.userName===fallbackUserName));
@@ -1298,7 +1298,11 @@ function SetupPanel({entries,setup,postSeasonInputs,setPSI,handleStart,setCommis
       const updatedHistory=history.map(s=>({...s,finalStandings:s.finalStandings.map(t=>{
         const n=userIdToName[t.userId]||oldNameMap[t.userName];
         return n&&n!==t.userName?{...t,userName:n}:t;
-      })}));
+      }),
+      // Also rename season-level champion/heisman fields (stored as userName strings)
+      champion: (()=>{const n=userIdToName[Object.keys(userIdToName).find(id=>(setup?.permanentUsers||[]).find(p=>p.id===id)?.defaultName===s.champion)]||oldNameMap[s.champion];return n||s.champion;})(),
+      heisman: oldNameMap[s.heisman]||s.heisman,
+    }));
       setHistory(updatedHistory);
       saveToDb({setup:updated,entries:updatedEntries,history:updatedHistory});
     } else {
