@@ -2139,14 +2139,23 @@ function ContentHub({sorted,entries,week,season,year,leagueName,history,leader,a
     return ctx;
   })();
 
-  const standingsText = sorted.map((t,i)=>{const tot=calcTotal(t);return `${i+1}. ${t.teamName} — ${t.wins}W ${t.losses}L — ${tot} pts${i===0?" [LEADER]":` (-${leader-tot})`}`;}).join("\n");
+  const coachTeamMap = sorted.map(t=>t.userName&&t.userName!==t.teamName?`${t.userName} (head coach of ${t.teamName})`:`${t.teamName}`).join(", ");
+  const standingsText = sorted.map((t,i)=>{const tot=calcTotal(t);const coach=t.userName&&t.userName!==t.teamName?`${t.userName}/${t.teamName}`:`${t.teamName}`;return `${i+1}. ${coach} — ${t.wins}W ${t.losses}L — ${tot} pts${i===0?" [LEADER]":` (-${leader-tot})`}`;}).join("\n");
 
   // Build schedule context for AI
+  const teamToCoach = Object.fromEntries(sorted.filter(t=>t.userName&&t.userName!==t.teamName).map(t=>[t.teamName,t.userName]));
+  const fmt = (team,opp) => {
+    const c1=teamToCoach[team]; const c2=teamToCoach[opp];
+    const t1=c1?`${c1} (${team})`:team; const t2=c2?`${c2} (${opp})`:opp;
+    if(opp==="BYE")return `${t1}: BYE`;
+    if(opp==="CPU")return `${t1} vs CPU (non-conf)`;
+    return `${t1} vs ${t2}`;
+  };
   const thisWeekMatchups = schedule[week] ? (() => {
     const seen = new Set(); const games = [];
     Object.entries(schedule[week]).forEach(([team,opp])=>{
       const key = [team,opp].sort().join("vs");
-      if(!seen.has(key)){seen.add(key);games.push(opp==="BYE"?`${team}: BYE`:opp==="CPU"?`${team} vs CPU (non-conf)`:`${team} vs ${opp}`);}
+      if(!seen.has(key)){seen.add(key);games.push(fmt(team,opp));}
     });
     return games.join("\n");
   })() : "Schedule not yet set";
@@ -2155,7 +2164,7 @@ function ContentHub({sorted,entries,week,season,year,leagueName,history,leader,a
     const seen = new Set(); const games = [];
     Object.entries(schedule[week-1]).forEach(([team,opp])=>{
       const key = [team,opp].sort().join("vs");
-      if(!seen.has(key)){seen.add(key);games.push(opp==="BYE"?`${team}: BYE`:opp==="CPU"?`${team} vs CPU`:` ${team} vs ${opp}`);}
+      if(!seen.has(key)){seen.add(key);games.push(fmt(team,opp));}
     });
     return games.join("\n");
   })() : "Schedule not available";
@@ -2177,7 +2186,8 @@ function ContentHub({sorted,entries,week,season,year,leagueName,history,leader,a
     const r = reporter;
     const leagueAge = history.length > 0 ? `This is year ${year} of the league (its ${year===2024?"1st":year===2025?"2nd":year===2026?"3rd":year===2027?"4th":year===2028?"5th":(year-2023)+"th"} year of existence, founded in 2024). ` : "";
     const pastChamps = history.length > 0 ? `Past dynasty champions: ${[...history].reverse().slice(0,5).map(s=>`${s.year} S${s.seasonNum||"?"}: ${s.champion}`).join(", ")}. ` : "";
-    const byline = `You are ${r.name}, ${r.title} for Dynasty Central covering the "${leagueName}" dynasty. Your writing style is ${r.style}\n\n${leagueAge}${pastChamps}This is NOT the inaugural season — the league has history and established rivalries.${bibleContext}\n\nAlways sign your articles with your name and title at the end.\n\n`;
+    const rosterContext = sorted.some(t=>t.userName&&t.userName!==t.teamName) ? `\n\nCOACH ROSTER — each entry is "Coach Name, head coach of Team Name". When writing, introduce them as "[Coach] head coach of [Team]" on first mention, then you may refer to them by coach name, team name, or "[Coach]'s [Team]" — never treat coaches and teams as separate entities:\n${sorted.filter(t=>t.userName&&t.userName!==t.teamName).map(t=>`${t.userName}, head coach of ${t.teamName}`).join("\n")}` : "";
+    const byline = `You are ${r.name}, ${r.title} for Dynasty Central covering the "${leagueName}" dynasty. Your writing style is ${r.style}\n\n${leagueAge}${pastChamps}This is NOT the inaugural season — the league has history and established rivalries.${rosterContext}${bibleContext}\n\nAlways sign your articles with your name and title at the end.\n\n`;
 
     const subjectProfile = (setup?.leagueBible?.profiles||[]).find(p=>p.name===breakingSubject);
     const subjectEntry = entries.find(e=>e.userName===breakingSubject||e.teamName===breakingSubject);
