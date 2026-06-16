@@ -2062,6 +2062,8 @@ function ContentHub({sorted,entries,week,season,year,leagueName,history,leader,a
   const [breakingGuidance,setBreakingGuidance] = useState("");
   const [draftArticle,setDraftArticle] = useState(null);
   const [draftText,setDraftText] = useState("");
+  const [revisionNote,setRevisionNote] = useState("");
+  const [revising,setRevising] = useState(false);
   const [bibleProfiles,setBibleProfiles] = useState(()=>(setup?.leagueBible?.profiles||[]).length>0?setup.leagueBible.profiles:entries.map(e=>({name:e.userName||e.teamName,bio:""})));
   const [bibleStorylines,setBibleStorylines] = useState(setup?.leagueBible?.storylines||"");
   const [bibleSaved,setBibleSaved] = useState(false);
@@ -2089,6 +2091,22 @@ function ContentHub({sorted,entries,week,season,year,leagueName,history,leader,a
       // Chronicle extraction failing silently is fine
     } finally {
       setExtracting(false);
+    }
+  }
+
+  async function requestRevision() {
+    if(!revisionNote.trim())return;
+    setRevising(true);
+    const r = reporter;
+    try {
+      const revisionPrompt = `You are ${r.name}, ${r.title}. You wrote the following article and the editor has requested changes.\n\nORIGINAL ARTICLE:\n${draftText}\n\nEDITOR NOTES — make ONLY these corrections, keep everything else the same:\n${revisionNote}\n\nReturn the full revised article only. No preamble.`;
+      const revised = cleanArticle(await callClaude(revisionPrompt));
+      setDraftText(revised);
+      setRevisionNote("");
+    } catch(e) {
+      setGenError(e.message);
+    } finally {
+      setRevising(false);
     }
   }
 
@@ -2317,10 +2335,18 @@ function ContentHub({sorted,entries,week,season,year,leagueName,history,leader,a
           <div style={{padding:14}}>
             <div style={{fontSize:11,color:"#888",fontWeight:700,textTransform:"uppercase",letterSpacing:0.5,marginBottom:8}}>Review &amp; Edit Before Publishing</div>
             <textarea value={draftText} onChange={e=>setDraftText(e.target.value)} style={{width:"100%",minHeight:300,fontSize:13,fontFamily:"Georgia,serif",lineHeight:1.7,padding:12,border:"1px solid #ddd",borderRadius:2,resize:"vertical",boxSizing:"border-box",color:"#222"}}/>
+
+            {/* Revision request */}
+            <div style={{marginTop:12,background:"#f9f9f9",border:"1px solid #e8e8e8",borderRadius:2,padding:12}}>
+              <div style={{fontSize:11,fontWeight:800,textTransform:"uppercase",letterSpacing:0.5,color:"#555",marginBottom:6}}>Request Changes</div>
+              <textarea value={revisionNote} onChange={e=>setRevisionNote(e.target.value)} placeholder={`Tell ${draftArticle.reporter?.split(" ")[0]||"the writer"} what to fix — be specific. e.g. "Jelly Roll only won 2 of those 3 conference championship games, not all 3. Fix that stat." or "Make the tone less formal and more chaotic."`} style={{width:"100%",minHeight:64,padding:"8px 10px",border:"1px solid #ddd",borderRadius:2,fontSize:12,fontFamily:ff,lineHeight:1.5,resize:"vertical",boxSizing:"border-box",color:"#222",background:"#fff"}}/>
+              <button onClick={requestRevision} disabled={revising||!revisionNote.trim()} style={{marginTop:8,background:revising||!revisionNote.trim()?"#ccc":"#444",color:"#fff",border:"none",borderRadius:2,padding:"8px 16px",cursor:revising||!revisionNote.trim()?"not-allowed":"pointer",fontFamily:ff,fontSize:12,fontWeight:800,textTransform:"uppercase"}}>{revising?"Revising…":"✏ Revise Article"}</button>
+            </div>
+
             <div style={{display:"flex",gap:10,marginTop:10,alignItems:"center"}}>
-              <button onClick={()=>publishArticle({...draftArticle,text:draftText})} disabled={extracting} style={{background:draftArticle.reporterColor||"#111",color:"#fff",border:"none",borderRadius:2,padding:"10px 20px",cursor:"pointer",fontFamily:ff,fontSize:13,fontWeight:800,textTransform:"uppercase"}}>Publish</button>
-              <button onClick={()=>{setDraftArticle(null);setDraftText("");}} style={{background:"#fff",color:"#666",border:"1px solid #ccc",borderRadius:2,padding:"10px 20px",cursor:"pointer",fontFamily:ff,fontSize:13,fontWeight:700,textTransform:"uppercase"}}>Discard</button>
-              {extracting&&<span style={{fontSize:11,color:"#888",fontStyle:"italic"}}>Updating Chronicle…</span>}
+              <button onClick={()=>publishArticle({...draftArticle,text:draftText})} disabled={extracting||revising} style={{background:draftArticle.reporterColor||"#111",color:"#fff",border:"none",borderRadius:2,padding:"10px 20px",cursor:"pointer",fontFamily:ff,fontSize:13,fontWeight:800,textTransform:"uppercase"}}>Publish</button>
+              <button onClick={()=>{setDraftArticle(null);setDraftText("");setRevisionNote("");}} style={{background:"#fff",color:"#666",border:"1px solid #ccc",borderRadius:2,padding:"10px 20px",cursor:"pointer",fontFamily:ff,fontSize:13,fontWeight:700,textTransform:"uppercase"}}>Discard</button>
+              {(extracting||revising)&&<span style={{fontSize:11,color:"#888",fontStyle:"italic"}}>{revising?"Revising…":"Updating Chronicle…"}</span>}
             </div>
           </div>
         </Card>
