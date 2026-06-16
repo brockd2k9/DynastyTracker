@@ -2090,17 +2090,22 @@ export default function App() {
   // saveToDb defined after render to access latest state
   const stateRef = { setup, season, week, entries, history, postSeasonInputs, articles, schedule };
   async function saveToDb(overrides) {
+    // Never save while DB is still loading — could overwrite real data with empty state
+    if (dbLoading) return;
     var ovr = overrides || {};
     var data = {
       setup: ovr.setup !== undefined ? ovr.setup : stateRef.setup,
       season: ovr.season !== undefined ? ovr.season : stateRef.season,
       week: ovr.week !== undefined ? ovr.week : stateRef.week,
       entries: ovr.entries !== undefined ? ovr.entries : stateRef.entries,
-      history: ovr.history !== undefined ? ovr.history : stateRef.history,
+      // Never overwrite history with empty array unless explicitly passing an empty array via override
+      history: ovr.history !== undefined ? ovr.history : (stateRef.history.length > 0 ? stateRef.history : undefined),
       post_season_inputs: ovr.post_season_inputs !== undefined ? ovr.post_season_inputs : stateRef.postSeasonInputs,
       articles: ovr.articles !== undefined ? ovr.articles : stateRef.articles,
       schedule: ovr.schedule !== undefined ? ovr.schedule : stateRef.schedule,
     };
+    // Remove undefined keys so they're excluded from the PATCH
+    Object.keys(data).forEach(k => data[k] === undefined && delete data[k]);
     try { await dbSave(data); setLastSaved(new Date()); }
     catch(err) { console.error("Save failed:", err); }
   }
