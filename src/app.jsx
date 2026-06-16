@@ -1074,14 +1074,15 @@ function ProfileTab({history,setupRows,currentEntries,season,year,permanentUsers
       const userName=entry.userName;
       const nattyWin=(entry.nattyWinner||((entry.nattyWins||0)>0))||(s.nattyWinners?.includes(entry.teamName))||(s.nattyWinner&&s.nattyWinner.split(", ").includes(entry.teamName));
       const confChamp=(entry.confChampion||((entry.confChampWins||0)>0))||(s.confWinners?.includes(entry.teamName))||(s.confChampion&&s.confChampion.split(", ").includes(entry.teamName))||s.confChampion===entry.teamName||s.confChampion===userName;
-      return{year:s.year,seasonNum:s.seasonNum,rank,total:calcTotal(entry),wins:entry.wins,losses:entry.losses,teamName:entry.teamName,userName,champion:s.champion===userName,confChamp,nattyWin,heisman:s.heisman===entry.teamName||s.heisman===userName,weekLog:entry.weekLog||[],gamePts:entry.gamePts||0,rankedBonusPts:entry.rankedBonusPts||0,confStandPts:entry.confStandPts||0,confChampPts:entry.confChampPts||0,bowlPts:entry.bowlPts||0,recruitingPts:entry.recruitingPts||0,prestigePts:entry.prestigePts||0,heismanPts:entry.heismanPts||0,h2h:entry.h2h||{},playoffWins:entry.playoffWins||0,playoffLosses:entry.playoffLosses||0,bowlResult:entry.bowlResult||"none",bowlOpponent:entry.bowlOpponent||"",top25Wins:entry.top25Wins||0,top25Losses:entry.top25Losses||0,top10Wins:entry.top10Wins||0,top10Losses:entry.top10Losses||0,isHistorical:s.isHistorical||false};
+      return{year:s.year,seasonNum:s.seasonNum,rank,total:calcTotal(entry),wins:entry.wins,losses:entry.losses,teamName:entry.teamName,userName,champion:s.champion===userName,confChamp,confChampWins:entry.confChampWins||0,nattyWin,nattyWins:entry.nattyWins||0,heisman:s.heisman===entry.teamName||s.heisman===userName,weekLog:entry.weekLog||[],gamePts:entry.gamePts||0,rankedBonusPts:entry.rankedBonusPts||0,confStandPts:entry.confStandPts||0,confChampPts:entry.confChampPts||0,bowlPts:entry.bowlPts||0,recruitingPts:entry.recruitingPts||0,prestigePts:entry.prestigePts||0,heismanPts:entry.heismanPts||0,h2h:entry.h2h||{},playoffWins:entry.playoffWins||0,playoffLosses:entry.playoffLosses||0,bowlResult:entry.bowlResult||"none",bowlOpponent:entry.bowlOpponent||"",top25Wins:entry.top25Wins||0,top25Losses:entry.top25Losses||0,top10Wins:entry.top10Wins||0,top10Losses:entry.top10Losses||0,isHistorical:s.isHistorical||false};
     }).filter(Boolean);
     const cur=currentEntries.find(e=>(userId&&e.userId===userId)||(e.userName===fallbackUserName));
     const totalWins=seasons.reduce((a,s)=>a+s.wins,0)+(cur?.wins||0);
     const totalLosses=seasons.reduce((a,s)=>a+s.losses,0)+(cur?.losses||0);
     const totalPts=seasons.reduce((a,s)=>a+s.total,0)+(cur?calcTotal(cur):0);
     const championships=seasons.filter(s=>s.champion).length;
-    const confTitles=seasons.filter(s=>s.confChamp).length;
+    const confTitles=seasons.reduce((a,s)=>a+(s.confChampWins>0?s.confChampWins:s.confChamp?1:0),0);
+    const nattyWins=seasons.reduce((a,s)=>a+(s.nattyWins>0?s.nattyWins:s.nattyWin?1:0),0);
     const heismans=seasons.filter(s=>s.heisman).length;
     const bestFinish=seasons.length?Math.min(...seasons.map(s=>s.rank)):null;
     const allResults=[...seasons.flatMap(s=>(s.weekLog||[]).map(w=>w.result)),(cur?.weekLog||[]).map(w=>w.result)].flat().filter(r=>r==="win"||r==="loss");
@@ -1093,7 +1094,6 @@ function ProfileTab({history,setupRows,currentEntries,season,year,permanentUsers
     const rankedWins=allWeekLogs.filter(w=>w.result==="win"&&(w.ranked25||w.ranked10)).length;
     const top10Wins=allWeekLogs.filter(w=>w.result==="win"&&w.ranked10).length;
     const winPct=totalWins+totalLosses>0?((totalWins/(totalWins+totalLosses))*100).toFixed(1):0;
-    const nattyWins=seasons.filter(s=>s.nattyWin).length;
     // Career bowl/playoff/ranked records (from historical + weekLog-derived)
     const careerPlayoffWins=seasons.reduce((a,s)=>a+(s.playoffWins||0),0);
     const careerPlayoffLosses=seasons.reduce((a,s)=>a+(s.playoffLosses||0),0);
