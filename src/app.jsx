@@ -461,9 +461,11 @@ function SchedulePanel({entries,schedule,setSchedule}) {
 }
 
 // ── History Tab ───────────────────────────────────────────────────────────
-function HistoryTab({history}) {
+function HistoryTab({history, setHistory, saveToDb, commUnlocked}) {
   const isMobile = useIsMobile();
   const [sel,setSel] = useState(null);
+  const [editing,setEditing] = useState(null); // index into sortedHistory
+  const [editData,setEditData] = useState(null); // copy of season being edited
   if (!history.length) return <Card style={{padding:20}}><div style={{color:"#888",fontSize:14,textAlign:"center"}}>No completed seasons yet.</div></Card>;
 
   // Aggregate all-time stats
@@ -518,39 +520,110 @@ function HistoryTab({history}) {
       {/* Season History - sorted by year */}
       <Card><CardHead>Season History</CardHead>
         <div style={{padding:"12px 14px",display:"flex",gap:8,flexWrap:"wrap"}}>
-          {sortedHistory.map((s,i)=>{const key=s.year+"-"+i;return(<button key={key} onClick={()=>setSel(sel===key?null:key)} style={{padding:"5px 12px",borderRadius:2,border:"1px solid",borderColor:sel===key?RED:s.isHistorical?"#aaa":"#ddd",background:sel===key?RED:s.isHistorical?"#f5f5f5":"#fff",color:sel===key?"#fff":"#555",cursor:"pointer",fontSize:12,fontWeight:700,fontFamily:ff,textTransform:"uppercase"}}>{s.year}{s.isHistorical?" · HIST":` · S${s.seasonNum}`}</button>);})}
+          {sortedHistory.map((s,i)=>{const key=s.year+"-"+i;return(<button key={key} onClick={()=>{setSel(sel===key?null:key);setEditing(null);}} style={{padding:"5px 12px",borderRadius:2,border:"1px solid",borderColor:sel===key?RED:s.isHistorical?"#aaa":"#ddd",background:sel===key?RED:s.isHistorical?"#f5f5f5":"#fff",color:sel===key?"#fff":"#555",cursor:"pointer",fontSize:12,fontWeight:700,fontFamily:ff,textTransform:"uppercase"}}>{s.year}{s.isHistorical?" · HIST":` · S${s.seasonNum}`}</button>);})}
         </div>
         {sel!==null&&(()=>{
-          const s=sortedHistory.find((_,i)=>sel===_.year+"-"+i)||null;
+          const selIdx=sortedHistory.findIndex((_,i)=>sel===_.year+"-"+i);
+          const s=selIdx>=0?sortedHistory[selIdx]:null;
           if(!s)return null;
-          // Only show teams that actually played (have wins, losses, or non-zero pts)
-          const active=s.finalStandings.filter(t=>t.wins>0||t.losses>0||calcTotal(t)>0);
-          const srt=[...(active.length?active:s.finalStandings)].sort((a,b)=>calcTotal(b)-calcTotal(a));
+          // Find index in original history array for mutations
+          const histIdx=history.indexOf(s);
+
+          function handleDelete(){
+            if(!window.confirm(`Delete ${s.year} season? This cannot be undone.`))return;
+            const next=history.filter((_,i)=>i!==histIdx);
+            setHistory(next);
+            saveToDb({history:next});
+            setSel(null);setEditing(null);
+          }
+
+          function startEdit(){
+            setEditing(selIdx);
+            setEditData(JSON.parse(JSON.stringify(s))); // deep copy
+          }
+
+          function setEditTeam(teamName,field,val){
+            setEditData(prev=>{
+              const standings=prev.finalStandings.map(t=>t.teamName===teamName?{...t,[field]:field==="historicalTotal"||field==="wins"||field==="losses"?parseInt(val)||0:val}:t);
+              return{...prev,finalStandings:standings};
+            });
+          }
+
+          function saveEdit(){
+            // Recompute champion from highest pts
+            const srt=[...editData.finalStandings].sort((a,b)=>calcTotal(b)-calcTotal(a));
+            const updated={...editData,champion:srt[0]?.userName||editData.champion};
+            const next=history.map((h,i)=>i===histIdx?updated:h);
+            setHistory(next);
+            saveToDb({history:next});
+            setEditing(null);setEditData(null);
+          }
+
+          const isEditing=editing===selIdx&&editData;
+          const displayData=isEditing?editData:s;
+          const active=displayData.finalStandings.filter(t=>t.wins>0||t.losses>0||calcTotal(t)>0);
+          const srt=[...(active.length?active:displayData.finalStandings)].sort((a,b)=>calcTotal(b)-calcTotal(a));
           const top=calcTotal(srt[0]);
+
+          const numInp=(val,onChange)=><input type="number" min="0" value={val} onChange={e=>onChange(e.target.value)}
+            style={{width:52,padding:"3px 5px",border:"1px solid #ddd",borderRadius:2,fontSize:12,fontWeight:700,textAlign:"center",fontFamily:ff}}/>;
+
           return(
             <div style={{padding:"0 14px 14px"}}>
-              {/* Season badges */}
-              <div style={{display:"flex",gap:8,marginBottom:12,flexWrap:"wrap"}}>
-                {s.isHistorical&&<div style={{background:"#555",borderRadius:2,padding:"3px 10px",fontSize:11,color:"#fff",fontWeight:700}}>📥 IMPORTED</div>}
-                {s.champion&&<div style={{background:RED,borderRadius:2,padding:"3px 10px",fontSize:11,color:"#fff",fontWeight:700}}>🏆 {s.champion}</div>}
-                {s.nattyWinner&&<div style={{background:"#1a3a6b",borderRadius:2,padding:"3px 10px",fontSize:11,color:"#fff",fontWeight:700}}>🏈 Natty: {s.nattyWinner}</div>}
-                {s.confChampion&&<div style={{background:"#f5f5f5",border:"1px solid #ddd",borderRadius:2,padding:"3px 10px",fontSize:11,color:"#111",fontWeight:700}}>🏅 Conf: {s.confChampion}</div>}
-                {s.heisman&&<div style={{background:"#fff8e8",border:"1px solid #ddd",borderRadius:2,padding:"3px 10px",fontSize:11,color:"#cc7700",fontWeight:700}}>🏆 Heisman: {s.heisman}</div>}
+              {/* Season badges + action buttons */}
+              <div style={{display:"flex",justifyContent:"space-between",alignItems:"flex-start",gap:8,marginBottom:12,flexWrap:"wrap"}}>
+                <div style={{display:"flex",gap:8,flexWrap:"wrap"}}>
+                  {s.isHistorical&&<div style={{background:"#555",borderRadius:2,padding:"3px 10px",fontSize:11,color:"#fff",fontWeight:700}}>📥 IMPORTED</div>}
+                  {displayData.champion&&<div style={{background:RED,borderRadius:2,padding:"3px 10px",fontSize:11,color:"#fff",fontWeight:700}}>🏆 {displayData.champion}</div>}
+                  {displayData.nattyWinner&&<div style={{background:"#1a3a6b",borderRadius:2,padding:"3px 10px",fontSize:11,color:"#fff",fontWeight:700}}>🏈 Natty: {displayData.nattyWinner}</div>}
+                  {displayData.confChampion&&<div style={{background:"#f5f5f5",border:"1px solid #ddd",borderRadius:2,padding:"3px 10px",fontSize:11,color:"#111",fontWeight:700}}>🏅 Conf: {displayData.confChampion}</div>}
+                  {displayData.heisman&&<div style={{background:"#fff8e8",border:"1px solid #ddd",borderRadius:2,padding:"3px 10px",fontSize:11,color:"#cc7700",fontWeight:700}}>🏆 Heisman: {displayData.heisman}</div>}
+                </div>
+                {commUnlocked&&<div style={{display:"flex",gap:6,flexShrink:0}}>
+                  {!isEditing&&<button onClick={startEdit} style={{padding:"4px 12px",background:"#1a3a6b",color:"#fff",border:"none",borderRadius:2,cursor:"pointer",fontSize:11,fontWeight:800,fontFamily:ff}}>✏️ Edit</button>}
+                  {isEditing&&<button onClick={saveEdit} style={{padding:"4px 12px",background:"#007a00",color:"#fff",border:"none",borderRadius:2,cursor:"pointer",fontSize:11,fontWeight:800,fontFamily:ff}}>✓ Save</button>}
+                  {isEditing&&<button onClick={()=>{setEditing(null);setEditData(null);}} style={{padding:"4px 12px",background:"#888",color:"#fff",border:"none",borderRadius:2,cursor:"pointer",fontSize:11,fontWeight:800,fontFamily:ff}}>Cancel</button>}
+                  {!isEditing&&<button onClick={handleDelete} style={{padding:"4px 12px",background:RED,color:"#fff",border:"none",borderRadius:2,cursor:"pointer",fontSize:11,fontWeight:800,fontFamily:ff}}>🗑 Delete</button>}
+                </div>}
               </div>
+
+              {/* Edit: awards row */}
+              {isEditing&&<div style={{background:"#f9f9f9",border:"1px solid #eee",borderRadius:2,padding:"12px 14px",marginBottom:12,display:"flex",flexDirection:"column",gap:10}}>
+                <div style={{fontSize:11,fontWeight:800,color:"#555",textTransform:"uppercase",letterSpacing:1,marginBottom:4}}>Awards</div>
+                {[["nattyWinner","🏈 Natty Winner"],["nattyRunnerUp","Natty Runner-Up"],["confChampion","🏅 Conf Champion"],["confRunnerUp","Conf Runner-Up"],["heisman","🏆 Heisman"]].map(([field,label])=>(
+                  <div key={field} style={{display:"flex",alignItems:"center",gap:10}}>
+                    <div style={{fontSize:12,color:"#555",width:130,flexShrink:0}}>{label}</div>
+                    <input value={editData[field]||""} onChange={e=>setEditData(p=>({...p,[field]:e.target.value}))}
+                      style={{padding:"5px 8px",border:"1px solid #ddd",borderRadius:2,fontSize:12,fontFamily:ff,flex:1}}/>
+                  </div>
+                ))}
+              </div>}
+
               {/* Standings table */}
               <table style={{width:"100%",borderCollapse:"collapse",fontSize:isMobile?11:13}}>
                 <thead><tr style={{borderBottom:`2px solid ${RED}`,background:"#f7f7f7"}}>
-                  {["#","User",...(isMobile?[]:["Team"]),"W","L","PTS","Behind"].map(h=><th key={h} style={{padding:"7px 6px",textAlign:h==="User"||h==="Team"?"left":"center",color:"#555",fontSize:9,letterSpacing:1,textTransform:"uppercase",fontWeight:800}}>{h}</th>)}
+                  {["#","User",...(isMobile?[]:["Team"]),"W","L","PTS",...(!isEditing?["Behind"]:[])]
+                    .map(h=><th key={h} style={{padding:"7px 6px",textAlign:h==="User"||h==="Team"?"left":"center",color:"#555",fontSize:9,letterSpacing:1,textTransform:"uppercase",fontWeight:800}}>{h}</th>)}
                 </tr></thead>
                 <tbody>{srt.map((t,i)=>{const tot=calcTotal(t);return(
-                  <tr key={t.userName} style={{borderBottom:"1px solid #eee",background:i===0?"#fff8f8":"transparent"}}>
+                  <tr key={t.teamName||t.userName} style={{borderBottom:"1px solid #eee",background:i===0?"#fff8f8":"transparent"}}>
                     <td style={{padding:"8px 6px",textAlign:"center",color:i===0?RED:"#bbb",fontWeight:800,fontSize:13}}>{i+1}</td>
                     <td style={{padding:"8px 6px",color:"#111",fontWeight:i===0?800:400}}>{t.userName}</td>
                     {!isMobile&&<td style={{padding:"8px 6px",color:"#888",fontSize:12}}>{t.teamName}</td>}
-                    <td style={{padding:"8px 6px",textAlign:"center",color:"#007a00",fontWeight:700}}>{t.wins||0}</td>
-                    <td style={{padding:"8px 6px",textAlign:"center",color:RED,fontWeight:700}}>{t.losses||0}</td>
-                    <td style={{padding:"8px 6px",textAlign:"center",fontWeight:800,color:i===0?RED:"#111",fontSize:14}}>{tot}</td>
-                    <td style={{padding:"8px 6px",textAlign:"center",color:i===0?"#007a00":RED,fontSize:12}}>{i===0?"LEAD":`-${top-tot}`}</td>
+                    {isEditing?(
+                      <>
+                        <td style={{padding:"4px 4px",textAlign:"center"}}>{numInp(t.wins||0,v=>setEditTeam(t.teamName,"wins",v))}</td>
+                        <td style={{padding:"4px 4px",textAlign:"center"}}>{numInp(t.losses||0,v=>setEditTeam(t.teamName,"losses",v))}</td>
+                        <td style={{padding:"4px 4px",textAlign:"center"}}>{numInp(t.historicalTotal!==undefined?t.historicalTotal:tot,v=>setEditTeam(t.teamName,t.historicalTotal!==undefined?"historicalTotal":"gamePts",v))}</td>
+                      </>
+                    ):(
+                      <>
+                        <td style={{padding:"8px 6px",textAlign:"center",color:"#007a00",fontWeight:700}}>{t.wins||0}</td>
+                        <td style={{padding:"8px 6px",textAlign:"center",color:RED,fontWeight:700}}>{t.losses||0}</td>
+                        <td style={{padding:"8px 6px",textAlign:"center",fontWeight:800,color:i===0?RED:"#111",fontSize:14}}>{tot}</td>
+                        <td style={{padding:"8px 6px",textAlign:"center",color:i===0?"#007a00":RED,fontSize:12}}>{i===0?"LEAD":`-${top-tot}`}</td>
+                      </>
+                    )}
                   </tr>
                 );})}</tbody>
               </table>
@@ -2303,7 +2376,7 @@ export default function App() {
             )}
           </>)}
 
-          {tab==="History"&&<HistoryTab history={history}/>}
+          {tab==="History"&&<HistoryTab history={history} setHistory={setHistory} saveToDb={saveToDb} commUnlocked={commUnlocked}/>}
           {tab==="Profiles"&&<ProfileTab history={history} setupRows={setup?.rows||[]} currentEntries={entries} season={season} permanentUsers={setup?.permanentUsers}/>}
           {tab==="Schedule"&&<ScheduleTab schedule={schedule} entries={activeEntries} week={week} season={season}/>}
           {tab==="Rules"&&<div style={{display:"grid",gridTemplateColumns:isMobile?"1fr":"repeat(auto-fill,minmax(250px,1fr))",gap:10}}>
