@@ -518,13 +518,19 @@ function SchedulePanel({entries,schedule,setSchedule}) {
 }
 
 // ── History Tab ───────────────────────────────────────────────────────────
-function HistoryTab({history, setHistory, saveToDb, commUnlocked, entries, setEntries, season, week, setWeek, yearRosters}) {
+function HistoryTab({history, setHistory, saveToDb, commUnlocked, entries, setEntries, season, week, setWeek, yearRosters, permanentUsers}) {
   // Apply per-year name/team overrides from yearRosters to a standings array
   function applyRoster(standings, yr) {
     const roster = yearRosters?.[yr];
     if(!roster?.length) return standings;
     return standings.map(t=>{
-      const ov = roster.find(r=>r.userId===t.userId);
+      // Match by userId first
+      let ov = roster.find(r=>r.userId && r.userId===t.userId);
+      // Fall back: find permanent user whose defaultName matches this entry's userName, then match roster by that userId
+      if(!ov && permanentUsers?.length) {
+        const pu = permanentUsers.find(u=>u.defaultName===t.userName);
+        if(pu) ov = roster.find(r=>r.userId===pu.id);
+      }
       if(!ov) return t;
       return {...t, userName:ov.userName||t.userName, teamName:ov.teamName||t.teamName};
     });
@@ -2637,7 +2643,7 @@ export default function App() {
             )}
           </>)}
 
-          {tab==="History"&&<HistoryTab history={history} setHistory={setHistory} saveToDb={saveToDb} commUnlocked={commUnlocked} yearRosters={setup?.yearRosters}/>}
+          {tab==="History"&&<HistoryTab history={history} setHistory={setHistory} saveToDb={saveToDb} commUnlocked={commUnlocked} yearRosters={setup?.yearRosters} permanentUsers={setup?.permanentUsers}/>}
           {tab==="Profiles"&&<ProfileTab history={history} setupRows={setup?.rows||[]} currentEntries={entries} season={season} year={year} permanentUsers={setup?.permanentUsers}/>}
           {tab==="Schedule"&&<ScheduleTab schedule={schedule} entries={activeEntries} week={week} season={season}/>}
           {tab==="Rules"&&<div style={{display:"grid",gridTemplateColumns:isMobile?"1fr":"repeat(auto-fill,minmax(250px,1fr))",gap:10}}>
@@ -2709,7 +2715,7 @@ export default function App() {
           {["Enter Results","Season History","Schedule","Content","League Setup"].map(t=><button key={t} onClick={()=>setCommTab(t)} style={{padding:"11px 18px",background:"transparent",border:"none",borderBottom:commTab===t?`3px solid ${RED}`:"3px solid transparent",color:commTab===t?"#fff":"#888",cursor:"pointer",fontSize:12,fontWeight:700,fontFamily:ff,textTransform:"uppercase",letterSpacing:0.5,whiteSpace:"nowrap"}}>{t}</button>)}
         </div>
         <div style={{maxWidth:800,margin:"0 auto",padding:"20px 14px"}}>
-          {commTab==="Season History"&&<HistoryTab history={history} setHistory={setHistory} saveToDb={saveToDb} commUnlocked={true} entries={entries} setEntries={setEntries} season={season} week={week} setWeek={setWeek} yearRosters={setup?.yearRosters}/>}
+          {commTab==="Season History"&&<HistoryTab history={history} setHistory={setHistory} saveToDb={saveToDb} commUnlocked={true} entries={entries} setEntries={setEntries} season={season} week={week} setWeek={setWeek} yearRosters={setup?.yearRosters} permanentUsers={setup?.permanentUsers}/>}
           {commTab==="Enter Results"&&<EnterResultsPanel entries={activeEntries} weekResults={weekResults} setWeekResults={setWeekResults} week={week} setWeek={setWeek} applyBulkResults={applyBulkResults} applyWeekResults={applyWeekResults} postSeasonInputs={postSeasonInputs} setPSI={setPSI} applyPostSeason={applyPostSeason} finalizeSeason={finalizeSeason} season={season} setSeason={setSeason} year={year} setYear={setYear} teamNames={teamNames} schedule={schedule} history={history} onImportHistory={importHistoricalSeason} setupRows={setup?.rows||[]} saveToDb={saveToDb}/>}
           {commTab==="Schedule"&&<SchedulePanel entries={activeEntries} schedule={schedule} setSchedule={setSchedule}/>}
           {commTab==="Content"&&<ContentHub sorted={sorted} entries={activeEntries} week={week} season={season} leagueName={leagueName} history={history} leader={leader} articles={articles} setArticles={setArticles} setActiveArticle={setActiveArticle} schedule={schedule}/>}
