@@ -742,14 +742,26 @@ function HistoryTab({history, setHistory, saveToDb, commUnlocked, entries, setEn
                         {/* Bowl */}
                         <div style={{display:"flex",alignItems:"center",gap:8,flexWrap:"wrap"}}>
                           <span style={{fontSize:11,fontWeight:700,color:"#555",width:110}}>Bowl Game</span>
-                          {["none","win","loss"].map(opt=>(
-                            <button key={opt} onClick={()=>setEditTeam(t.teamName,"bowlResult",opt)}
-                              style={{padding:"3px 10px",borderRadius:2,border:"1px solid",borderColor:(t.bowlResult||"none")===opt?(opt==="win"?"#007a00":opt==="loss"?RED:"#888"):"#ddd",background:(t.bowlResult||"none")===opt?(opt==="win"?"#f0f8f0":opt==="loss"?"#fff8f8":"#eee"):"#fff",color:(t.bowlResult||"none")===opt?(opt==="win"?"#007a00":opt==="loss"?RED:"#555"):"#888",cursor:"pointer",fontSize:11,fontFamily:ff,fontWeight:700}}>
-                              {opt==="none"?"No Bowl":opt==="win"?"Win":"Loss"}
-                            </button>
-                          ))}
-                          {(t.bowlResult||"none")!=="none"&&<input value={t.bowlOpponent||""} onChange={e=>setEditTeam(t.teamName,"bowlOpponent",e.target.value)} placeholder="Opponent"
-                            style={{padding:"3px 8px",border:"1px solid #ddd",borderRadius:2,fontSize:11,fontFamily:ff,width:130}}/>}
+                          {numInp(t.bowlWins!=null?t.bowlWins:(t.bowlResult==="win"?1:0),v=>setEditTeam(t.teamName,"bowlWins",v),44)}
+                          <span style={{color:"#888",fontSize:11,fontWeight:700}}>W</span>
+                          {numInp(t.bowlLosses!=null?t.bowlLosses:(t.bowlResult==="loss"?1:0),v=>setEditTeam(t.teamName,"bowlLosses",v),44)}
+                          <span style={{color:"#888",fontSize:11,fontWeight:700}}>L</span>
+                        </div>
+                        {/* Natl Champ */}
+                        <div style={{display:"flex",alignItems:"center",gap:8,flexWrap:"wrap"}}>
+                          <span style={{fontSize:11,fontWeight:700,color:"#555",width:110}}>Natl Champ</span>
+                          {numInp(t.nattyWins||0,v=>setEditTeam(t.teamName,"nattyWins",v),44)}
+                          <span style={{color:"#888",fontSize:11,fontWeight:700}}>W</span>
+                          {numInp(t.nattyLosses||0,v=>setEditTeam(t.teamName,"nattyLosses",v),44)}
+                          <span style={{color:"#888",fontSize:11,fontWeight:700}}>L</span>
+                        </div>
+                        {/* Conf Champ */}
+                        <div style={{display:"flex",alignItems:"center",gap:8,flexWrap:"wrap"}}>
+                          <span style={{fontSize:11,fontWeight:700,color:"#555",width:110}}>Conf Champ</span>
+                          {numInp(t.confChampWins||0,v=>setEditTeam(t.teamName,"confChampWins",v),44)}
+                          <span style={{color:"#888",fontSize:11,fontWeight:700}}>W</span>
+                          {numInp(t.confChampLosses||0,v=>setEditTeam(t.teamName,"confChampLosses",v),44)}
+                          <span style={{color:"#888",fontSize:11,fontWeight:700}}>L</span>
                         </div>
                         {/* vs Top 25 */}
                         <div style={{display:"flex",alignItems:"center",gap:10,flexWrap:"wrap"}}>
@@ -1050,9 +1062,9 @@ function ProfileTab({history,setupRows,currentEntries,season,permanentUsers}) {
     // Career bowl/playoff/ranked records (from historical + weekLog-derived)
     const careerPlayoffWins=seasons.reduce((a,s)=>a+(s.playoffWins||0),0);
     const careerPlayoffLosses=seasons.reduce((a,s)=>a+(s.playoffLosses||0),0);
-    const bowlWins=seasons.filter(s=>s.bowlResult==="win").length;
-    const bowlLosses=seasons.filter(s=>s.bowlResult==="loss").length;
-    const bowlAppearances=seasons.filter(s=>s.bowlResult&&s.bowlResult!=="none").length;
+    const bowlWins=seasons.reduce((a,s)=>a+(s.bowlWins!=null?s.bowlWins:(s.bowlResult==="win"?1:0)),0);
+    const bowlLosses=seasons.reduce((a,s)=>a+(s.bowlLosses!=null?s.bowlLosses:(s.bowlResult==="loss"?1:0)),0);
+    const bowlAppearances=bowlWins+bowlLosses;
     const careerTop25Wins=seasons.reduce((a,s)=>a+(s.top25Wins||0),0)+allWeekLogs.filter(w=>w.result==="win"&&w.ranked25&&!w.ranked10).length;
     const careerTop10Wins=seasons.reduce((a,s)=>a+(s.top10Wins||0),0)+allWeekLogs.filter(w=>w.result==="win"&&w.ranked10).length;
     // H2H - merge across all seasons + current
@@ -1574,8 +1586,12 @@ function HistoricalImportPanel({setupRows, history, onImport}) {
         // Extended historical stats
         playoffWins: parseInt(d.playoffWins)||0,
         playoffLosses: parseInt(d.playoffLosses)||0,
-        bowlResult: d.bowlResult||"none",
-        bowlOpponent: d.bowlOpponent||"",
+        bowlWins: parseInt(d.bowlWins)||0,
+        bowlLosses: parseInt(d.bowlLosses)||0,
+        nattyWins: parseInt(d.nattyWins)||0,
+        nattyLosses: parseInt(d.nattyLosses)||0,
+        confChampWins: parseInt(d.confChampWins)||0,
+        confChampLosses: parseInt(d.confChampLosses)||0,
         top25Wins: parseInt(d.top25Wins)||0,
         top25Losses: parseInt(d.top25Losses)||0,
         top10Wins: parseInt(d.top10Wins)||0,
@@ -1676,18 +1692,34 @@ function HistoricalImportPanel({setupRows, history, onImport}) {
                   {/* Bowl result */}
                   <div style={{display:"flex",alignItems:"center",gap:10,flexWrap:"wrap"}}>
                     <div style={{fontSize:12,fontWeight:600,color:"#333",width:120}}>Bowl Game</div>
-                    <div style={{display:"flex",alignItems:"center",gap:6,flexWrap:"wrap"}}>
-                      {["none","win","loss"].map(opt=>(
-                        <button key={opt} onClick={()=>setDetail(r.teamName,"bowlResult",opt)}
-                          style={{padding:"4px 10px",borderRadius:2,border:"1px solid",borderColor:getDetail(r.teamName,"bowlResult","none")===opt?(opt==="win"?"#007a00":opt==="loss"?"#cc0000":"#888"):"#ddd",background:getDetail(r.teamName,"bowlResult","none")===opt?(opt==="win"?"#f0f8f0":opt==="loss"?"#fff8f8":"#f5f5f5"):"#fff",color:getDetail(r.teamName,"bowlResult","none")===opt?(opt==="win"?"#007a00":opt==="loss"?"#cc0000":"#555"):"#888",cursor:"pointer",fontSize:11,fontFamily:"'Helvetica Neue',Arial,sans-serif",fontWeight:700}}>
-                          {opt==="none"?"No Bowl":opt==="win"?"Win":"Loss"}
-                        </button>
-                      ))}
-                      {getDetail(r.teamName,"bowlResult","none")!=="none"&&(
-                        <input value={getDetail(r.teamName,"bowlOpponent")} onChange={e=>setDetail(r.teamName,"bowlOpponent",e.target.value)} placeholder="Opponent (e.g. Alabama)"
-                          style={{padding:"4px 8px",border:"1px solid #ddd",borderRadius:2,fontSize:12,fontFamily:"'Helvetica Neue',Arial,sans-serif",width:160}}/>
-                      )}
+                    <div style={{display:"flex",alignItems:"center",gap:6}}>
+                      {inp(getDetail(r.teamName,"bowlWins"), v=>setDetail(r.teamName,"bowlWins",v), 50)}
+                      <span style={{color:"#888",fontWeight:700}}>W</span>
+                      {inp(getDetail(r.teamName,"bowlLosses"), v=>setDetail(r.teamName,"bowlLosses",v), 50)}
+                      <span style={{color:"#888",fontWeight:700}}>L</span>
                     </div>
+                  </div>
+                  {/* National Championship */}
+                  <div style={{display:"flex",alignItems:"center",gap:10,flexWrap:"wrap"}}>
+                    <div style={{fontSize:12,fontWeight:600,color:"#333",width:120}}>Natl Champ</div>
+                    <div style={{display:"flex",alignItems:"center",gap:6}}>
+                      {inp(getDetail(r.teamName,"nattyWins"), v=>setDetail(r.teamName,"nattyWins",v), 50)}
+                      <span style={{color:"#888",fontWeight:700}}>W</span>
+                      {inp(getDetail(r.teamName,"nattyLosses"), v=>setDetail(r.teamName,"nattyLosses",v), 50)}
+                      <span style={{color:"#888",fontWeight:700}}>L</span>
+                    </div>
+                    <div style={{fontSize:11,color:"#888"}}>(titles won counted in Awards below)</div>
+                  </div>
+                  {/* Conference Championship */}
+                  <div style={{display:"flex",alignItems:"center",gap:10,flexWrap:"wrap"}}>
+                    <div style={{fontSize:12,fontWeight:600,color:"#333",width:120}}>Conf Champ</div>
+                    <div style={{display:"flex",alignItems:"center",gap:6}}>
+                      {inp(getDetail(r.teamName,"confChampWins"), v=>setDetail(r.teamName,"confChampWins",v), 50)}
+                      <span style={{color:"#888",fontWeight:700}}>W</span>
+                      {inp(getDetail(r.teamName,"confChampLosses"), v=>setDetail(r.teamName,"confChampLosses",v), 50)}
+                      <span style={{color:"#888",fontWeight:700}}>L</span>
+                    </div>
+                    <div style={{fontSize:11,color:"#888"}}>(titles won counted in Awards below)</div>
                   </div>
                   {/* vs Top 25 */}
                   <div style={{display:"flex",alignItems:"center",gap:10,flexWrap:"wrap"}}>
