@@ -2093,7 +2093,9 @@ function ContentHub({sorted,entries,week,season,year,leagueName,history,leader,a
     setGenerating(type);
     setGenError(null);
     const r = reporter;
-    const byline = `You are ${r.name}, ${r.title} for Dynasty Central covering the "${leagueName}" dynasty. Your writing style is ${r.style}\n\nAlways sign your articles with your name and title at the end.\n\n`;
+    const leagueAge = history.length > 0 ? `This is year ${year} of the league (its ${year===2024?"1st":year===2025?"2nd":year===2026?"3rd":year===2027?"4th":year===2028?"5th":(year-2023)+"th"} year of existence, founded in 2024). ` : "";
+    const pastChamps = history.length > 0 ? `Past dynasty champions: ${[...history].reverse().slice(0,5).map(s=>`${s.year} S${s.seasonNum||"?"}: ${s.champion}`).join(", ")}. ` : "";
+    const byline = `You are ${r.name}, ${r.title} for Dynasty Central covering the "${leagueName}" dynasty. Your writing style is ${r.style}\n\n${leagueAge}${pastChamps}This is NOT the inaugural season — the league has history and established rivalries.\n\nAlways sign your articles with your name and title at the end.\n\n`;
 
     const scheduleContext = upcomingSchedule ? `\n\nUPCOMING SCHEDULE:\n${upcomingSchedule}` : "";
     const prompts = {
