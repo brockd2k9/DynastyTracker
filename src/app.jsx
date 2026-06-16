@@ -1256,8 +1256,8 @@ function ProfileTab({history,setupRows,currentEntries,season,year,permanentUsers
 
 // ── SetupPanel ────────────────────────────────────────────────────────────
 function SetupPanel({entries,setup,postSeasonInputs,setPSI,handleStart,setCommissionerUnlocked,season,year,setEntries,setWeekResults,setSetup,saveToDb,history,setHistory}) {
-  const [setupRows,setSetupRows] = useState(setup?.rows?.length?setup.rows.map(r=>({userId:r.userId||"",userName:r.userName,teamName:r.teamName})):Array.from({length:4},()=>({userId:"",userName:"",teamName:""})));
-  useEffect(()=>{if(setup?.rows?.length)setSetupRows(setup.rows.map(r=>({userId:r.userId||"",userName:r.userName,teamName:r.teamName})));},[setup?.rows]);
+  const [setupRows,setSetupRows] = useState(setup?.rows?.length?setup.rows.map(r=>({userId:r.userId||"",userName:r.userName,teamName:r.teamName,aliases:r.aliases||""})):Array.from({length:4},()=>({userId:"",userName:"",teamName:"",aliases:""})));
+  useEffect(()=>{if(setup?.rows?.length)setSetupRows(setup.rows.map(r=>({userId:r.userId||"",userName:r.userName,teamName:r.teamName,aliases:r.aliases||""})));},[setup?.rows]);
   const [setupLeague,setSetupLeague] = useState(setup?.leagueName||"");
   const [rosterSeason,setRosterSeason] = useState(season+1);
   const [rosterEdits,setRosterEdits] = useState({});
@@ -1272,15 +1272,18 @@ function SetupPanel({entries,setup,postSeasonInputs,setPSI,handleStart,setCommis
     const valid=setupRows.filter(r=>r.userName.trim());
     if(valid.length<2)return alert("Need at least 2 users.");
     // Map userId→canonicalName for ALL permanent users (not just changed ones)
-    // Also map oldDefaultName→newName for entries that have no userId
+    // Also map any aliases or old defaultNames → canonical name for history entries without userId
     const userIdToName={}, oldNameMap={};
-    (setup?.permanentUsers||[]).forEach(p=>{
-      const sr=valid.find(s=>s.userId===p.id);
-      const newName=sr?.userName.trim()||p.defaultName;
-      userIdToName[p.id]=newName;
-      if(newName!==p.defaultName) oldNameMap[p.defaultName]=newName;
+    valid.forEach(sr=>{
+      const pu=(setup?.permanentUsers||[]).find(p=>p.id===sr.userId);
+      const newName=sr.userName.trim();
+      if(!newName||!sr.userId)return;
+      userIdToName[sr.userId]=newName;
+      if(pu&&newName!==pu.defaultName) oldNameMap[pu.defaultName]=newName;
+      // Parse aliases field (comma-separated old names)
+      (sr.aliases||"").split(",").map(a=>a.trim()).filter(Boolean).forEach(alias=>{oldNameMap[alias]=newName;});
     });
-    const updatedRows=(setup?.rows||[]).map(r=>{const n=userIdToName[r.userId];return n?{...r,userName:n}:r;});
+    const updatedRows=(setup?.rows||[]).map(r=>{const sr=valid.find(s=>s.userId===r.userId);const n=userIdToName[r.userId];const base={...r};if(n)base.userName=n;if(sr?.aliases!==undefined)base.aliases=sr.aliases;return base;});
     const updatedPerm=(setup?.permanentUsers||[]).map(p=>{const n=userIdToName[p.id];return n?{...p,defaultName:n}:p;});
     const updated={...setup,rows:updatedRows,permanentUsers:updatedPerm};
     setSetup(updated);
@@ -1356,15 +1359,18 @@ function SetupPanel({entries,setup,postSeasonInputs,setPSI,handleStart,setCommis
       <Card><CardHead bg={RED}>Users & Teams</CardHead>
         <div style={{padding:"0 0 8px"}}>
           <div style={{padding:"6px 14px 4px",fontSize:11,color:"#888"}}>These are the permanent player accounts. IDs are assigned automatically and persist across all seasons.</div>
-          <div style={{display:"grid",gridTemplateColumns:"1fr 1fr 32px",padding:"8px 14px 6px",borderBottom:"1px solid #f0f0f0"}}>
+          <div style={{padding:"4px 14px 6px",fontSize:11,color:"#888"}}>Add old names in "Also known as" to merge historical stats under this username.</div>
+          <div style={{display:"grid",gridTemplateColumns:"1fr 1fr 1fr 32px",padding:"8px 14px 6px",borderBottom:"1px solid #f0f0f0"}}>
             <div style={{fontSize:10,color:"#999",letterSpacing:1,textTransform:"uppercase",fontWeight:700}}>Username</div>
             <div style={{fontSize:10,color:"#999",letterSpacing:1,textTransform:"uppercase",fontWeight:700}}>Team</div>
+            <div style={{fontSize:10,color:"#999",letterSpacing:1,textTransform:"uppercase",fontWeight:700}}>Also known as</div>
             <div/>
           </div>
           {setupRows.map((row,i)=>(
-            <div key={i} style={{display:"grid",gridTemplateColumns:"1fr 1fr 32px",borderBottom:"1px solid #f5f5f5",alignItems:"center"}}>
+            <div key={i} style={{display:"grid",gridTemplateColumns:"1fr 1fr 1fr 32px",borderBottom:"1px solid #f5f5f5",alignItems:"center"}}>
               <input value={row.userName} onChange={e=>setSR(i,"userName",e.target.value)} placeholder={"User "+(i+1)} style={{background:"transparent",border:"none",borderRight:"1px solid #f0f0f0",padding:"9px 14px",color:"#111",fontFamily:ff,fontSize:13,outline:"none"}}/>
               <input value={row.teamName} onChange={e=>setSR(i,"teamName",e.target.value)} placeholder="e.g. Troy" style={{background:"transparent",border:"none",borderRight:"1px solid #f0f0f0",padding:"9px 14px",color:"#111",fontFamily:ff,fontSize:13,outline:"none"}}/>
+              <input value={row.aliases||""} onChange={e=>setSR(i,"aliases",e.target.value)} placeholder="old name, other name" style={{background:"transparent",border:"none",borderRight:"1px solid #f0f0f0",padding:"9px 14px",color:"#777",fontFamily:ff,fontSize:12,outline:"none"}}/>
               <button onClick={()=>removeRow(i)} style={{background:"transparent",border:"none",color:"#ccc",cursor:"pointer",fontSize:18,padding:"0 8px"}}>×</button>
             </div>
           ))}
