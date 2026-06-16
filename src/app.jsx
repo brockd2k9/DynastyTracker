@@ -2058,6 +2058,8 @@ function ContentHub({sorted,entries,week,season,year,leagueName,history,leader,a
   const [genError,setGenError] = useState(null);
   const [selectedReporter,setSelectedReporter] = useState(0);
   const [contentType,setContentType] = useState("powerrankings");
+  const [breakingSubject,setBreakingSubject] = useState("");
+  const [breakingGuidance,setBreakingGuidance] = useState("");
   const [draftArticle,setDraftArticle] = useState(null);
   const [draftText,setDraftText] = useState("");
   const [bibleProfiles,setBibleProfiles] = useState(()=>(setup?.leagueBible?.profiles||[]).length>0?setup.leagueBible.profiles:entries.map(e=>({name:e.userName||e.teamName,bio:""})));
@@ -2149,12 +2151,19 @@ function ContentHub({sorted,entries,week,season,year,leagueName,history,leader,a
   const reporter = REPORTERS[selectedReporter];
 
   async function generate(type) {
+    if(type==="breaking"&&!breakingSubject){setGenError("Select a coach for the breaking news.");return;}
+    if(type==="breaking"&&!breakingGuidance.trim()){setGenError("Add some guidance — what's the breaking news about?");return;}
     setGenerating(type);
     setGenError(null);
     const r = reporter;
     const leagueAge = history.length > 0 ? `This is year ${year} of the league (its ${year===2024?"1st":year===2025?"2nd":year===2026?"3rd":year===2027?"4th":year===2028?"5th":(year-2023)+"th"} year of existence, founded in 2024). ` : "";
     const pastChamps = history.length > 0 ? `Past dynasty champions: ${[...history].reverse().slice(0,5).map(s=>`${s.year} S${s.seasonNum||"?"}: ${s.champion}`).join(", ")}. ` : "";
     const byline = `You are ${r.name}, ${r.title} for Dynasty Central covering the "${leagueName}" dynasty. Your writing style is ${r.style}\n\n${leagueAge}${pastChamps}This is NOT the inaugural season — the league has history and established rivalries.${bibleContext}\n\nAlways sign your articles with your name and title at the end.\n\n`;
+
+    const subjectProfile = (setup?.leagueBible?.profiles||[]).find(p=>p.name===breakingSubject);
+    const subjectEntry = entries.find(e=>e.userName===breakingSubject||e.teamName===breakingSubject);
+    const subjectContext = subjectProfile?.bio ? `\n\nABOUT ${breakingSubject.toUpperCase()}: ${subjectProfile.bio}` : "";
+    const subjectRecord = subjectEntry ? ` (currently ${subjectEntry.wins}W-${subjectEntry.losses}L, ${calcTotal(subjectEntry)} pts)` : "";
 
     const scheduleContext = upcomingSchedule ? `\n\nUPCOMING SCHEDULE:\n${upcomingSchedule}` : "";
     const prompts = {
@@ -2167,11 +2176,13 @@ function ContentHub({sorted,entries,week,season,year,leagueName,history,leader,a
       seasonpreview: `${byline}Write a Season ${season} (${year}) preview for the "${leagueName}" dynasty.\n\nTeams:\n${entries.map(e=>e.teamName).join("\n")}\n${history.length>0?`\nDefending champion: ${history[history.length-1].champion}`:"This is the inaugural season."}\n${upcomingSchedule?`\nEarly schedule:\n${upcomingSchedule}`:""}\n\nWrite 450 words previewing the season. Give each team a one-line outlook, predict a champion, name dark horses and sleepers, and build excitement. Write in your distinct voice.`,
 
       hotakes: `${byline}Write a spicy hot takes column for Season ${season} Week ${week-1} of the "${leagueName}" dynasty.\n\nStandings:\n${standingsText}\n\nLast week's matchups:\n${lastWeekMatchups}\n\nWrite 5 bold, controversial hot takes. Reference real matchups and team names. Each take 2-3 sentences, provocative and specific. Number 1-5. Write in your distinct voice.`,
+
+      breaking: `${byline}Write a BREAKING NEWS article for the "${leagueName}" dynasty, Season ${season} Week ${week}.${subjectContext}\n\nSUBJECT: ${breakingSubject}${subjectRecord}\nBREAKING NEWS ANGLE: ${breakingGuidance}\n\nCurrent standings context:\n${standingsText}\n\nWrite 300-400 words in a breathless breaking-news style — urgent, dramatic, with a punchy headline. Lead with the headline (ALL CAPS), then the story. Let the subject's personality and known traits color the narrative heavily. Be wild, irreverent, and entertaining. Reference their standing in the league and what this news means for the dynasty season. Make it feel like a legitimate sports scandal or bombshell dropped mid-season. Write in your distinct voice.`,
     };
 
     try {
       const text = cleanArticle(await callClaude(prompts[type]));
-      const labels = {powerrankings:"📊 Power Rankings",preview:"🔭 Week Preview",recap:"📰 Weekly Recap",seasonpreview:"🏈 Season Preview",hotakes:"🔥 Hot Takes"};
+      const labels = {powerrankings:"📊 Power Rankings",preview:"🔭 Week Preview",recap:"📰 Weekly Recap",seasonpreview:"🏈 Season Preview",hotakes:"🔥 Hot Takes",breaking:"🚨 Breaking News"};
       const label = labels[type]||"📰 Article";
       const draft = {id:Date.now(),type,label,week,season,text,reporter:r.name,reporterColor:r.color,reporterAvatar:r.avatar};
       setDraftArticle(draft);
@@ -2214,13 +2225,31 @@ function ContentHub({sorted,entries,week,season,year,leagueName,history,leader,a
       <Card style={{padding:16}}>
         <SL>Generate Article</SL>
         <div style={{display:"flex",gap:8,marginBottom:14,flexWrap:"wrap"}}>
-          {[["powerrankings","📊 Power Rankings"],["preview","🔭 Week Preview"],["recap","📰 Weekly Recap"],["seasonpreview","🏈 Season Preview"],["hotakes","🔥 Hot Takes"]].map(([val,label])=>(
-            <button key={val} onClick={()=>setContentType(val)} style={{padding:"8px 14px",borderRadius:2,border:"1px solid",borderColor:contentType===val?reporter.color:"#ddd",background:contentType===val?reporter.color:"#fff",color:contentType===val?"#fff":"#555",cursor:"pointer",fontSize:12,fontFamily:ff,fontWeight:700,textTransform:"uppercase"}}>{label}</button>
+          {[["powerrankings","📊 Power Rankings"],["preview","🔭 Week Preview"],["recap","📰 Weekly Recap"],["seasonpreview","🏈 Season Preview"],["hotakes","🔥 Hot Takes"],["breaking","🚨 Breaking News"]].map(([val,label])=>(
+            <button key={val} onClick={()=>setContentType(val)} style={{padding:"8px 14px",borderRadius:2,border:"1px solid",borderColor:contentType===val?(val==="breaking"?RED:reporter.color):"#ddd",background:contentType===val?(val==="breaking"?RED:reporter.color):"#fff",color:contentType===val?"#fff":"#555",cursor:"pointer",fontSize:12,fontFamily:ff,fontWeight:700,textTransform:"uppercase"}}>{label}</button>
           ))}
         </div>
+
+        {contentType==="breaking"&&(
+          <div style={{background:"#fff8f8",border:`1px solid ${RED}33`,borderRadius:2,padding:14,marginBottom:14,display:"flex",flexDirection:"column",gap:10}}>
+            <div style={{fontSize:11,fontWeight:800,textTransform:"uppercase",letterSpacing:0.5,color:RED}}>Breaking News Setup</div>
+            <div>
+              <div style={{fontSize:11,color:"#555",marginBottom:5,fontWeight:600}}>Who is this about?</div>
+              <select value={breakingSubject} onChange={e=>setBreakingSubject(e.target.value)} style={{width:"100%",padding:"8px 10px",border:"1px solid #ddd",borderRadius:2,fontSize:13,fontFamily:ff,color:breakingSubject?"#111":"#999",background:"#fff"}}>
+                <option value="">— Select a coach —</option>
+                {entries.map(e=><option key={e.userId||e.userName} value={e.userName||e.teamName}>{e.userName||e.teamName} ({e.teamName})</option>)}
+              </select>
+            </div>
+            <div>
+              <div style={{fontSize:11,color:"#555",marginBottom:5,fontWeight:600}}>What's the story? <span style={{color:"#999",fontWeight:400}}>(give the AI direction — wild, specific, or both)</span></div>
+              <textarea value={breakingGuidance} onChange={e=>setBreakingGuidance(e.target.value)} placeholder={`e.g. "Got caught trying to poach a recruit at a Waffle House" or "Called out the entire league in a post-game rant" or "Mysteriously benched his entire starting lineup in Week 3"`} style={{width:"100%",minHeight:72,padding:"8px 10px",border:"1px solid #ddd",borderRadius:2,fontSize:12,fontFamily:ff,lineHeight:1.5,resize:"vertical",boxSizing:"border-box",color:"#222"}}/>
+            </div>
+          </div>
+        )}
+
         {genError&&<div style={{background:"#fff0f0",border:"1px solid #ffcccc",borderRadius:2,padding:"10px 14px",fontSize:12,color:RED,marginBottom:4}}><strong>Error:</strong> {genError}</div>}
-        <button onClick={()=>generate(contentType)} disabled={!!generating} style={{background:generating?"#ccc":reporter.color,color:"#fff",border:"none",borderRadius:2,padding:"11px 22px",cursor:generating?"not-allowed":"pointer",fontFamily:ff,fontSize:13,fontWeight:800,textTransform:"uppercase",display:"flex",alignItems:"center",gap:8}}>
-          {generating?<>Generating...</>:<><span style={{background:"rgba(255,255,255,0.2)",borderRadius:"50%",width:22,height:22,display:"flex",alignItems:"center",justifyContent:"center",fontSize:10,fontWeight:800}}>{reporter.avatar}</span> Generate as {reporter.name.split(" ")[0]}</>}
+        <button onClick={()=>generate(contentType)} disabled={!!generating} style={{background:generating?"#ccc":contentType==="breaking"?RED:reporter.color,color:"#fff",border:"none",borderRadius:2,padding:"11px 22px",cursor:generating?"not-allowed":"pointer",fontFamily:ff,fontSize:13,fontWeight:800,textTransform:"uppercase",display:"flex",alignItems:"center",gap:8}}>
+          {generating?<>Generating...</>:contentType==="breaking"?<>🚨 Break the Story</>:<><span style={{background:"rgba(255,255,255,0.2)",borderRadius:"50%",width:22,height:22,display:"flex",alignItems:"center",justifyContent:"center",fontSize:10,fontWeight:800}}>{reporter.avatar}</span> Generate as {reporter.name.split(" ")[0]}</>}
         </button>
       </Card>
 
