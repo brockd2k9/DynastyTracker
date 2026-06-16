@@ -2063,10 +2063,35 @@ function ContentHub({sorted,entries,week,season,year,leagueName,history,leader,a
   const [bibleProfiles,setBibleProfiles] = useState(()=>(setup?.leagueBible?.profiles||[]).length>0?setup.leagueBible.profiles:entries.map(e=>({name:e.userName||e.teamName,bio:""})));
   const [bibleStorylines,setBibleStorylines] = useState(setup?.leagueBible?.storylines||"");
   const [bibleSaved,setBibleSaved] = useState(false);
+  const [extracting,setExtracting] = useState(false);
   useEffect(()=>{if(setup?.leagueBible?.profiles?.length)setBibleProfiles(setup.leagueBible.profiles);if(setup?.leagueBible?.storylines!==undefined)setBibleStorylines(setup.leagueBible.storylines);},[setup?.leagueBible]);
 
+  async function publishArticle(finalArticle) {
+    const newArticles=[finalArticle,...articles].slice(0,30);
+    setArticles(newArticles);
+    dbSave({articles:newArticles});
+    setDraftArticle(null);
+    setDraftText("");
+    // Extract storyline developments from the article
+    setExtracting(true);
+    try {
+      const chronicle = setup?.leagueBible?.chronicle||[];
+      const extractPrompt = `You are a dynasty league historian. Read this article and extract 1-2 sentences of meaningful story developments — rivalries that escalated, upsets that matter, momentum shifts, character moments, or ongoing narrative threads. Be specific (name names, mention stakes). If nothing noteworthy happened, write "Quiet week — no major developments."\n\nArticle:\n${finalArticle.text}\n\nRespond with ONLY the 1-2 sentence summary. No preamble.`;
+      const summary = (await callClaude(extractPrompt)).trim();
+      const entry = {id:Date.now(),week:finalArticle.week,season:finalArticle.season,date:new Date().toLocaleDateString("en-US",{month:"short",day:"numeric",year:"numeric"}),summary};
+      const newChronicle = [entry,...chronicle].slice(0,40);
+      const updatedSetup = {...setup,leagueBible:{...(setup?.leagueBible||{}),chronicle:newChronicle}};
+      setSetup(updatedSetup);
+      saveToDb({setup:updatedSetup});
+    } catch(e) {
+      // Chronicle extraction failing silently is fine
+    } finally {
+      setExtracting(false);
+    }
+  }
+
   function saveBible(){
-    const bible={profiles:bibleProfiles,storylines:bibleStorylines};
+    const bible={...(setup?.leagueBible||{}),profiles:bibleProfiles,storylines:bibleStorylines};
     const updatedSetup={...setup,leagueBible:bible};
     setSetup(updatedSetup);
     saveToDb({setup:updatedSetup});
@@ -2074,13 +2099,22 @@ function ContentHub({sorted,entries,week,season,year,leagueName,history,leader,a
     setTimeout(()=>setBibleSaved(false),2000);
   }
 
+  function deleteChronicleEntry(id){
+    const chronicle=(setup?.leagueBible?.chronicle||[]).filter(e=>e.id!==id);
+    const updatedSetup={...setup,leagueBible:{...(setup?.leagueBible||{}),chronicle}};
+    setSetup(updatedSetup);
+    saveToDb({setup:updatedSetup});
+  }
+
   const bibleContext = (()=>{
     const profiles=(setup?.leagueBible?.profiles||[]).filter(p=>p.bio?.trim());
     const storylines=(setup?.leagueBible?.storylines||"").trim();
-    if(!profiles.length&&!storylines)return "";
+    const chronicle=(setup?.leagueBible?.chronicle||[]).slice(0,20);
+    if(!profiles.length&&!storylines&&!chronicle.length)return "";
     let ctx="";
     if(profiles.length){ctx+=`\n\nLEAGUE PERSONALITIES — use these character details to add color, storylines, and personality to your writing. Reference them naturally and with humor where appropriate:\n${profiles.map(p=>`${p.name}: ${p.bio}`).join("\n")}`;}
     if(storylines){ctx+=`\n\nLEAGUE STORYLINES — weave these season narratives into your writing naturally:\n${storylines}`;}
+    if(chronicle.length){ctx+=`\n\nLEAGUE CHRONICLE — recent story developments (most recent first). Build on these threads:\n${chronicle.map(e=>`S${e.season} Wk${e.week} (${e.date}): ${e.summary}`).join("\n")}`;}
     return ctx;
   })();
 
@@ -2217,6 +2251,25 @@ function ContentHub({sorted,entries,week,season,year,leagueName,history,leader,a
           </div>
 
           <button onClick={saveBible} style={{alignSelf:"flex-start",background:bibleSaved?"#007a00":"#1a3a6b",color:"#fff",border:"none",borderRadius:2,padding:"10px 20px",cursor:"pointer",fontFamily:ff,fontSize:12,fontWeight:800,textTransform:"uppercase",transition:"background 0.2s"}}>{bibleSaved?"✓ Saved":"Save League Bible"}</button>
+
+          {/* Chronicle */}
+          <div style={{borderTop:"1px solid #e8e8e8",paddingTop:14}}>
+            <div style={{display:"flex",justifyContent:"space-between",alignItems:"baseline",marginBottom:4}}>
+              <div style={{fontSize:11,fontWeight:800,textTransform:"uppercase",letterSpacing:0.5,color:"#333"}}>Story Chronicle</div>
+              {extracting&&<span style={{fontSize:10,color:"#888",fontStyle:"italic"}}>Extracting developments…</span>}
+            </div>
+            <div style={{fontSize:11,color:"#888",marginBottom:10}}>Auto-updated every time you publish an article. Writers read this to build on past storylines.</div>
+            {(setup?.leagueBible?.chronicle||[]).length===0&&<div style={{fontSize:12,color:"#aaa",fontStyle:"italic",padding:"10px 0"}}>No chronicle entries yet. Publish an article to start building the history.</div>}
+            <div style={{display:"flex",flexDirection:"column",gap:6}}>
+              {(setup?.leagueBible?.chronicle||[]).map(e=>(
+                <div key={e.id} style={{display:"flex",gap:10,alignItems:"flex-start",background:"#f7f9ff",border:"1px solid #dde4f0",borderRadius:2,padding:"8px 10px"}}>
+                  <div style={{flexShrink:0,fontSize:10,color:"#6677aa",fontWeight:700,whiteSpace:"nowrap",paddingTop:1}}>S{e.season} W{e.week}<br/><span style={{fontWeight:400,color:"#aaa"}}>{e.date}</span></div>
+                  <div style={{flex:1,fontSize:12,color:"#333",lineHeight:1.5}}>{e.summary}</div>
+                  <button onClick={()=>deleteChronicleEntry(e.id)} style={{background:"transparent",border:"none",color:"#ccc",cursor:"pointer",fontSize:14,padding:"0 2px",flexShrink:0}} title="Remove entry">×</button>
+                </div>
+              ))}
+            </div>
+          </div>
         </div>
       </Card>
 
@@ -2235,9 +2288,10 @@ function ContentHub({sorted,entries,week,season,year,leagueName,history,leader,a
           <div style={{padding:14}}>
             <div style={{fontSize:11,color:"#888",fontWeight:700,textTransform:"uppercase",letterSpacing:0.5,marginBottom:8}}>Review &amp; Edit Before Publishing</div>
             <textarea value={draftText} onChange={e=>setDraftText(e.target.value)} style={{width:"100%",minHeight:300,fontSize:13,fontFamily:"Georgia,serif",lineHeight:1.7,padding:12,border:"1px solid #ddd",borderRadius:2,resize:"vertical",boxSizing:"border-box",color:"#222"}}/>
-            <div style={{display:"flex",gap:10,marginTop:10}}>
-              <button onClick={()=>{const finalArticle={...draftArticle,text:draftText};const newArticles=[finalArticle,...articles].slice(0,30);setArticles(newArticles);dbSave({articles:newArticles});setDraftArticle(null);setDraftText("");}} style={{background:draftArticle.reporterColor||"#111",color:"#fff",border:"none",borderRadius:2,padding:"10px 20px",cursor:"pointer",fontFamily:ff,fontSize:13,fontWeight:800,textTransform:"uppercase"}}>Publish</button>
+            <div style={{display:"flex",gap:10,marginTop:10,alignItems:"center"}}>
+              <button onClick={()=>publishArticle({...draftArticle,text:draftText})} disabled={extracting} style={{background:draftArticle.reporterColor||"#111",color:"#fff",border:"none",borderRadius:2,padding:"10px 20px",cursor:"pointer",fontFamily:ff,fontSize:13,fontWeight:800,textTransform:"uppercase"}}>Publish</button>
               <button onClick={()=>{setDraftArticle(null);setDraftText("");}} style={{background:"#fff",color:"#666",border:"1px solid #ccc",borderRadius:2,padding:"10px 20px",cursor:"pointer",fontFamily:ff,fontSize:13,fontWeight:700,textTransform:"uppercase"}}>Discard</button>
+              {extracting&&<span style={{fontSize:11,color:"#888",fontStyle:"italic"}}>Updating Chronicle…</span>}
             </div>
           </div>
         </Card>
