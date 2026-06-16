@@ -2087,7 +2087,7 @@ function ContentHub({sorted,entries,week,season,year,leagueName,history,leader,a
       const newChronicle = [entry,...chronicle].slice(0,40);
       const updatedSetup = {...setup,leagueBible:{...(setup?.leagueBible||{}),chronicle:newChronicle}};
       setSetup(updatedSetup);
-      saveToDb({setup:updatedSetup});
+      saveToDb({setup:updatedSetup,articles:newArticles});
     } catch(e) {
       // Chronicle extraction failing silently is fine
     } finally {
