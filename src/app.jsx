@@ -115,37 +115,28 @@ function articleHeadline(text) {
 
 async function callClaude(prompt) {
   const apiKey = import.meta.env.VITE_ANTHROPIC_KEY;
-  if (!apiKey) throw new Error("Anthropic API key not configured. Add VITE_ANTHROPIC_KEY to GitHub Actions secrets and Cloudflare build variables.");
-  const controller = new AbortController();
-  const tid = setTimeout(()=>controller.abort(), 45000);
-  try {
-    const r = await fetch("https://api.anthropic.com/v1/messages", {
-      method: "POST",
-      signal: controller.signal,
-      headers: {
-        "Content-Type": "application/json",
-        "x-api-key": apiKey,
-        "anthropic-version": "2023-06-01",
-        "anthropic-dangerous-direct-browser-access": "true",
-      },
-      body: JSON.stringify({
-        model: "claude-haiku-4-5-20251001",
-        max_tokens: 1200,
-        messages: [{role:"user", content: prompt}],
-      }),
-    });
-    clearTimeout(tid);
-    if (!r.ok) {
-      const err = await r.json().catch(()=>({}));
-      throw new Error(err?.error?.message || `API error ${r.status}`);
-    }
-    const d = await r.json();
-    return d.content?.[0]?.text || "No content returned.";
-  } catch(e) {
-    clearTimeout(tid);
-    if (e.name === "AbortError") throw new Error("Request timed out after 45 seconds.");
-    throw e;
+  console.log("[callClaude] apiKey present:", !!apiKey);
+  if (!apiKey) throw new Error("API key not configured — add VITE_ANTHROPIC_KEY to GitHub repo secrets.");
+  const timeout = new Promise((_,reject)=>setTimeout(()=>reject(new Error("Request timed out after 30s")),30000));
+  const req = fetch("https://api.anthropic.com/v1/messages", {
+    method:"POST",
+    headers:{
+      "Content-Type":"application/json",
+      "x-api-key":apiKey,
+      "anthropic-version":"2023-06-01",
+      "anthropic-dangerous-direct-browser-access":"true",
+    },
+    body:JSON.stringify({model:"claude-haiku-4-5-20251001",max_tokens:1200,messages:[{role:"user",content:prompt}]}),
+  });
+  console.log("[callClaude] fetch started");
+  const r = await Promise.race([req, timeout]);
+  console.log("[callClaude] response status:", r.status);
+  if (!r.ok) {
+    const err = await r.json().catch(()=>({}));
+    throw new Error(err?.error?.message || `API error ${r.status}`);
   }
+  const d = await r.json();
+  return d.content?.[0]?.text || "No content returned.";
 }
 
 const ff = "'Helvetica Neue',Arial,sans-serif";
