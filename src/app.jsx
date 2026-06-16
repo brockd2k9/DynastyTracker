@@ -464,8 +464,9 @@ function SchedulePanel({entries,schedule,setSchedule}) {
 function HistoryTab({history, setHistory, saveToDb, commUnlocked}) {
   const isMobile = useIsMobile();
   const [sel,setSel] = useState(null);
-  const [editing,setEditing] = useState(null); // index into sortedHistory
-  const [editData,setEditData] = useState(null); // copy of season being edited
+  const [editing,setEditing] = useState(null);
+  const [editData,setEditData] = useState(null);
+  const [expandTeam,setExpandTeam] = useState({});
   if (!history.length) return <Card style={{padding:20}}><div style={{color:"#888",fontSize:14,textAlign:"center"}}>No completed seasons yet.</div></Card>;
 
   // Aggregate all-time stats
@@ -539,18 +540,27 @@ function HistoryTab({history, setHistory, saveToDb, commUnlocked}) {
 
           function startEdit(){
             setEditing(selIdx);
-            setEditData(JSON.parse(JSON.stringify(s))); // deep copy
+            setEditData(JSON.parse(JSON.stringify(s)));
+            setExpandTeam({});
           }
 
           function setEditTeam(teamName,field,val){
             setEditData(prev=>{
-              const standings=prev.finalStandings.map(t=>t.teamName===teamName?{...t,[field]:field==="historicalTotal"||field==="wins"||field==="losses"?parseInt(val)||0:val}:t);
+              const numFields=["historicalTotal","wins","losses","playoffWins","playoffLosses","top25Wins","top25Losses","top10Wins","top10Losses"];
+              const standings=prev.finalStandings.map(t=>t.teamName===teamName?{...t,[field]:numFields.includes(field)?parseInt(val)||0:val}:t);
               return{...prev,finalStandings:standings};
             });
           }
 
+          function toggleEditMulti(field,teamName){
+            setEditData(prev=>{
+              const cur=(prev[field]||"").split(", ").filter(Boolean);
+              const next=cur.includes(teamName)?cur.filter(x=>x!==teamName):[...cur,teamName];
+              return{...prev,[field]:next.join(", ")};
+            });
+          }
+
           function saveEdit(){
-            // Recompute champion from highest pts
             const srt=[...editData.finalStandings].sort((a,b)=>calcTotal(b)-calcTotal(a));
             const updated={...editData,champion:srt[0]?.userName||editData.champion};
             const next=history.map((h,i)=>i===histIdx?updated:h);
@@ -561,12 +571,32 @@ function HistoryTab({history, setHistory, saveToDb, commUnlocked}) {
 
           const isEditing=editing===selIdx&&editData;
           const displayData=isEditing?editData:s;
+          const allTeams=displayData.finalStandings;
           const active=displayData.finalStandings.filter(t=>t.wins>0||t.losses>0||calcTotal(t)>0);
           const srt=[...(active.length?active:displayData.finalStandings)].sort((a,b)=>calcTotal(b)-calcTotal(a));
           const top=calcTotal(srt[0]);
 
-          const numInp=(val,onChange)=><input type="number" min="0" value={val} onChange={e=>onChange(e.target.value)}
-            style={{width:52,padding:"3px 5px",border:"1px solid #ddd",borderRadius:2,fontSize:12,fontWeight:700,textAlign:"center",fontFamily:ff}}/>;
+          const numInp=(val,onChange,w=52)=><input type="number" min="0" value={val??""} onChange={e=>onChange(e.target.value)}
+            style={{width:w,padding:"3px 5px",border:"1px solid #ddd",borderRadius:2,fontSize:12,fontWeight:700,textAlign:"center",fontFamily:ff}}/>;
+
+          // Multi-select toggle buttons for awards
+          const MultiToggle=({field,label})=>{
+            const selected=(editData[field]||"").split(", ").filter(Boolean);
+            return(
+              <div>
+                <div style={{fontSize:11,color:"#555",fontWeight:700,marginBottom:5}}>{label}</div>
+                <div style={{display:"flex",flexWrap:"wrap",gap:6}}>
+                  {allTeams.map(t=>{const on=selected.includes(t.teamName);return(
+                    <button key={t.teamName} onClick={()=>toggleEditMulti(field,t.teamName)}
+                      style={{padding:"3px 10px",borderRadius:2,border:`1px solid ${on?RED:"#ddd"}`,background:on?RED:"#fff",color:on?"#fff":"#555",cursor:"pointer",fontSize:11,fontFamily:ff,fontWeight:700}}>
+                      {t.teamName}
+                    </button>
+                  );})}
+                </div>
+                {selected.length>0&&<div style={{fontSize:11,color:RED,marginTop:3,fontWeight:600}}>{selected.join(", ")}</div>}
+              </div>
+            );
+          };
 
           return(
             <div style={{padding:"0 14px 14px"}}>
@@ -587,34 +617,46 @@ function HistoryTab({history, setHistory, saveToDb, commUnlocked}) {
                 </div>}
               </div>
 
-              {/* Edit: awards row */}
-              {isEditing&&<div style={{background:"#f9f9f9",border:"1px solid #eee",borderRadius:2,padding:"12px 14px",marginBottom:12,display:"flex",flexDirection:"column",gap:10}}>
-                <div style={{fontSize:11,fontWeight:800,color:"#555",textTransform:"uppercase",letterSpacing:1,marginBottom:4}}>Awards</div>
-                {[["nattyWinner","🏈 Natty Winner"],["nattyRunnerUp","Natty Runner-Up"],["confChampion","🏅 Conf Champion"],["confRunnerUp","Conf Runner-Up"],["heisman","🏆 Heisman"]].map(([field,label])=>(
-                  <div key={field} style={{display:"flex",alignItems:"center",gap:10}}>
-                    <div style={{fontSize:12,color:"#555",width:130,flexShrink:0}}>{label}</div>
-                    <input value={editData[field]||""} onChange={e=>setEditData(p=>({...p,[field]:e.target.value}))}
-                      style={{padding:"5px 8px",border:"1px solid #ddd",borderRadius:2,fontSize:12,fontFamily:ff,flex:1}}/>
-                  </div>
-                ))}
+              {/* Edit: awards (multi-select) + heisman */}
+              {isEditing&&<div style={{background:"#f9f9f9",border:"1px solid #eee",borderRadius:2,padding:"14px",marginBottom:14,display:"flex",flexDirection:"column",gap:14}}>
+                <div style={{fontSize:11,fontWeight:800,color:"#555",textTransform:"uppercase",letterSpacing:1}}>Awards & Championships</div>
+                <MultiToggle field="nattyWinner" label="🏈 National Championship Winner(s)"/>
+                <MultiToggle field="nattyRunnerUp" label="National Championship Runner-Up(s)"/>
+                <MultiToggle field="confChampion" label="🏅 Conference Championship Winner(s)"/>
+                <MultiToggle field="confRunnerUp" label="Conference Championship Runner-Up(s)"/>
+                <div>
+                  <div style={{fontSize:11,color:"#555",fontWeight:700,marginBottom:5}}>🏆 Heisman Winner</div>
+                  <input value={editData.heisman||""} onChange={e=>setEditData(p=>({...p,heisman:e.target.value}))}
+                    placeholder="Team name" style={{padding:"5px 8px",border:"1px solid #ddd",borderRadius:2,fontSize:12,fontFamily:ff,width:"100%",boxSizing:"border-box"}}/>
+                </div>
               </div>}
 
-              {/* Standings table */}
+              {/* Standings table — with per-team expandable edit */}
               <table style={{width:"100%",borderCollapse:"collapse",fontSize:isMobile?11:13}}>
                 <thead><tr style={{borderBottom:`2px solid ${RED}`,background:"#f7f7f7"}}>
-                  {["#","User",...(isMobile?[]:["Team"]),"W","L","PTS",...(!isEditing?["Behind"]:[])]
+                  {["#","User",...(isMobile?[]:["Team"]),"W","L","PTS",...(!isEditing?["Behind"]:isEditing?["Details"]:[])]
                     .map(h=><th key={h} style={{padding:"7px 6px",textAlign:h==="User"||h==="Team"?"left":"center",color:"#555",fontSize:9,letterSpacing:1,textTransform:"uppercase",fontWeight:800}}>{h}</th>)}
                 </tr></thead>
-                <tbody>{srt.map((t,i)=>{const tot=calcTotal(t);return(
-                  <tr key={t.teamName||t.userName} style={{borderBottom:"1px solid #eee",background:i===0?"#fff8f8":"transparent"}}>
+                <tbody>{srt.map((t,i)=>{
+                  const tot=calcTotal(t);
+                  const detailKey=`det-${t.teamName}`;
+                  const detailOpen=expandTeam[detailKey];
+                  return(<>
+                  <tr key={t.teamName||t.userName} style={{borderBottom:detailOpen?"none":"1px solid #eee",background:i===0?"#fff8f8":"transparent"}}>
                     <td style={{padding:"8px 6px",textAlign:"center",color:i===0?RED:"#bbb",fontWeight:800,fontSize:13}}>{i+1}</td>
                     <td style={{padding:"8px 6px",color:"#111",fontWeight:i===0?800:400}}>{t.userName}</td>
                     {!isMobile&&<td style={{padding:"8px 6px",color:"#888",fontSize:12}}>{t.teamName}</td>}
                     {isEditing?(
                       <>
-                        <td style={{padding:"4px 4px",textAlign:"center"}}>{numInp(t.wins||0,v=>setEditTeam(t.teamName,"wins",v))}</td>
-                        <td style={{padding:"4px 4px",textAlign:"center"}}>{numInp(t.losses||0,v=>setEditTeam(t.teamName,"losses",v))}</td>
-                        <td style={{padding:"4px 4px",textAlign:"center"}}>{numInp(t.historicalTotal!==undefined?t.historicalTotal:tot,v=>setEditTeam(t.teamName,t.historicalTotal!==undefined?"historicalTotal":"gamePts",v))}</td>
+                        <td style={{padding:"4px 3px",textAlign:"center"}}>{numInp(t.wins||0,v=>setEditTeam(t.teamName,"wins",v),44)}</td>
+                        <td style={{padding:"4px 3px",textAlign:"center"}}>{numInp(t.losses||0,v=>setEditTeam(t.teamName,"losses",v),44)}</td>
+                        <td style={{padding:"4px 3px",textAlign:"center"}}>{numInp(t.historicalTotal!==undefined?t.historicalTotal:tot,v=>setEditTeam(t.teamName,t.historicalTotal!==undefined?"historicalTotal":"gamePts",v),56)}</td>
+                        <td style={{padding:"4px 3px",textAlign:"center"}}>
+                          <button onClick={()=>setExpandTeam(p=>({...p,[detailKey]:!p[detailKey]}))}
+                            style={{padding:"2px 8px",borderRadius:2,border:"1px solid #ddd",background:detailOpen?"#eee":"#fff",color:"#555",cursor:"pointer",fontSize:10,fontFamily:ff,fontWeight:700}}>
+                            {detailOpen?"▲":"▼"}
+                          </button>
+                        </td>
                       </>
                     ):(
                       <>
@@ -625,7 +667,50 @@ function HistoryTab({history, setHistory, saveToDb, commUnlocked}) {
                       </>
                     )}
                   </tr>
-                );})}</tbody>
+                  {isEditing&&detailOpen&&<tr key={detailKey} style={{borderBottom:"1px solid #eee"}}>
+                    <td colSpan={isMobile?5:6} style={{padding:"10px 14px",background:"#fafafa"}}>
+                      <div style={{display:"flex",flexDirection:"column",gap:10}}>
+                        {/* Playoff */}
+                        <div style={{display:"flex",alignItems:"center",gap:10,flexWrap:"wrap"}}>
+                          <span style={{fontSize:11,fontWeight:700,color:"#555",width:110}}>Playoff Record</span>
+                          {numInp(t.playoffWins||0,v=>setEditTeam(t.teamName,"playoffWins",v),44)}
+                          <span style={{color:"#888",fontSize:11,fontWeight:700}}>W</span>
+                          {numInp(t.playoffLosses||0,v=>setEditTeam(t.teamName,"playoffLosses",v),44)}
+                          <span style={{color:"#888",fontSize:11,fontWeight:700}}>L</span>
+                        </div>
+                        {/* Bowl */}
+                        <div style={{display:"flex",alignItems:"center",gap:8,flexWrap:"wrap"}}>
+                          <span style={{fontSize:11,fontWeight:700,color:"#555",width:110}}>Bowl Game</span>
+                          {["none","win","loss"].map(opt=>(
+                            <button key={opt} onClick={()=>setEditTeam(t.teamName,"bowlResult",opt)}
+                              style={{padding:"3px 10px",borderRadius:2,border:"1px solid",borderColor:(t.bowlResult||"none")===opt?(opt==="win"?"#007a00":opt==="loss"?RED:"#888"):"#ddd",background:(t.bowlResult||"none")===opt?(opt==="win"?"#f0f8f0":opt==="loss"?"#fff8f8":"#eee"):"#fff",color:(t.bowlResult||"none")===opt?(opt==="win"?"#007a00":opt==="loss"?RED:"#555"):"#888",cursor:"pointer",fontSize:11,fontFamily:ff,fontWeight:700}}>
+                              {opt==="none"?"No Bowl":opt==="win"?"Win":"Loss"}
+                            </button>
+                          ))}
+                          {(t.bowlResult||"none")!=="none"&&<input value={t.bowlOpponent||""} onChange={e=>setEditTeam(t.teamName,"bowlOpponent",e.target.value)} placeholder="Opponent"
+                            style={{padding:"3px 8px",border:"1px solid #ddd",borderRadius:2,fontSize:11,fontFamily:ff,width:130}}/>}
+                        </div>
+                        {/* vs Top 25 */}
+                        <div style={{display:"flex",alignItems:"center",gap:10,flexWrap:"wrap"}}>
+                          <span style={{fontSize:11,fontWeight:700,color:"#555",width:110}}>vs Top 25</span>
+                          {numInp(t.top25Wins||0,v=>setEditTeam(t.teamName,"top25Wins",v),44)}
+                          <span style={{color:"#888",fontSize:11,fontWeight:700}}>W</span>
+                          {numInp(t.top25Losses||0,v=>setEditTeam(t.teamName,"top25Losses",v),44)}
+                          <span style={{color:"#888",fontSize:11,fontWeight:700}}>L</span>
+                        </div>
+                        {/* vs Top 10 */}
+                        <div style={{display:"flex",alignItems:"center",gap:10,flexWrap:"wrap"}}>
+                          <span style={{fontSize:11,fontWeight:700,color:"#555",width:110}}>vs Top 10</span>
+                          {numInp(t.top10Wins||0,v=>setEditTeam(t.teamName,"top10Wins",v),44)}
+                          <span style={{color:"#888",fontSize:11,fontWeight:700}}>W</span>
+                          {numInp(t.top10Losses||0,v=>setEditTeam(t.teamName,"top10Losses",v),44)}
+                          <span style={{color:"#888",fontSize:11,fontWeight:700}}>L</span>
+                        </div>
+                      </div>
+                    </td>
+                  </tr>}
+                  </>);
+                })}</tbody>
               </table>
             </div>
           );
