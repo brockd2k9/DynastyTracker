@@ -42,7 +42,7 @@ async function ensureScheduleColumn() {
 
 const CONF_STAND_PTS = [50,43,36,30,24,18,14,10,7,5,3,1];
 const RECRUITING_PTS = [15,10,7,5,3,0,0,0,0,0,0,0];
-const START_YEAR = 2025;
+const START_YEAR = 2024;
 const PASS = "RatedRKO99";
 const MODEL = "claude-sonnet-4-20250514";
 const API_URL = "https://api.anthropic.com/v1/messages";
