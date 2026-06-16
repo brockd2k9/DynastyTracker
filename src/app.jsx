@@ -1337,8 +1337,8 @@ function SetupPanel({entries,setup,postSeasonInputs,setPSI,handleStart,setCommis
       yearRosters:{...(setup?.yearRosters||{}), [rosterYear]:roster},
     };
     setSetup(updated);
-    // If saving for the current season, also update live entries with new team names (username stays permanent)
-    if(rosterSeason===season && entries.length>0){
+    // If saving for the current year, also update live entries with new team names (username stays permanent)
+    if(rosterYear===year && entries.length>0){
       const updatedEntries = entries.map(e=>{
         const override = roster.find(r=>r.userId===e.userId);
         if(!override)return e;
