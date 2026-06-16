@@ -470,22 +470,44 @@ function HistoryTab({history, setHistory, saveToDb, commUnlocked, entries, setEn
   const [liveEdit,setLiveEdit] = useState(false);
   const [liveData,setLiveData] = useState(null);
   // Aggregate all-time stats
-  const allWins={}, champs={}, confT={}, nattyT={};
+  const allWins={}, confT={}, nattyT={};
   history.forEach(s=>{
-    s.finalStandings.forEach(t=>{allWins[t.userName]=(allWins[t.userName]||0)+(t.wins||0);});
-    if(s.champion) champs[s.champion]=(champs[s.champion]||0)+1;
-    // Conf championships — may be comma-separated
-    if(s.confChampion){s.confChampion.split(", ").filter(Boolean).forEach(n=>{confT[n]=(confT[n]||0)+1;});}
-    if(s.confWinners?.length){s.confWinners.forEach(n=>{if(!s.confChampion?.split(", ").includes(n))confT[n]=(confT[n]||0)+1;});}
-    // Natty winners
-    if(s.nattyWinner){s.nattyWinner.split(", ").filter(Boolean).forEach(n=>{nattyT[n]=(nattyT[n]||0)+1;});}
-    if(s.nattyWinners?.length){s.nattyWinners.forEach(n=>{if(!s.nattyWinner?.split(", ").includes(n))nattyT[n]=(nattyT[n]||0)+1;});}
-    // Also check per-entry flags
+    // teamName → userName lookup for this season
+    const nameMap={};
+    s.finalStandings.forEach(t=>{ nameMap[t.teamName]=t.userName; });
+
+    // Track which users already got titles from per-team data this season
+    const gotNatty=new Set(), gotConf=new Set();
+
     s.finalStandings.forEach(t=>{
-      if(t.nattyWinner&&!nattyT[t.userName])nattyT[t.userName]=(nattyT[t.userName]||0);
-      if(t.nattyWinner)nattyT[t.userName]=(nattyT[t.userName]||0)+1;
-      if(t.confChampion)confT[t.userName]=(confT[t.userName]||0)+1;
+      allWins[t.userName]=(allWins[t.userName]||0)+(t.wins||0);
+      // National titles: prefer new count field, fall back to boolean flag
+      if((t.nattyWins||0)>0){
+        nattyT[t.userName]=(nattyT[t.userName]||0)+t.nattyWins;
+        gotNatty.add(t.userName);
+      } else if(t.nattyWinner===true){
+        nattyT[t.userName]=(nattyT[t.userName]||0)+1;
+        gotNatty.add(t.userName);
+      }
+      // Conf titles: prefer new count field, fall back to boolean flag
+      if((t.confChampWins||0)>0){
+        confT[t.userName]=(confT[t.userName]||0)+t.confChampWins;
+        gotConf.add(t.userName);
+      } else if(t.confChampion===true){
+        confT[t.userName]=(confT[t.userName]||0)+1;
+        gotConf.add(t.userName);
+      }
     });
+
+    // Fall back to season-level strings only for users not yet counted from per-team data
+    if(s.nattyWinner){s.nattyWinner.split(", ").filter(Boolean).forEach(tn=>{
+      const un=nameMap[tn]||tn;
+      if(!gotNatty.has(un)){nattyT[un]=(nattyT[un]||0)+1;}
+    });}
+    if(s.confChampion){s.confChampion.split(", ").filter(Boolean).forEach(tn=>{
+      const un=nameMap[tn]||tn;
+      if(!gotConf.has(un)){confT[un]=(confT[un]||0)+1;}
+    });}
   });
   const wList=Object.entries(allWins).sort((a,b)=>b[1]-a[1]);
 
