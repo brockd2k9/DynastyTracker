@@ -537,6 +537,19 @@ function HistoryTab({history, setHistory, saveToDb, commUnlocked, entries, setEn
   }
   const isMobile = useIsMobile();
   const [sel,setSel] = useState(null);
+  // Resolve a seasonal userName to permanent defaultName using yearRosters
+  function permName(userName, yr) {
+    const roster = yearRosters?.[yr];
+    if (roster?.length) {
+      const entry = roster.find(r => r.userName === userName);
+      if (entry?.userId) {
+        const pu = permanentUsers?.find(p => p.id === entry.userId);
+        if (pu) return pu.defaultName;
+      }
+    }
+    return userName;
+  }
+
   const [editing,setEditing] = useState(null);
   const [editData,setEditData] = useState(null);
   const [expandTeam,setExpandTeam] = useState({});
@@ -545,6 +558,7 @@ function HistoryTab({history, setHistory, saveToDb, commUnlocked, entries, setEn
   // Aggregate all-time stats
   const allWins={}, confT={}, nattyT={};
   history.forEach(s=>{
+    const yr = s.year;
     // teamName → userName lookup for this season
     const nameMap={};
     s.finalStandings.forEach(t=>{ nameMap[t.teamName]=t.userName; });
@@ -553,32 +567,33 @@ function HistoryTab({history, setHistory, saveToDb, commUnlocked, entries, setEn
     const gotNatty=new Set(), gotConf=new Set();
 
     s.finalStandings.forEach(t=>{
-      allWins[t.userName]=(allWins[t.userName]||0)+(t.wins||0);
+      const pn = permName(t.userName, yr);
+      allWins[pn]=(allWins[pn]||0)+(t.wins||0);
       // National titles: prefer new count field, fall back to boolean flag
       if((t.nattyWins||0)>0){
-        nattyT[t.userName]=(nattyT[t.userName]||0)+t.nattyWins;
-        gotNatty.add(t.userName);
+        nattyT[pn]=(nattyT[pn]||0)+t.nattyWins;
+        gotNatty.add(pn);
       } else if(t.nattyWinner===true){
-        nattyT[t.userName]=(nattyT[t.userName]||0)+1;
-        gotNatty.add(t.userName);
+        nattyT[pn]=(nattyT[pn]||0)+1;
+        gotNatty.add(pn);
       }
       // Conf titles: prefer new count field, fall back to boolean flag
       if((t.confChampWins||0)>0){
-        confT[t.userName]=(confT[t.userName]||0)+t.confChampWins;
-        gotConf.add(t.userName);
+        confT[pn]=(confT[pn]||0)+t.confChampWins;
+        gotConf.add(pn);
       } else if(t.confChampion===true){
-        confT[t.userName]=(confT[t.userName]||0)+1;
-        gotConf.add(t.userName);
+        confT[pn]=(confT[pn]||0)+1;
+        gotConf.add(pn);
       }
     });
 
     // Fall back to season-level strings only for users not yet counted from per-team data
     if(s.nattyWinner){s.nattyWinner.split(", ").filter(Boolean).forEach(tn=>{
-      const un=nameMap[tn]||tn;
+      const un=permName(nameMap[tn]||tn, yr);
       if(!gotNatty.has(un)){nattyT[un]=(nattyT[un]||0)+1;}
     });}
     if(s.confChampion){s.confChampion.split(", ").filter(Boolean).forEach(tn=>{
-      const un=nameMap[tn]||tn;
+      const un=permName(nameMap[tn]||tn, yr);
       if(!gotConf.has(un)){confT[un]=(confT[un]||0)+1;}
     });}
   });
