@@ -469,8 +469,6 @@ function HistoryTab({history, setHistory, saveToDb, commUnlocked, entries, setEn
   const [expandTeam,setExpandTeam] = useState({});
   const [liveEdit,setLiveEdit] = useState(false);
   const [liveData,setLiveData] = useState(null);
-  if (!history.length) return <Card style={{padding:20}}><div style={{color:"#888",fontSize:14,textAlign:"center"}}>No completed seasons yet.</div></Card>;
-
   // Aggregate all-time stats
   const allWins={}, champs={}, confT={}, nattyT={};
   history.forEach(s=>{
@@ -557,7 +555,7 @@ function HistoryTab({history, setHistory, saveToDb, commUnlocked, entries, setEn
       </Card>}
 
       {/* All-Time Leaders */}
-      <div style={{display:"grid",gridTemplateColumns:isMobile?"1fr":"1fr 1fr 1fr",gap:14}}>
+      {history.length>0&&<div style={{display:"grid",gridTemplateColumns:isMobile?"1fr":"1fr 1fr 1fr",gap:14}}>
         <Card><CardHead bg={RED}>All-Time Wins</CardHead><div style={{padding:"4px 0"}}>
           {wList.map(([u,w],i)=><div key={u} style={{display:"flex",justifyContent:"space-between",alignItems:"center",padding:"7px 12px",borderBottom:"1px solid #f5f5f5"}}>
             <span style={{fontSize:12,color:i===0?"#111":"#555",fontWeight:i===0?700:400}}>{i+1}. {u}</span>
@@ -578,10 +576,11 @@ function HistoryTab({history, setHistory, saveToDb, commUnlocked, entries, setEn
             <span style={{fontSize:13,fontWeight:800,color:"#333"}}>{n}×</span>
           </div>)}
         </div></Card>
-      </div>
+      </div>}
 
       {/* Season History - sorted by year */}
       <Card><CardHead>Season History</CardHead>
+        {!history.length&&<div style={{padding:"16px 14px",color:"#aaa",fontSize:13,textAlign:"center"}}>No completed seasons yet.</div>}
         <div style={{padding:"12px 14px",display:"flex",gap:8,flexWrap:"wrap"}}>
           {sortedHistory.map((s,i)=>{const key=s.year+"-"+i;return(<button key={key} onClick={()=>{setSel(sel===key?null:key);setEditing(null);}} style={{padding:"5px 12px",borderRadius:2,border:"1px solid",borderColor:sel===key?RED:s.isHistorical?"#aaa":"#ddd",background:sel===key?RED:s.isHistorical?"#f5f5f5":"#fff",color:sel===key?"#fff":"#555",cursor:"pointer",fontSize:12,fontWeight:700,fontFamily:ff,textTransform:"uppercase"}}>{s.year}{s.isHistorical?" · HIST":` · S${s.seasonNum}`}</button>);})}
         </div>
