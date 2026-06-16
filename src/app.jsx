@@ -1312,22 +1312,16 @@ function SetupPanel({entries,setup,postSeasonInputs,setPSI,handleStart,setCommis
       yearRosters:{...(setup?.yearRosters||{}), [rosterYear]:roster},
     };
     setSetup(updated);
-    // If saving for the current season, also update live entries and setup.rows
+    // If saving for the current season, also update live entries (but NOT setup.rows — permanent names must stay permanent)
     if(rosterSeason===season && entries.length>0){
       const updatedEntries = entries.map(e=>{
         const override = roster.find(r=>r.userId===e.userId);
         if(!override)return e;
         return {...e, userName:override.userName||e.userName, teamName:override.teamName||e.teamName};
       });
-      const updatedRows = (setup?.rows||[]).map(r=>{
-        const override = roster.find(o=>o.userId===r.userId);
-        if(!override)return r;
-        return {...r, userName:override.userName||r.userName, teamName:override.teamName||r.teamName};
-      });
-      const updatedSetup = {...updated, rows:updatedRows};
       setEntries(updatedEntries);
-      setSetup(updatedSetup);
-      saveToDb({setup:updatedSetup, entries:updatedEntries});
+      setSetup(updated);
+      saveToDb({setup:updated, entries:updatedEntries});
     } else {
       saveToDb({setup:updated});
     }
