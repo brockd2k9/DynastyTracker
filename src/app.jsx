@@ -921,73 +921,59 @@ function ProfileTab({history,setupRows,currentEntries,season,permanentUsers}) {
 
           {pTab==="seasons"&&<div style={{display:"flex",flexDirection:"column",gap:0}}>
             <SL>Season-by-Season Results</SL>
-            {/* Group seasons by year */}
             {(()=>{
-              // Build list of all season entries including current
               const allSeasons=[...profile.seasons];
               if(profile.cur){allSeasons.push({year:START_YEAR+season-1,seasonNum:season,teamName:profile.cur.teamName,wins:profile.cur.wins,losses:profile.cur.losses,total:calcTotal(profile.cur),rank:null,champion:false,confChamp:false,heisman:false,weekLog:profile.cur.weekLog||[],isCurrent:true});}
-              // Group by year
-              const byYear={};
-              allSeasons.forEach(s=>{if(!byYear[s.year])byYear[s.year]=[];byYear[s.year].push(s);});
-              return Object.entries(byYear).sort((a,b)=>Number(b[0])-Number(a[0])).map(([yr,seasons])=>(
-                <div key={yr} style={{marginBottom:10,border:"1px solid #eee",borderRadius:2,overflow:"hidden"}}>
-                  {/* Year header */}
-                  <div style={{background:"#1a1a1a",padding:"8px 14px",display:"flex",alignItems:"center",gap:8}}>
-                    <span style={{fontSize:13,fontWeight:900,color:"#fff",letterSpacing:1}}>{yr}</span>
-                    <div style={{display:"flex",gap:6,flex:1}}>
-                      {seasons.map(s=>(
-                        <button key={s.seasonNum} onClick={()=>setExpandedSeasons(prev=>({...prev,[`${yr}-${s.seasonNum}`]:!prev[`${yr}-${s.seasonNum}`]}))}
-                          style={{padding:"3px 10px",background:expandedSeasons[`${yr}-${s.seasonNum}`]?RED:"rgba(255,255,255,0.1)",border:"1px solid",borderColor:expandedSeasons[`${yr}-${s.seasonNum}`]?RED:"rgba(255,255,255,0.2)",borderRadius:2,color:"#fff",cursor:"pointer",fontSize:10,fontWeight:700,fontFamily:ff,display:"flex",alignItems:"center",gap:4}}>
-                          S{s.seasonNum}{s.champion?" 🏆":""}{s.isCurrent?" 🔴":""}
-                          <span style={{opacity:0.6}}>{expandedSeasons[`${yr}-${s.seasonNum}`]?"▲":"▼"}</span>
-                        </button>
-                      ))}
-                    </div>
-                  </div>
-                  {/* Season rows */}
-                  {seasons.map(s=>{
-                    const pct=s.wins+s.losses>0?((s.wins/(s.wins+s.losses))*100).toFixed(0):0;
-                    const key=`${yr}-${s.seasonNum}`;
-                    return(
-                      <div key={s.seasonNum}>
-                        {/* Season summary row */}
-                        <div onClick={()=>setExpandedSeasons(prev=>({...prev,[key]:!prev[key]}))}
-                          style={{display:"flex",alignItems:"center",gap:10,padding:"10px 14px",borderBottom:"1px solid #f0f0f0",cursor:"pointer",background:s.champion?"#fff8f8":s.isCurrent?"#f8f8ff":"#fff"}}>
-                          <div style={{fontSize:10,fontWeight:800,color:"#999",width:30}}>S{s.seasonNum}</div>
-                          <div style={{flex:1,fontSize:12,fontWeight:700,color:"#555"}}>{s.teamName}</div>
-                          <div style={{fontSize:12,fontWeight:700,color:"#007a00"}}>{s.wins}W</div>
-                          <div style={{fontSize:12,color:"#aaa"}}>-</div>
-                          <div style={{fontSize:12,fontWeight:700,color:RED}}>{s.losses}L</div>
-                          <div style={{fontSize:11,color:"#888",width:32,textAlign:"center"}}>{pct}%</div>
-                          <div style={{fontSize:14,fontWeight:900,color:RED,width:36,textAlign:"right"}}>{s.total}</div>
-                          <div style={{fontSize:11,color:s.rank===1?RED:"#888",fontWeight:s.rank===1?800:400,width:28,textAlign:"right"}}>{s.rank?`#${s.rank}`:s.isCurrent?"Live":"—"}</div>
-                          {s.champion&&<span style={{fontSize:11}}>🏆</span>}
-                          <span style={{color:"#ccc",fontSize:12}}>{expandedSeasons[key]?"▲":"▼"}</span>
-                        </div>
-                        {/* Expanded: game log */}
-                        {expandedSeasons[key]&&s.weekLog&&s.weekLog.length>0&&(
-                          <div style={{background:"#fafafa",borderBottom:"1px solid #eee"}}>
-                            <table style={{width:"100%",borderCollapse:"collapse",fontSize:12}}>
-                              <thead><tr style={{borderBottom:"1px solid #e0e0e0"}}>{["Week","Result","Opponent Rank","Pts"].map(h=><th key={h} style={{padding:"6px 12px",textAlign:"center",color:"#aaa",fontSize:9,letterSpacing:1,textTransform:"uppercase",fontWeight:700}}>{h}</th>)}</tr></thead>
-                              <tbody>{s.weekLog.map((w,i)=>(
-                                <tr key={i} style={{borderBottom:"1px solid #f0f0f0",background:w.result==="win"?"#f0f8f0":"#fff8f8"}}>
-                                  <td style={{padding:"7px 12px",textAlign:"center",color:"#888"}}>Wk {w.week}</td>
-                                  <td style={{padding:"7px 12px",textAlign:"center",fontWeight:800,color:w.result==="win"?"#007a00":RED,textTransform:"uppercase"}}>{w.result}</td>
-                                  <td style={{padding:"7px 12px",textAlign:"center",color:w.ranked10?RED:w.ranked25?"#cc7700":"#ccc"}}>{w.ranked10?"Top 10":w.ranked25?"Top 25":"Unranked"}</td>
-                                  <td style={{padding:"7px 12px",textAlign:"center",color:RED,fontWeight:700}}>+{w.pts}</td>
-                                </tr>
-                              ))}</tbody>
-                            </table>
-                          </div>
-                        )}
-                        {expandedSeasons[key]&&(!s.weekLog||s.weekLog.length===0)&&(
-                          <div style={{padding:"12px 14px",background:"#fafafa",color:"#aaa",fontSize:12,borderBottom:"1px solid #eee"}}>No game log available for this season.</div>
-                        )}
+              // Sort by year descending, then seasonNum descending within same year
+              allSeasons.sort((a,b)=>b.year!==a.year?b.year-a.year:(b.seasonNum||0)-(a.seasonNum||0));
+              return allSeasons.map((s,idx)=>{
+                const pct=s.wins+s.losses>0?((s.wins/(s.wins+s.losses))*100).toFixed(0):0;
+                const key=`${s.year}-${s.seasonNum}-${idx}`;
+                return(
+                  <div key={key} style={{border:"1px solid #eee",borderRadius:2,overflow:"hidden",marginBottom:8}}>
+                    {/* Year + season header — click to expand */}
+                    <div onClick={()=>setExpandedSeasons(prev=>({...prev,[key]:!prev[key]}))}
+                      style={{display:"flex",alignItems:"center",gap:10,padding:"10px 14px",cursor:"pointer",background:s.champion?"#fff8f8":s.isCurrent?"#f8f8ff":"#fff",borderBottom:expandedSeasons[key]?"1px solid #eee":"none"}}>
+                      {/* Year badge */}
+                      <div style={{background:"#1a1a1a",borderRadius:2,padding:"3px 8px",flexShrink:0}}>
+                        <div style={{fontSize:12,fontWeight:900,color:"#fff",letterSpacing:1}}>{s.year}</div>
+                        {s.seasonNum&&<div style={{fontSize:9,color:"#888",textAlign:"center"}}>S{s.seasonNum}</div>}
                       </div>
-                    );
-                  })}
-                </div>
-              ));
+                      <div style={{flex:1,fontSize:12,fontWeight:700,color:"#555"}}>{s.teamName}</div>
+                      <div style={{fontSize:12,fontWeight:700,color:"#007a00"}}>{s.wins}W</div>
+                      <div style={{fontSize:12,color:"#aaa"}}>-</div>
+                      <div style={{fontSize:12,fontWeight:700,color:RED}}>{s.losses}L</div>
+                      <div style={{fontSize:11,color:"#888",width:32,textAlign:"center"}}>{pct}%</div>
+                      <div style={{fontSize:14,fontWeight:900,color:RED,width:36,textAlign:"right"}}>{s.total}</div>
+                      <div style={{fontSize:11,color:s.rank===1?RED:"#888",fontWeight:s.rank===1?800:400,width:28,textAlign:"right"}}>{s.rank?`#${s.rank}`:s.isCurrent?"Live":"—"}</div>
+                      {s.champion&&<span style={{fontSize:11}}>🏆</span>}
+                      {s.nattyWin&&<span style={{fontSize:11}} title="National Champion">🏈</span>}
+                      {s.confChamp&&<span style={{fontSize:11}} title="Conf Champion">🏅</span>}
+                      {s.isCurrent&&<span style={{background:RED,color:"#fff",fontSize:8,fontWeight:800,padding:"1px 5px",borderRadius:10}}>LIVE</span>}
+                      <span style={{color:"#ccc",fontSize:12}}>{expandedSeasons[key]?"▲":"▼"}</span>
+                    </div>
+                    {/* Expanded: game log */}
+                    {expandedSeasons[key]&&s.weekLog&&s.weekLog.length>0&&(
+                      <div style={{background:"#fafafa"}}>
+                        <table style={{width:"100%",borderCollapse:"collapse",fontSize:12}}>
+                          <thead><tr style={{borderBottom:"1px solid #e0e0e0"}}>{["Week","Result","Opponent Rank","Pts"].map(h=><th key={h} style={{padding:"6px 12px",textAlign:"center",color:"#aaa",fontSize:9,letterSpacing:1,textTransform:"uppercase",fontWeight:700}}>{h}</th>)}</tr></thead>
+                          <tbody>{s.weekLog.map((w,i)=>(
+                            <tr key={i} style={{borderBottom:"1px solid #f0f0f0",background:w.result==="win"?"#f0f8f0":"#fff8f8"}}>
+                              <td style={{padding:"7px 12px",textAlign:"center",color:"#888"}}>Wk {w.week}</td>
+                              <td style={{padding:"7px 12px",textAlign:"center",fontWeight:800,color:w.result==="win"?"#007a00":RED,textTransform:"uppercase"}}>{w.result}</td>
+                              <td style={{padding:"7px 12px",textAlign:"center",color:w.ranked10?RED:w.ranked25?"#cc7700":"#ccc"}}>{w.ranked10?"Top 10":w.ranked25?"Top 25":"Unranked"}</td>
+                              <td style={{padding:"7px 12px",textAlign:"center",color:RED,fontWeight:700}}>+{w.pts}</td>
+                            </tr>
+                          ))}</tbody>
+                        </table>
+                      </div>
+                    )}
+                    {expandedSeasons[key]&&(!s.weekLog||s.weekLog.length===0)&&(
+                      <div style={{padding:"12px 14px",background:"#fafafa",color:"#aaa",fontSize:12}}>No game log available for this season.</div>
+                    )}
+                  </div>
+                );
+              });
             })()}
             {profile.seasons.length===0&&!profile.cur&&<div style={{color:"#888",fontSize:13,padding:"12px 0"}}>No seasons recorded yet.</div>}
           </div>}
