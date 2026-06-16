@@ -1879,9 +1879,12 @@ function EnterResultsPanel({entries,weekResults,setWeekResults,week,setWeek,appl
           </div>
           <div>
             <div style={{fontSize:10,fontWeight:700,color:"#888",textTransform:"uppercase",letterSpacing:1,marginBottom:6}}>Week</div>
-            <select value={entryWeek} onChange={e=>{const w=Number(e.target.value);setEntryWeek(w);}} style={{fontSize:16,fontWeight:700,color:"#111",padding:"8px 12px",background:"#fff",border:`2px solid #cc0000`,borderRadius:2,cursor:"pointer",fontFamily:"'Helvetica Neue',Arial,sans-serif",minWidth:80}}>
-              {Array.from({length:16},(_,i)=>i+1).map(w=><option key={w} value={w}>Week {w}{w===week?" (current)":""}</option>)}
-            </select>
+            <div style={{display:"flex",alignItems:"center",gap:6}}>
+              <select value={entryWeek} onChange={e=>{const w=Number(e.target.value);setEntryWeek(w);}} style={{fontSize:16,fontWeight:700,color:"#111",padding:"8px 12px",background:"#fff",border:`2px solid #cc0000`,borderRadius:2,cursor:"pointer",fontFamily:"'Helvetica Neue',Arial,sans-serif",minWidth:80}}>
+                {Array.from({length:16},(_,i)=>i+1).map(w=><option key={w} value={w}>Week {w}{w===week?" (current)":""}</option>)}
+              </select>
+              {entryWeek!==week&&<button onClick={()=>{setWeek(entryWeek);saveToDb({week:entryWeek});}} style={{padding:"8px 10px",background:"#1a3a6b",color:"#fff",border:"none",borderRadius:2,cursor:"pointer",fontSize:11,fontWeight:800,fontFamily:ff,whiteSpace:"nowrap"}}>Set Current</button>}
+            </div>
           </div>
           {entryWeek!==week&&<div style={{padding:"6px 12px",background:"#fffbf0",border:"1px solid #f0c040",borderRadius:2,fontSize:12,color:"#886600",fontWeight:600}}>⚠ Entering results for a past week — global week will not advance</div>}
         </div>
