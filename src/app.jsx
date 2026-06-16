@@ -714,99 +714,52 @@ function HistoryTab({history, setHistory, saveToDb, commUnlocked, entries, setEn
                 </div>
               </div>}
 
-              {/* Standings table — with per-team expandable edit */}
-              <table style={{width:"100%",borderCollapse:"collapse",fontSize:isMobile?11:13}}>
+              {/* Standings table */}
+              <div style={{overflowX:"auto"}}>
+              <table style={{width:"100%",borderCollapse:"collapse",fontSize:isMobile?10:12}}>
                 <thead><tr style={{borderBottom:`2px solid ${RED}`,background:"#f7f7f7"}}>
-                  {["#","User",...(isMobile?[]:["Team"]),"W","L","PTS",...(!isEditing?["Behind"]:isEditing?["Details"]:[])]
-                    .map(h=><th key={h} style={{padding:"7px 6px",textAlign:h==="User"||h==="Team"?"left":"center",color:"#555",fontSize:9,letterSpacing:1,textTransform:"uppercase",fontWeight:800}}>{h}</th>)}
+                  {["#","User","Team","W","L","PTS",
+                    ...(isEditing?["Playoff W","Playoff L","Bowl W","Bowl L","Natty W","Natty L","Conf W","Conf L","Top25 W","Top25 L","Top10 W","Top10 L"]:["Behind"])]
+                    .map(h=><th key={h} style={{padding:"6px 4px",textAlign:h==="User"||h==="Team"?"left":"center",color:"#555",fontSize:8,letterSpacing:0.5,textTransform:"uppercase",fontWeight:800,whiteSpace:"nowrap"}}>{h}</th>)}
                 </tr></thead>
                 <tbody>{srt.map((t,i)=>{
                   const tot=calcTotal(t);
-                  const detailKey=`det-${t.teamName}`;
-                  const detailOpen=expandTeam[detailKey];
-                  return(<>
-                  <tr key={t.teamName||t.userName} style={{borderBottom:detailOpen?"none":"1px solid #eee",background:i===0?"#fff8f8":"transparent"}}>
-                    <td style={{padding:"8px 6px",textAlign:"center",color:i===0?RED:"#bbb",fontWeight:800,fontSize:13}}>{i+1}</td>
-                    <td style={{padding:"8px 6px",color:"#111",fontWeight:i===0?800:400}}>{t.userName}</td>
-                    {!isMobile&&<td style={{padding:"8px 6px",color:"#888",fontSize:12}}>{t.teamName}</td>}
+                  return(
+                  <tr key={t.teamName||t.userName} style={{borderBottom:"1px solid #eee",background:i===0?"#fff8f8":"transparent"}}>
+                    <td style={{padding:"6px 4px",textAlign:"center",color:i===0?RED:"#bbb",fontWeight:800,fontSize:12}}>{i+1}</td>
+                    <td style={{padding:"6px 4px",color:"#111",fontWeight:i===0?800:400,whiteSpace:"nowrap"}}>{t.userName}</td>
+                    <td style={{padding:"6px 4px",color:"#888",fontSize:11,whiteSpace:"nowrap"}}>{t.teamName}</td>
                     {isEditing?(
                       <>
-                        <td style={{padding:"4px 3px",textAlign:"center"}}>{numInp(t.wins||0,v=>setEditTeam(t.teamName,"wins",v),44)}</td>
-                        <td style={{padding:"4px 3px",textAlign:"center"}}>{numInp(t.losses||0,v=>setEditTeam(t.teamName,"losses",v),44)}</td>
-                        <td style={{padding:"4px 3px",textAlign:"center"}}>{numInp(t.historicalTotal!==undefined?t.historicalTotal:tot,v=>setEditTeam(t.teamName,t.historicalTotal!==undefined?"historicalTotal":"gamePts",v),56)}</td>
-                        <td style={{padding:"4px 3px",textAlign:"center"}}>
-                          <button onClick={()=>setExpandTeam(p=>({...p,[detailKey]:!p[detailKey]}))}
-                            style={{padding:"2px 8px",borderRadius:2,border:"1px solid #ddd",background:detailOpen?"#eee":"#fff",color:"#555",cursor:"pointer",fontSize:10,fontFamily:ff,fontWeight:700}}>
-                            {detailOpen?"▲":"▼"}
-                          </button>
-                        </td>
+                        <td style={{padding:"3px 2px"}}>{numInp(t.wins||0,v=>setEditTeam(t.teamName,"wins",v),40)}</td>
+                        <td style={{padding:"3px 2px"}}>{numInp(t.losses||0,v=>setEditTeam(t.teamName,"losses",v),40)}</td>
+                        <td style={{padding:"3px 2px"}}>{numInp(t.historicalTotal!==undefined?t.historicalTotal:tot,v=>setEditTeam(t.teamName,t.historicalTotal!==undefined?"historicalTotal":"gamePts",v),52)}</td>
+                        <td style={{padding:"3px 2px"}}>{numInp(t.playoffWins||0,v=>setEditTeam(t.teamName,"playoffWins",v),40)}</td>
+                        <td style={{padding:"3px 2px"}}>{numInp(t.playoffLosses||0,v=>setEditTeam(t.teamName,"playoffLosses",v),40)}</td>
+                        <td style={{padding:"3px 2px"}}>{numInp(t.bowlWins!=null?t.bowlWins:(t.bowlResult==="win"?1:0),v=>setEditTeam(t.teamName,"bowlWins",v),40)}</td>
+                        <td style={{padding:"3px 2px"}}>{numInp(t.bowlLosses!=null?t.bowlLosses:(t.bowlResult==="loss"?1:0),v=>setEditTeam(t.teamName,"bowlLosses",v),40)}</td>
+                        <td style={{padding:"3px 2px"}}>{numInp(t.nattyWins||0,v=>setEditTeam(t.teamName,"nattyWins",v),40)}</td>
+                        <td style={{padding:"3px 2px"}}>{numInp(t.nattyLosses||0,v=>setEditTeam(t.teamName,"nattyLosses",v),40)}</td>
+                        <td style={{padding:"3px 2px"}}>{numInp(t.confChampWins||0,v=>setEditTeam(t.teamName,"confChampWins",v),40)}</td>
+                        <td style={{padding:"3px 2px"}}>{numInp(t.confChampLosses||0,v=>setEditTeam(t.teamName,"confChampLosses",v),40)}</td>
+                        <td style={{padding:"3px 2px"}}>{numInp(t.top25Wins||0,v=>setEditTeam(t.teamName,"top25Wins",v),40)}</td>
+                        <td style={{padding:"3px 2px"}}>{numInp(t.top25Losses||0,v=>setEditTeam(t.teamName,"top25Losses",v),40)}</td>
+                        <td style={{padding:"3px 2px"}}>{numInp(t.top10Wins||0,v=>setEditTeam(t.teamName,"top10Wins",v),40)}</td>
+                        <td style={{padding:"3px 2px"}}>{numInp(t.top10Losses||0,v=>setEditTeam(t.teamName,"top10Losses",v),40)}</td>
                       </>
                     ):(
                       <>
-                        <td style={{padding:"8px 6px",textAlign:"center",color:"#007a00",fontWeight:700}}>{t.wins||0}</td>
-                        <td style={{padding:"8px 6px",textAlign:"center",color:RED,fontWeight:700}}>{t.losses||0}</td>
-                        <td style={{padding:"8px 6px",textAlign:"center",fontWeight:800,color:i===0?RED:"#111",fontSize:14}}>{tot}</td>
-                        <td style={{padding:"8px 6px",textAlign:"center",color:i===0?"#007a00":RED,fontSize:12}}>{i===0?"LEAD":`-${top-tot}`}</td>
+                        <td style={{padding:"6px 4px",textAlign:"center",color:"#007a00",fontWeight:700}}>{t.wins||0}</td>
+                        <td style={{padding:"6px 4px",textAlign:"center",color:RED,fontWeight:700}}>{t.losses||0}</td>
+                        <td style={{padding:"6px 4px",textAlign:"center",fontWeight:800,color:i===0?RED:"#111",fontSize:14}}>{tot}</td>
+                        <td style={{padding:"6px 4px",textAlign:"center",color:i===0?"#007a00":RED,fontSize:12}}>{i===0?"LEAD":`-${top-tot}`}</td>
                       </>
                     )}
                   </tr>
-                  {isEditing&&detailOpen&&<tr key={detailKey} style={{borderBottom:"1px solid #eee"}}>
-                    <td colSpan={isMobile?5:6} style={{padding:"10px 14px",background:"#fafafa"}}>
-                      <div style={{display:"flex",flexDirection:"column",gap:10}}>
-                        {/* Playoff */}
-                        <div style={{display:"flex",alignItems:"center",gap:10,flexWrap:"wrap"}}>
-                          <span style={{fontSize:11,fontWeight:700,color:"#555",width:110}}>Playoff Record</span>
-                          {numInp(t.playoffWins||0,v=>setEditTeam(t.teamName,"playoffWins",v),44)}
-                          <span style={{color:"#888",fontSize:11,fontWeight:700}}>W</span>
-                          {numInp(t.playoffLosses||0,v=>setEditTeam(t.teamName,"playoffLosses",v),44)}
-                          <span style={{color:"#888",fontSize:11,fontWeight:700}}>L</span>
-                        </div>
-                        {/* Bowl */}
-                        <div style={{display:"flex",alignItems:"center",gap:8,flexWrap:"wrap"}}>
-                          <span style={{fontSize:11,fontWeight:700,color:"#555",width:110}}>Bowl Game</span>
-                          {numInp(t.bowlWins!=null?t.bowlWins:(t.bowlResult==="win"?1:0),v=>setEditTeam(t.teamName,"bowlWins",v),44)}
-                          <span style={{color:"#888",fontSize:11,fontWeight:700}}>W</span>
-                          {numInp(t.bowlLosses!=null?t.bowlLosses:(t.bowlResult==="loss"?1:0),v=>setEditTeam(t.teamName,"bowlLosses",v),44)}
-                          <span style={{color:"#888",fontSize:11,fontWeight:700}}>L</span>
-                        </div>
-                        {/* Natl Champ */}
-                        <div style={{display:"flex",alignItems:"center",gap:8,flexWrap:"wrap"}}>
-                          <span style={{fontSize:11,fontWeight:700,color:"#555",width:110}}>Natl Champ</span>
-                          {numInp(t.nattyWins||0,v=>setEditTeam(t.teamName,"nattyWins",v),44)}
-                          <span style={{color:"#888",fontSize:11,fontWeight:700}}>W</span>
-                          {numInp(t.nattyLosses||0,v=>setEditTeam(t.teamName,"nattyLosses",v),44)}
-                          <span style={{color:"#888",fontSize:11,fontWeight:700}}>L</span>
-                        </div>
-                        {/* Conf Champ */}
-                        <div style={{display:"flex",alignItems:"center",gap:8,flexWrap:"wrap"}}>
-                          <span style={{fontSize:11,fontWeight:700,color:"#555",width:110}}>Conf Champ</span>
-                          {numInp(t.confChampWins||0,v=>setEditTeam(t.teamName,"confChampWins",v),44)}
-                          <span style={{color:"#888",fontSize:11,fontWeight:700}}>W</span>
-                          {numInp(t.confChampLosses||0,v=>setEditTeam(t.teamName,"confChampLosses",v),44)}
-                          <span style={{color:"#888",fontSize:11,fontWeight:700}}>L</span>
-                        </div>
-                        {/* vs Top 25 */}
-                        <div style={{display:"flex",alignItems:"center",gap:10,flexWrap:"wrap"}}>
-                          <span style={{fontSize:11,fontWeight:700,color:"#555",width:110}}>vs Top 25</span>
-                          {numInp(t.top25Wins||0,v=>setEditTeam(t.teamName,"top25Wins",v),44)}
-                          <span style={{color:"#888",fontSize:11,fontWeight:700}}>W</span>
-                          {numInp(t.top25Losses||0,v=>setEditTeam(t.teamName,"top25Losses",v),44)}
-                          <span style={{color:"#888",fontSize:11,fontWeight:700}}>L</span>
-                        </div>
-                        {/* vs Top 10 */}
-                        <div style={{display:"flex",alignItems:"center",gap:10,flexWrap:"wrap"}}>
-                          <span style={{fontSize:11,fontWeight:700,color:"#555",width:110}}>vs Top 10</span>
-                          {numInp(t.top10Wins||0,v=>setEditTeam(t.teamName,"top10Wins",v),44)}
-                          <span style={{color:"#888",fontSize:11,fontWeight:700}}>W</span>
-                          {numInp(t.top10Losses||0,v=>setEditTeam(t.teamName,"top10Losses",v),44)}
-                          <span style={{color:"#888",fontSize:11,fontWeight:700}}>L</span>
-                        </div>
-                      </div>
-                    </td>
-                  </tr>}
-                  </>);
+                  );
                 })}</tbody>
               </table>
+              </div>
             </div>
           );
         })()}
