@@ -1325,7 +1325,7 @@ function SetupPanel({entries,setup,postSeasonInputs,setPSI,handleStart,setCommis
           <div style={{display:"flex",alignItems:"center",gap:10,marginBottom:14}}>
             <span style={{fontSize:12,color:"#555",fontWeight:700}}>Year:</span>
             <select value={rosterSeason} onChange={e=>{setRosterSeason(Number(e.target.value));setRosterEdits({});}} style={{padding:"6px 10px",border:"1px solid #ccc",borderRadius:2,fontFamily:ff,fontSize:13,color:"#111",background:"#fff"}}>
-              {Array.from({length:season+5},(_, i)=>i+1).map(s=><option key={s} value={s}>{START_YEAR+s-1}{s===season?" (current)":s===season+1?" (next)":""}</option>)}
+              {(()=>{const FIRST_YEAR=2020;const startS=FIRST_YEAR-START_YEAR+1;const endS=season+5;const arr=[];for(let s=startS;s<=endS;s++)arr.push(s);return arr;})().map(s=><option key={s} value={s}>{START_YEAR+s-1}{s===season?" (current)":s===season+1?" (next)":""}</option>)}
             </select>
           </div>
           <div style={{display:"grid",gridTemplateColumns:"auto 1fr 1fr",gap:0,border:"1px solid #eee",borderRadius:2,overflow:"hidden"}}>
