@@ -582,7 +582,7 @@ function HistoryTab({history, setHistory, saveToDb, commUnlocked, entries, setEn
         <div style={{background:"#111",padding:"10px 16px",display:"flex",justifyContent:"space-between",alignItems:"center"}}>
           <div>
             <span style={{fontSize:13,fontWeight:900,color:"#fff",letterSpacing:1}}>CURRENT SEASON</span>
-            <span style={{fontSize:11,color:"#888",marginLeft:10}}>S{season} · Week {week}</span>
+            <span style={{fontSize:11,color:"#888",marginLeft:10}}>{season&&week?`S${season} · Week ${week}`:""}</span>
           </div>
           <div style={{display:"flex",gap:8}}>
             {!liveEdit&&<button onClick={()=>{setLiveEdit(true);setLiveData(JSON.parse(JSON.stringify(entries)));}} style={{padding:"4px 12px",background:"#1a3a6b",color:"#fff",border:"none",borderRadius:2,cursor:"pointer",fontSize:11,fontWeight:800,fontFamily:ff}}>✏️ Edit</button>}
@@ -1052,7 +1052,7 @@ function ScheduleTab({schedule,entries,week,season}) {
   );
 }
 
-function ProfileTab({history,setupRows,currentEntries,season,permanentUsers}) {
+function ProfileTab({history,setupRows,currentEntries,season,year,permanentUsers}) {
   const isMobile = useIsMobile();
   const [sel,setSel] = useState(null);
   const [pTab,setPTab] = useState("overview");
@@ -1188,7 +1188,7 @@ function ProfileTab({history,setupRows,currentEntries,season,permanentUsers}) {
             <SL>Season-by-Season Results</SL>
             {(()=>{
               const allSeasons=[...profile.seasons];
-              if(profile.cur){allSeasons.push({year:START_YEAR+season-1,seasonNum:season,teamName:profile.cur.teamName,wins:profile.cur.wins,losses:profile.cur.losses,total:calcTotal(profile.cur),rank:null,champion:false,confChamp:false,heisman:false,weekLog:profile.cur.weekLog||[],isCurrent:true});}
+              if(profile.cur){allSeasons.push({year:year,seasonNum:season,teamName:profile.cur.teamName,wins:profile.cur.wins,losses:profile.cur.losses,total:calcTotal(profile.cur),rank:null,champion:false,confChamp:false,heisman:false,weekLog:profile.cur.weekLog||[],isCurrent:true});}
               // Sort by year descending, then seasonNum descending within same year
               allSeasons.sort((a,b)=>b.year!==a.year?b.year-a.year:(b.seasonNum||0)-(a.seasonNum||0));
               return allSeasons.map((s,idx)=>{
@@ -1840,10 +1840,9 @@ function HistoricalImportPanel({setupRows, history, onImport}) {
 }
 
 // ── EnterResultsPanel ─────────────────────────────────────────────────────
-function EnterResultsPanel({entries,weekResults,setWeekResults,week,setWeek,applyBulkResults,applyWeekResults,postSeasonInputs,setPSI,applyPostSeason,finalizeSeason,season,setSeason,teamNames,schedule,history,onImportHistory,setupRows,saveToDb}) {
+function EnterResultsPanel({entries,weekResults,setWeekResults,week,setWeek,applyBulkResults,applyWeekResults,postSeasonInputs,setPSI,applyPostSeason,finalizeSeason,season,setSeason,year,setYear,teamNames,schedule,history,onImportHistory,setupRows,saveToDb}) {
   const [entryWeek,setEntryWeek] = useState(week);
   const [resultsTab,setResultsTab] = useState("weekly");
-  const [entryYear,setEntryYear] = useState(START_YEAR + season - 1);
   const setWR=(i,f,v)=>setWeekResults(prev=>prev.map((r,idx)=>idx===i?{...r,[f]:v}:r));
   const thisWeekSchedule = schedule?.[entryWeek]||{};
 
@@ -1867,13 +1866,13 @@ function EnterResultsPanel({entries,weekResults,setWeekResults,week,setWeek,appl
         <div style={{padding:"14px 16px",display:"flex",flexWrap:"wrap",gap:20,alignItems:"flex-end"}}>
           <div>
             <div style={{fontSize:10,fontWeight:700,color:"#888",textTransform:"uppercase",letterSpacing:1,marginBottom:6}}>Season</div>
-            <select value={season} onChange={e=>{const s=Number(e.target.value);setSeason(s);setEntryYear(START_YEAR+s-1);setEntryWeek(week);if(saveToDb)saveToDb({season:s});}} style={{fontSize:16,fontWeight:700,color:"#111",padding:"8px 12px",background:"#fff",border:`2px solid #cc0000`,borderRadius:2,cursor:"pointer",fontFamily:"'Helvetica Neue',Arial,sans-serif",minWidth:60}}>
+            <select value={season} onChange={e=>{const s=Number(e.target.value);setSeason(s);setEntryWeek(week);if(saveToDb)saveToDb({season:s});}} style={{fontSize:16,fontWeight:700,color:"#111",padding:"8px 12px",background:"#fff",border:`2px solid #cc0000`,borderRadius:2,cursor:"pointer",fontFamily:"'Helvetica Neue',Arial,sans-serif",minWidth:60}}>
               {Array.from({length:20},(_,i)=>i+1).map(s=><option key={s} value={s}>S{s}</option>)}
             </select>
           </div>
           <div>
             <div style={{fontSize:10,fontWeight:700,color:"#888",textTransform:"uppercase",letterSpacing:1,marginBottom:6}}>Year</div>
-            <select value={entryYear} onChange={e=>setEntryYear(Number(e.target.value))} style={{fontSize:16,fontWeight:700,color:"#111",padding:"8px 12px",background:"#fff",border:`2px solid #cc0000`,borderRadius:2,cursor:"pointer",fontFamily:"'Helvetica Neue',Arial,sans-serif",minWidth:80}}>
+            <select value={year} onChange={e=>{const y=Number(e.target.value);setYear(y);if(saveToDb)saveToDb({year:y});}} style={{fontSize:16,fontWeight:700,color:"#111",padding:"8px 12px",background:"#fff",border:`2px solid #cc0000`,borderRadius:2,cursor:"pointer",fontFamily:"'Helvetica Neue',Arial,sans-serif",minWidth:80}}>
               {Array.from({length:20},(_,i)=>2020+i).map(y=><option key={y} value={y}>{y}</option>)}
             </select>
           </div>
@@ -1892,7 +1891,7 @@ function EnterResultsPanel({entries,weekResults,setWeekResults,week,setWeek,appl
 
       <BulkResultsUploader entries={entries} week={entryWeek} teamNames={teamNames} onConfirm={(results)=>applyBulkResults(results,entryWeek)}/>
       {entryWeek<=12&&<Card><div style={{padding:16}}>
-        <SL>Manual Entry — Week {entryWeek}{entryWeek!==week?` (S${season} · ${entryYear})`:""}</SL>
+        <SL>Manual Entry — Week {entryWeek}{entryWeek!==week?` (S${season} · ${year})`:""}</SL>
         {Object.keys(thisWeekSchedule).length>0&&<div style={{background:"#f0f8f0",border:"1px solid #cce5cc",borderRadius:2,padding:"8px 12px",fontSize:12,color:"#555",marginBottom:12}}>✓ Schedule loaded — entering one team's result automatically updates their opponent's record.</div>}
         {weekResults.map((wr,i)=>(
           <div key={wr.teamName} style={{display:"flex",alignItems:"center",gap:8,flexWrap:"wrap",padding:"9px 0",borderBottom:"1px solid #f0f0f0"}}>
@@ -1916,7 +1915,7 @@ function EnterResultsPanel({entries,weekResults,setWeekResults,week,setWeek,appl
         const SectionLabel=({children,pts})=><div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:10}}><div style={{fontSize:12,color:"#555",fontWeight:700}}>{children}</div><div style={{fontSize:11,color:"#007a00",fontWeight:700}}>{pts}</div></div>;
         return(<>
           <Card style={{borderTop:`3px solid ${RED}`}}><div style={{padding:16}}>
-            <SL>Post Season — {START_YEAR+season-1}</SL>
+            <SL>Post Season — {year}</SL>
             {/* Conf Standings */}
             <div style={{marginBottom:18}}><SectionLabel pts="Appear +10 · Win +15">Conference Championship Game</SectionLabel>
               <div style={{display:"flex",alignItems:"center",gap:8,flexWrap:"wrap",marginBottom:8}}><TeamSel value={psi.confChampGame?.teamA||""} onChange={v=>setTopGame("confChampGame","teamA",v)} exclude={psi.confChampGame?.teamB}/><span style={{fontSize:11,color:"#aaa",fontWeight:700}}>VS</span><TeamSel value={psi.confChampGame?.teamB||""} onChange={v=>setTopGame("confChampGame","teamB",v)} exclude={psi.confChampGame?.teamA}/></div>
@@ -2053,7 +2052,7 @@ function ContentHub({sorted,entries,week,season,leagueName,history,leader,articl
 
       recap: `${byline}Write a dramatic weekly recap for Season ${season} Week ${week-1} of the "${leagueName}" dynasty.\n\nStandings after this week:\n${standingsText}\n\nLast week's matchups:\n${lastWeekMatchups}\n\nWrite 400 words recapping last week's actual games. Make up exciting scores and game details for the real matchups listed above. Highlight upsets, dominant performances, and dynasty implications. Write in your distinct voice.`,
 
-      seasonpreview: `${byline}Write a Season ${season} (${START_YEAR+season-1}) preview for the "${leagueName}" dynasty.\n\nTeams:\n${entries.map(e=>e.teamName).join("\n")}\n${history.length>0?`\nDefending champion: ${history[history.length-1].champion}`:"This is the inaugural season."}\n${upcomingSchedule?`\nEarly schedule:\n${upcomingSchedule}`:""}\n\nWrite 450 words previewing the season. Give each team a one-line outlook, predict a champion, name dark horses and sleepers, and build excitement. Write in your distinct voice.`,
+      seasonpreview: `${byline}Write a Season ${season} (${year}) preview for the "${leagueName}" dynasty.\n\nTeams:\n${entries.map(e=>e.teamName).join("\n")}\n${history.length>0?`\nDefending champion: ${history[history.length-1].champion}`:"This is the inaugural season."}\n${upcomingSchedule?`\nEarly schedule:\n${upcomingSchedule}`:""}\n\nWrite 450 words previewing the season. Give each team a one-line outlook, predict a champion, name dark horses and sleepers, and build excitement. Write in your distinct voice.`,
 
       hotakes: `${byline}Write a spicy hot takes column for Season ${season} Week ${week-1} of the "${leagueName}" dynasty.\n\nStandings:\n${standingsText}\n\nLast week's matchups:\n${lastWeekMatchups}\n\nWrite 5 bold, controversial hot takes. Reference real matchups and team names. Each take 2-3 sentences, provocative and specific. Number 1-5. Write in your distinct voice.`,
     };
@@ -2174,6 +2173,7 @@ export default function App() {
   const [setup,setSetup] = useState(null);
   const [tab,setTab] = useState("Home");
   const [season,setSeason] = useState(1);
+  const [year,setYear] = useState(2024);
   const [week,setWeek] = useState(1);
   const [entries,setEntries] = useState([]);
   const [history,setHistory] = useState([]);
@@ -2214,6 +2214,7 @@ export default function App() {
         }
         if (migratedSetup) setSetup(migratedSetup);
         if (row.season) setSeason(row.season);
+        if (row.year) setYear(row.year);
         if (row.week) setWeek(row.week);
         if (migratedEntries) { if (migratedEntries.length) setEntries(migratedEntries); }
         if (row.history) { if (row.history.length) setHistory(row.history); }
@@ -2234,7 +2235,7 @@ export default function App() {
 
   // ── Save to Supabase whenever key state changes ──
   // saveToDb defined after render to access latest state
-  const stateRef = { setup, season, week, entries, history, postSeasonInputs, articles, schedule };
+  const stateRef = { setup, season, year, week, entries, history, postSeasonInputs, articles, schedule };
   async function saveToDb(overrides) {
     // Never save while DB is still loading — could overwrite real data with empty state
     if (dbLoading) return;
@@ -2242,6 +2243,7 @@ export default function App() {
     var data = {
       setup: ovr.setup !== undefined ? ovr.setup : stateRef.setup,
       season: ovr.season !== undefined ? ovr.season : stateRef.season,
+      year: ovr.year !== undefined ? ovr.year : stateRef.year,
       week: ovr.week !== undefined ? ovr.week : stateRef.week,
       entries: ovr.entries !== undefined ? ovr.entries : stateRef.entries,
       // Never overwrite history with empty array unless explicitly passing an empty array via override
@@ -2386,7 +2388,6 @@ export default function App() {
   }
 
   function finalizeSeason() {
-    const year=START_YEAR+season-1;
     const fin=entries.map(e=>({...e}));
     const srt=[...fin].sort((a,b)=>calcTotal(b)-calcTotal(a));
     const histEntry={year,seasonNum:season,finalStandings:fin,champion:srt[0]?.userName||"",confChampion:postSeasonInputs?.confChamp?.winner||postSeasonInputs?.confChampGame?.winner||"",heisman:postSeasonInputs?.heisman||""};
@@ -2399,7 +2400,7 @@ export default function App() {
     });
     setHistory(prev=>{
       const next=[...prev,histEntry];
-      setTimeout(()=>dbSave({history:next,season:newSeason,week:1,entries:fresh,post_season_inputs:FRESH_PSI(fresh)}),100);
+      setTimeout(()=>dbSave({history:next,season:newSeason,year,week:1,entries:fresh,post_season_inputs:FRESH_PSI(fresh)}),100);
       return next;
     });
     setEntries(fresh);setWeek(1);setSeason(newSeason);
@@ -2444,7 +2445,7 @@ export default function App() {
         <div style={{width:1,height:20,background:"#444",flexShrink:0}}/>
         <div style={{fontSize:isMobile?10:12,color:"#aaa",fontWeight:600,textTransform:"uppercase",letterSpacing:0.5,flex:1,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{leagueName}</div>
         {!isMobile&&<div style={{display:"flex",gap:14,alignItems:"center",flexShrink:0}}>
-          {[["S",season],["YR",START_YEAR+season-1],["WK",week>12?"PS":week]].map(([l,v])=><div key={l} style={{textAlign:"center"}}><div style={{fontSize:7,color:"#666",letterSpacing:1,textTransform:"uppercase"}}>{l}</div><div style={{fontSize:15,fontWeight:900,color:"#fff",lineHeight:1}}>{v}</div></div>)}
+          {[["S",season],["YR",year],["WK",week>12?"PS":week]].map(([l,v])=><div key={l} style={{textAlign:"center"}}><div style={{fontSize:7,color:"#666",letterSpacing:1,textTransform:"uppercase"}}>{l}</div><div style={{fontSize:15,fontWeight:900,color:"#fff",lineHeight:1}}>{v}</div></div>)}
         </div>}
         {isMobile&&<div style={{flexShrink:0,textAlign:"right"}}><div style={{fontSize:9,color:"#666",letterSpacing:1,textTransform:"uppercase"}}>WK</div><div style={{fontSize:14,fontWeight:900,color:"#fff",lineHeight:1}}>{week>12?"PS":week}</div></div>}
       </div>
@@ -2487,7 +2488,7 @@ export default function App() {
 
         {/* Left sidebar - desktop only */}
         {isMobile?null:<div style={{display:"flex",flexDirection:"column",gap:12}}>
-          <Card><CardHead>Dynasty Info</CardHead><div style={{padding:"8px 0"}}>{[["Season",season],["Year",START_YEAR+season-1],["Week",week>12?"Post":week],["Teams",entries.length]].map(([l,v])=><div key={l} style={{display:"flex",justifyContent:"space-between",padding:"6px 12px",borderBottom:"1px solid #f5f5f5"}}><span style={{fontSize:12,color:"#888"}}>{l}</span><span style={{fontSize:12,fontWeight:700,color:"#111"}}>{v}</span></div>)}</div></Card>
+          <Card><CardHead>Dynasty Info</CardHead><div style={{padding:"8px 0"}}>{[["Season",season],["Year",year],["Week",week>12?"Post":week],["Teams",entries.length]].map(([l,v])=><div key={l} style={{display:"flex",justifyContent:"space-between",padding:"6px 12px",borderBottom:"1px solid #f5f5f5"}}><span style={{fontSize:12,color:"#888"}}>{l}</span><span style={{fontSize:12,fontWeight:700,color:"#111"}}>{v}</span></div>)}</div></Card>
           <Card><CardHead>Quick Links</CardHead><div style={{padding:"4px 0"}}>{["Home","Standings","Schedule","History","Profiles","Rules"].map(l=><div key={l} onClick={()=>setTab(l)} style={{padding:"8px 12px",fontSize:12,color:RED,cursor:"pointer",borderBottom:"1px solid #f5f5f5",fontWeight:500}}>🏈 {l}</div>)}</div></Card>
           <Card><CardHead bg={RED}>Points Leader</CardHead>{sorted.length===0?<div style={{padding:"14px 12px",textAlign:"center",color:"#bbb",fontSize:12}}>Not started</div>:sorted.slice(0,1).map(t=><div key={t.teamName} style={{padding:"14px 12px",textAlign:"center"}}><div style={{fontSize:26,fontWeight:900,color:RED}}>{calcTotal(t)}</div><div style={{fontSize:14,fontWeight:700,color:"#111",marginTop:2}}>{t.teamName}</div><div style={{fontSize:11,color:"#555",marginTop:4}}>{t.wins}W - {t.losses}L</div></div>)}</Card>
         </div>}
@@ -2498,7 +2499,7 @@ export default function App() {
           {/* Page header - compact on mobile */}
           <Card style={{padding:isMobile?"10px 12px":"14px 16px",borderLeft:`4px solid ${RED}`}}>
             <div style={{fontSize:isMobile?15:18,fontWeight:900,color:"#111",textTransform:"uppercase"}}>{tab==="Home"?"Dynasty Home":tab==="Standings"?"Dynasty Standings":tab==="Schedule"?"Season Schedule":tab==="History"?"Season History":tab==="Profiles"?"Player Profiles":"Points System Rules"}</div>
-            <div style={{fontSize:10,color:"#888",marginTop:2}}>{leagueName} · S{season} · {START_YEAR+season-1} · {week>12?"Post":`Wk ${week}`}</div>
+            <div style={{fontSize:10,color:"#888",marginTop:2}}>{leagueName} · S{season} · {year} · {week>12?"Post":`Wk ${week}`}</div>
           </Card>
 
           {tab==="Home"&&(<>
@@ -2617,7 +2618,7 @@ export default function App() {
           </>)}
 
           {tab==="History"&&<HistoryTab history={history} setHistory={setHistory} saveToDb={saveToDb} commUnlocked={commUnlocked}/>}
-          {tab==="Profiles"&&<ProfileTab history={history} setupRows={setup?.rows||[]} currentEntries={entries} season={season} permanentUsers={setup?.permanentUsers}/>}
+          {tab==="Profiles"&&<ProfileTab history={history} setupRows={setup?.rows||[]} currentEntries={entries} season={season} year={year} permanentUsers={setup?.permanentUsers}/>}
           {tab==="Schedule"&&<ScheduleTab schedule={schedule} entries={activeEntries} week={week} season={season}/>}
           {tab==="Rules"&&<div style={{display:"grid",gridTemplateColumns:isMobile?"1fr":"repeat(auto-fill,minmax(250px,1fr))",gap:10}}>
             {[["🏈 Regular Season",[["Win","15 pts"],["Win vs Top 25","+5 bonus"],["Win vs Top 10","+10 bonus"],["Loss","0 pts"]]],["📊 Conference Standings",[["1st","50"],["2nd","43"],["3rd","36"],["4th","30"],["5th","24"],["6th","18"],["7th","14"],["8th","10"],["9th","7"],["10th","5"],["11th","3"],["12th","1"]]],["🏆 Conference Championship",[["Make the Game","10 pts"],["Win the Game","15 pts"]]],["🥣 Bowl & Playoff",[["Make a Bowl","5 pts"],["Win a Bowl","+10 pts"],["Playoff Round 1","15 pts"],["Win R1","+10 pts"],["Win Semifinal (R2)","+15 pts"],["Win National Championship","+25 pts"]]],["🎓 Recruiting (Top 5)",[["#1","15 pts"],["#2","10 pts"],["#3","7 pts"],["#4","5 pts"],["#5","3 pts"]]],["🏅 Dynasty Top 5",[["#1 in Dynasty","15 pts"],["#2 in Dynasty","10 pts"],["#3 in Dynasty","7 pts"],["#4 in Dynasty","5 pts"],["#5 in Dynasty","3 pts"]]],["⭐ Prestige & Awards",[["Gain a Prestige Star","10 pts"],["Reach Max Prestige","10 pts"],["Heisman Winner","15 pts"]]]].map(([title,rows])=><Card key={title} style={{overflow:"hidden"}}><CardHead bg={RED}>{title}</CardHead><table style={{width:"100%",borderCollapse:"collapse"}}><tbody>{rows.map(([l,p])=><tr key={l} style={{borderBottom:"1px solid #f0f0f0"}}><td style={{padding:"8px 12px",color:"#333",fontSize:13}}>{l}</td><td style={{padding:"8px 12px",textAlign:"right",color:RED,fontWeight:800,fontSize:13}}>{p}</td></tr>)}</tbody></table></Card>)}
@@ -2689,7 +2690,7 @@ export default function App() {
         </div>
         <div style={{maxWidth:800,margin:"0 auto",padding:"20px 14px"}}>
           {commTab==="Season History"&&<HistoryTab history={history} setHistory={setHistory} saveToDb={saveToDb} commUnlocked={true} entries={entries} setEntries={setEntries} season={season} week={week} setWeek={setWeek}/>}
-          {commTab==="Enter Results"&&<EnterResultsPanel entries={activeEntries} weekResults={weekResults} setWeekResults={setWeekResults} week={week} setWeek={setWeek} applyBulkResults={applyBulkResults} applyWeekResults={applyWeekResults} postSeasonInputs={postSeasonInputs} setPSI={setPSI} applyPostSeason={applyPostSeason} finalizeSeason={finalizeSeason} season={season} setSeason={setSeason} teamNames={teamNames} schedule={schedule} history={history} onImportHistory={importHistoricalSeason} setupRows={setup?.rows||[]} saveToDb={saveToDb}/>}
+          {commTab==="Enter Results"&&<EnterResultsPanel entries={activeEntries} weekResults={weekResults} setWeekResults={setWeekResults} week={week} setWeek={setWeek} applyBulkResults={applyBulkResults} applyWeekResults={applyWeekResults} postSeasonInputs={postSeasonInputs} setPSI={setPSI} applyPostSeason={applyPostSeason} finalizeSeason={finalizeSeason} season={season} setSeason={setSeason} year={year} setYear={setYear} teamNames={teamNames} schedule={schedule} history={history} onImportHistory={importHistoricalSeason} setupRows={setup?.rows||[]} saveToDb={saveToDb}/>}
           {commTab==="Schedule"&&<SchedulePanel entries={activeEntries} schedule={schedule} setSchedule={setSchedule}/>}
           {commTab==="Content"&&<ContentHub sorted={sorted} entries={activeEntries} week={week} season={season} leagueName={leagueName} history={history} leader={leader} articles={articles} setArticles={setArticles} setActiveArticle={setActiveArticle} schedule={schedule}/>}
           {commTab==="League Setup"&&<SetupPanel entries={entries} setup={setup} postSeasonInputs={postSeasonInputs} setPSI={setPSI} handleStart={handleStart} setCommissionerUnlocked={setCommUnlocked} season={season} setEntries={setEntries} setWeekResults={setWeekResults} setSetup={setSetup} saveToDb={saveToDb}/>}
