@@ -115,27 +115,37 @@ function articleHeadline(text) {
 
 async function callClaude(prompt) {
   const apiKey = import.meta.env.VITE_ANTHROPIC_KEY;
-  if (!apiKey) throw new Error("VITE_ANTHROPIC_KEY not set in Cloudflare build variables.");
-  const r = await fetch("https://api.anthropic.com/v1/messages", {
-    method: "POST",
-    headers: {
-      "Content-Type": "application/json",
-      "x-api-key": apiKey,
-      "anthropic-version": "2023-06-01",
-      "anthropic-dangerous-direct-browser-access": "true",
-    },
-    body: JSON.stringify({
-      model: "claude-haiku-4-5-20251001",
-      max_tokens: 1200,
-      messages: [{role:"user", content: prompt}],
-    }),
-  });
-  if (!r.ok) {
-    const err = await r.json().catch(()=>({}));
-    throw new Error(err?.error?.message || `API error ${r.status}`);
+  if (!apiKey) throw new Error("Anthropic API key not configured. Add VITE_ANTHROPIC_KEY to GitHub Actions secrets and Cloudflare build variables.");
+  const controller = new AbortController();
+  const tid = setTimeout(()=>controller.abort(), 45000);
+  try {
+    const r = await fetch("https://api.anthropic.com/v1/messages", {
+      method: "POST",
+      signal: controller.signal,
+      headers: {
+        "Content-Type": "application/json",
+        "x-api-key": apiKey,
+        "anthropic-version": "2023-06-01",
+        "anthropic-dangerous-direct-browser-access": "true",
+      },
+      body: JSON.stringify({
+        model: "claude-haiku-4-5-20251001",
+        max_tokens: 1200,
+        messages: [{role:"user", content: prompt}],
+      }),
+    });
+    clearTimeout(tid);
+    if (!r.ok) {
+      const err = await r.json().catch(()=>({}));
+      throw new Error(err?.error?.message || `API error ${r.status}`);
+    }
+    const d = await r.json();
+    return d.content?.[0]?.text || "No content returned.";
+  } catch(e) {
+    clearTimeout(tid);
+    if (e.name === "AbortError") throw new Error("Request timed out after 45 seconds.");
+    throw e;
   }
-  const d = await r.json();
-  return d.content?.[0]?.text || "No content returned.";
 }
 
 const ff = "'Helvetica Neue',Arial,sans-serif";
@@ -2055,6 +2065,7 @@ const REPORTERS = [
 // ── Content Hub Tab ───────────────────────────────────────────────────────
 function ContentHub({sorted,entries,week,season,leagueName,history,leader,articles,setArticles,setActiveArticle,schedule}) {
   const [generating,setGenerating] = useState(null);
+  const [genError,setGenError] = useState(null);
   const [selectedReporter,setSelectedReporter] = useState(0);
   const [contentType,setContentType] = useState("powerrankings");
 
@@ -2090,6 +2101,7 @@ function ContentHub({sorted,entries,week,season,leagueName,history,leader,articl
 
   async function generate(type) {
     setGenerating(type);
+    setGenError(null);
     const r = reporter;
     const byline = `You are ${r.name}, ${r.title} for Dynasty Central covering the "${leagueName}" dynasty. Your writing style is ${r.style}\n\nAlways sign your articles with your name and title at the end.\n\n`;
 
@@ -2114,9 +2126,10 @@ function ContentHub({sorted,entries,week,season,leagueName,history,leader,articl
       setArticles(newArticles);
       dbSave({articles:newArticles});
     } catch(e) {
-      alert("Error: "+e.message);
+      setGenError(e.message);
+    } finally {
+      setGenerating(null);
     }
-    setGenerating(null);
   }
 
   return (
@@ -2154,6 +2167,7 @@ function ContentHub({sorted,entries,week,season,leagueName,history,leader,articl
             <button key={val} onClick={()=>setContentType(val)} style={{padding:"8px 14px",borderRadius:2,border:"1px solid",borderColor:contentType===val?reporter.color:"#ddd",background:contentType===val?reporter.color:"#fff",color:contentType===val?"#fff":"#555",cursor:"pointer",fontSize:12,fontFamily:ff,fontWeight:700,textTransform:"uppercase"}}>{label}</button>
           ))}
         </div>
+        {genError&&<div style={{background:"#fff0f0",border:"1px solid #ffcccc",borderRadius:2,padding:"10px 14px",fontSize:12,color:RED,marginBottom:4}}><strong>Error:</strong> {genError}</div>}
         <button onClick={()=>generate(contentType)} disabled={!!generating} style={{background:generating?"#ccc":reporter.color,color:"#fff",border:"none",borderRadius:2,padding:"11px 22px",cursor:generating?"not-allowed":"pointer",fontFamily:ff,fontSize:13,fontWeight:800,textTransform:"uppercase",display:"flex",alignItems:"center",gap:8}}>
           {generating?<>Generating...</>:<><span style={{background:"rgba(255,255,255,0.2)",borderRadius:"50%",width:22,height:22,display:"flex",alignItems:"center",justifyContent:"center",fontSize:10,fontWeight:800}}>{reporter.avatar}</span> Generate as {reporter.name.split(" ")[0]}</>}
         </button>
