@@ -1286,6 +1286,18 @@ function SetupPanel({entries,setup,postSeasonInputs,setPSI,handleStart,setCommis
   const removeRow=(i)=>{if(setupRows.length<=2)return alert("Minimum 2 teams.");setSetupRows(p=>p.filter((_,idx)=>idx!==i));};
   function applySetup(){const valid=setupRows.filter(r=>r.userName.trim()&&r.teamName.trim());if(valid.length<2)return alert("Enter at least 2 users.");if(entries.length>0&&!window.confirm("This resets all standings. Continue?"))return;handleStart(setupLeague||"Dynasty League",valid);setCommissionerUnlocked(false);}
   function addMidSeason(){const last=setupRows[setupRows.length-1];if(!last?.userName?.trim()||!last?.teamName?.trim())return alert("Fill in the last row first.");if(entries.find(e=>e.teamName===last.teamName))return alert("That team is already in the dynasty.");const uid=last.userId||genId();const newE=INITIAL_ENTRY(last.userName.trim(),last.teamName.trim(),uid);setEntries(prev=>[...prev,newE]);setWeekResults(prev=>[...prev,{teamName:newE.teamName,userName:newE.userName,result:"none",ranked25:false,ranked10:false}]);if(postSeasonInputs)setPSI(prev=>({...prev,confStandings:[...prev.confStandings,{teamName:newE.teamName,rank:prev.confStandings.length+1}],bowls:[...prev.bowls,{teamName:newE.teamName,bowl:"none"}],recruiting:[...prev.recruiting,{teamName:newE.teamName,rank:prev.recruiting.length+1}]}));const newRow={userId:uid,userName:newE.userName,teamName:newE.teamName};const pUser={id:uid,defaultName:newE.userName};setSetup(prev=>{const updated={...prev,rows:[...(prev?.rows||[]),newRow],permanentUsers:[...(prev?.permanentUsers||[]),pUser]};setTimeout(()=>saveToDb({setup:updated}),100);return updated;});alert(`${newE.userName} (${newE.teamName}) added!`);}
+  const [permSaved,setPermSaved] = useState(false);
+  function savePermNames(){
+    const valid=setupRows.filter(r=>r.userName.trim());
+    if(valid.length<2)return alert("Need at least 2 users.");
+    const updatedRows=(setup?.rows||[]).map(r=>{const sr=valid.find(s=>s.userId===r.userId);return sr?{...r,userName:sr.userName.trim(),teamName:sr.teamName.trim()}:r;});
+    const updatedPerm=(setup?.permanentUsers||[]).map(p=>{const sr=valid.find(s=>s.userId===p.id);return sr?{...p,defaultName:sr.userName.trim()}:p;});
+    const updated={...setup,rows:updatedRows,permanentUsers:updatedPerm};
+    setSetup(updated);
+    saveToDb({setup:updated});
+    setPermSaved(true);
+    setTimeout(()=>setPermSaved(false),2000);
+  }
   function toggleActive(teamName){setSetup(prev=>{const rows=(prev?.rows||[]).map(r=>r.teamName===teamName?{...r,active:r.active===false?true:false}:r);const updated={...prev,rows};setTimeout(()=>saveToDb({setup:updated}),100);return updated;});}
 
   // Season roster management
@@ -1351,6 +1363,7 @@ function SetupPanel({entries,setup,postSeasonInputs,setPSI,handleStart,setCommis
             </div>
           ))}
           <div style={{padding:"10px 14px"}}><button onClick={addRow} style={{background:"transparent",border:"1px dashed #ccc",borderRadius:2,padding:"7px 14px",color:"#888",cursor:"pointer",fontSize:12,fontFamily:ff,fontWeight:600,width:"100%"}}>+ Add Player</button></div>
+          {isLive&&<div style={{padding:"0 14px 12px"}}><button onClick={savePermNames} style={{background:permSaved?"#007a00":"#333",color:"#fff",border:"none",borderRadius:2,padding:"8px 16px",cursor:"pointer",fontFamily:ff,fontSize:12,fontWeight:800,textTransform:"uppercase"}}>{permSaved?"✓ Saved":"Save Permanent Names"}</button></div>}
         </div>
       </Card>
 
