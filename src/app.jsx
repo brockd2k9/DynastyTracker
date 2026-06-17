@@ -728,7 +728,7 @@ function HistoryTab({history, setHistory, saveToDb, commUnlocked, entries, setEn
           const isEditing=editing===selIdx&&editData;
           const rawData=isEditing?editData:s;
           // Apply per-year name overrides from yearRosters
-          const displayData=rawData.finalStandings ? {...rawData, finalStandings:applyRoster(rawData.finalStandings, rawData.year)} : rawData;
+          const displayData=isEditing ? rawData : (rawData.finalStandings ? {...rawData, finalStandings:applyRoster(rawData.finalStandings, rawData.year)} : rawData);
           const allTeams=displayData.finalStandings;
           const active=displayData.finalStandings.filter(t=>t.wins>0||t.losses>0||calcTotal(t)>0);
           const srt=[...(active.length?active:displayData.finalStandings)].sort((a,b)=>calcTotal(b)-calcTotal(a));
