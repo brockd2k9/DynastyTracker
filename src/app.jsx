@@ -566,6 +566,8 @@ function HistoryTab({history, setHistory, saveToDb, commUnlocked, entries, setEn
   history.forEach(s=>{
     const nameMap={};
     s.finalStandings.forEach(t=>{ nameMap[t.teamName]=t.userName; });
+    // Also map yearRoster override team names so confChampion strings stored with display names resolve correctly
+    ((yearRosters||{})[s.year]||[]).forEach(r=>{ if(r.teamName&&r.userName) nameMap[r.teamName]=r.userName; });
     const gotNatty=new Set(), gotConf=new Set();
     s.finalStandings.forEach(t=>{
       allWins[t.userName]=(allWins[t.userName]||0)+(t.wins||0);
