@@ -1109,31 +1109,165 @@ function ProfileTab({history,setupRows,currentEntries,season,year,permanentUsers
     return{seasons,cur,totalWins,totalLosses,totalPts,championships,confTitles,heismans,nattyWins,bestFinish,longestWin,longestLoss,curStreak,curStreakType,rankedWins,top10Wins,winPct,h2hMerged,ptBreakdown,careerPlayoffWins,careerPlayoffLosses,bowlWins,bowlLosses,bowlAppearances,careerTop25Wins,careerTop10Wins};
   }
 
-  function getLR() {
+  function getLR(filterYear=null) {
     const recs={};
-    // Use current display name as key for league records display
     allUsers.forEach(u=>{try{const curEntry=currentEntries.find(e=>u.userId?e.userId===u.userId:e.userName===u.userName);const displayName=curEntry?.userName||u.userName;recs[displayName]=getProfile(u.userId||null,u.userName);}catch{}});
     const e=Object.entries(recs).filter(([,p])=>p);
     if(!e.length)return{};
+
+    // Helper: get all weekLog entries for a user across history (with weekLog, not imported)
+    const getUserLogs=(name)=>{
+      const u=allUsers.find(x=>x.userName===name||currentEntries.find(en=>en.userId===x.userId&&en.userName===name));
+      const prof=recs[name]; if(!prof)return[];
+      const logs=[];
+      prof.seasons.filter(s=>!s.isHistorical&&(filterYear==null||s.year===filterYear)).forEach(s=>{
+        (s.weekLog||[]).forEach(w=>logs.push({...w,season:s.seasonNum,year:s.year,teamName:s.teamName}));
+      });
+      if(!filterYear&&prof.cur)(prof.cur.weekLog||[]).forEach(w=>logs.push({...w,season,year,teamName:prof.cur.teamName}));
+      return logs;
+    };
+
+    // Win streak all time across seasons (all games, skip imported)
+    const getWinStreakAllTime=(name)=>{
+      const logs=getUserLogs(name);
+      let max=0,cur=0,startIdx=0,bestStart=0,bestEnd=0;
+      logs.forEach((w,i)=>{if(w.result==="win"){if(cur===0)startIdx=i;cur++;if(cur>max){max=cur;bestStart=startIdx;bestEnd=i;}}else cur=0;});
+      if(!max)return null;
+      const span=[...new Set(logs.slice(bestStart,bestEnd+1).map(w=>w.year))];
+      return{len:max,years:span.join("–"),teamName:logs[bestStart]?.teamName||""};
+    };
+
+    // Win streak single season
+    const getWinStreakSeason=(name)=>{
+      const prof=recs[name]; if(!prof)return null;
+      let best=null;
+      const allS=[...prof.seasons.filter(s=>!s.isHistorical&&(filterYear==null||s.year===filterYear))];
+      if(!filterYear&&prof.cur)allS.push({...prof.cur,year,seasonNum:season,isHistorical:false});
+      allS.forEach(s=>{
+        let cur=0,max=0;
+        (s.weekLog||[]).forEach(w=>{if(w.result==="win"){cur++;if(cur>max)max=cur;}else cur=0;});
+        if(max>0&&(!best||max>best.len))best={len:max,year:s.year,teamName:s.teamName};
+      });
+      return best;
+    };
+
+    // User vs user games only (opponent is not CPU or BYE)
+    const isUvU=(w)=>w.opponent&&w.opponent!=="CPU"&&w.opponent!=="BYE"&&w.opponent!=="Unknown"&&w.opponent!=="";
+
+    // Best/worst single season record (user vs user)
+    let bestSeason=null,worstSeason=null,mostSeasonLosses=null;
+    e.forEach(([name,prof])=>{
+      const allS=[...prof.seasons.filter(s=>!s.isHistorical&&(filterYear==null||s.year===filterYear))];
+      if(!filterYear&&prof.cur)allS.push({...prof.cur,year,seasonNum:season,isHistorical:false});
+      allS.forEach(s=>{
+        const uvuW=(s.weekLog||[]).filter(w=>isUvU(w)&&w.result==="win").length;
+        const uvuL=(s.weekLog||[]).filter(w=>isUvU(w)&&w.result==="loss").length;
+        if(uvuW+uvuL===0)return;
+        const pct=uvuW/(uvuW+uvuL);
+        if(!bestSeason||pct>bestSeason.pct||(pct===bestSeason.pct&&uvuW>bestSeason.w))bestSeason={name,w:uvuW,l:uvuL,pct,year:s.year,teamName:s.teamName};
+        if(!worstSeason||pct<worstSeason.pct||(pct===worstSeason.pct&&uvuL>worstSeason.l))worstSeason={name,w:uvuW,l:uvuL,pct,year:s.year,teamName:s.teamName};
+        // most losses single season (all games)
+        const totL=(s.weekLog||[]).filter(w=>w.result==="loss").length;
+        if(!mostSeasonLosses||totL>mostSeasonLosses.l)mostSeasonLosses={name,l:totL,year:s.year,teamName:s.teamName};
+      });
+    });
+
+    // Most wins vs single opponent (h2h)
+    let mostH2HWins=null;
+    e.forEach(([name,prof])=>{
+      Object.entries(prof.h2hMerged).forEach(([opp,rec])=>{
+        if(!mostH2HWins||rec.wins>mostH2HWins.wins)mostH2HWins={name,opp,wins:rec.wins};
+      });
+    });
+
+    // Longest H2H streak against single opponent
+    let longestH2HStreak=null;
+    e.forEach(([name,prof])=>{
+      const logs=getUserLogs(name);
+      const opponents=[...new Set(logs.filter(isUvU).map(w=>w.opponent))];
+      opponents.forEach(opp=>{
+        const oppLogs=logs.filter(w=>w.opponent===opp);
+        let cur=0,max=0;
+        oppLogs.forEach(w=>{if(w.result==="win"){cur++;if(cur>max)max=cur;}else cur=0;});
+        if(max>0&&(!longestH2HStreak||max>longestH2HStreak.len))longestH2HStreak={name,opp,len:max};
+      });
+    });
+
+    // Most conf championship appearances
+    let mostConfApp=null,mostNattyApp=null;
+    e.forEach(([name,prof])=>{
+      const confApps=prof.seasons.filter(s=>(filterYear==null||s.year===filterYear)&&(s.confChamp||s.confChampPts>0)).length;
+      const nattyApps=prof.seasons.filter(s=>(filterYear==null||s.year===filterYear)&&(s.nattyWin||(s.entry?.nattyLosses>0)||(s.playoffWins>=3))).length;
+      if(!mostConfApp||confApps>mostConfApp.n)mostConfApp={name,n:confApps};
+      if(!mostNattyApp||nattyApps>mostNattyApp.n)mostNattyApp={name,n:nattyApps};
+    });
+
+    // Per-user streak info
+    const streakAllTime={},streakSeason={};
+    e.forEach(([name])=>{streakAllTime[name]=getWinStreakAllTime(name);streakSeason[name]=getWinStreakSeason(name);});
+    const bestStreakAllTime=[...e].map(([name])=>({name,data:streakAllTime[name]})).filter(x=>x.data).sort((a,b)=>b.data.len-a.data.len)[0];
+    const bestStreakSeason=[...e].map(([name])=>({name,data:streakSeason[name]})).filter(x=>x.data).sort((a,b)=>b.data.len-a.data.len)[0];
+
     return{
       mostWins:[...e].sort((a,b)=>b[1].totalWins-a[1].totalWins)[0],
+      mostLosses:[...e].sort((a,b)=>b[1].totalLosses-a[1].totalLosses)[0],
       mostPts:[...e].sort((a,b)=>b[1].totalPts-a[1].totalPts)[0],
       mostChamps:[...e].sort((a,b)=>b[1].championships-a[1].championships)[0],
       bestWinPct:[...e].filter(([,p])=>p.totalWins+p.totalLosses>0).sort((a,b)=>parseFloat(b[1].winPct)-parseFloat(a[1].winPct))[0],
-      longestWS:[...e].sort((a,b)=>b[1].longestWin-a[1].longestWin)[0],
+      mostBowlWins:[...e].sort((a,b)=>b[1].bowlWins-a[1].bowlWins)[0],
+      mostPlayoffApp:[...e].sort((a,b)=>(b[1].careerPlayoffWins+b[1].careerPlayoffLosses)-(a[1].careerPlayoffWins+a[1].careerPlayoffLosses))[0],
       mostRW:[...e].sort((a,b)=>b[1].rankedWins-a[1].rankedWins)[0],
+      mostConfApp,mostNattyApp,
+      bestSeason,worstSeason,mostSeasonLosses,
+      mostH2HWins,longestH2HStreak,
+      bestStreakAllTime,bestStreakSeason,
     };
   }
 
-  const lr=getLR();
+  const [lrYear,setLrYear]=useState(null);
+  const lr=getLR(lrYear);
   const user=sel?allUsers.find(u=>(u.userId||u.userName)===sel):null;
   const profile=user?getProfile(user.userId||null,user.userName):null;
   const SB=({label,val,color="#111",sub})=><div style={{background:"#f7f7f7",borderRadius:2,padding:"12px 8px",textAlign:"center",border:"1px solid #eee"}}><div style={{fontSize:19,fontWeight:900,color}}>{val}</div>{sub&&<div style={{fontSize:10,color:"#999"}}>{sub}</div>}<div style={{fontSize:9,color:"#aaa",textTransform:"uppercase",letterSpacing:1,marginTop:3,fontWeight:700}}>{label}</div></div>;
-  const RR=({label,holder,val})=><div style={{display:"flex",justifyContent:"space-between",alignItems:"center",padding:"8px 0",borderBottom:"1px solid #f0f0f0"}}><span style={{fontSize:12,color:"#555"}}>{label}</span><div style={{textAlign:"right"}}><div style={{fontSize:13,color:"#111",fontWeight:700}}>{holder}</div><div style={{fontSize:11,color:RED,fontWeight:700}}>{val}</div></div></div>;
+  const RR=({label,holder,val,sub})=><div style={{display:"flex",justifyContent:"space-between",alignItems:"center",padding:"9px 0",borderBottom:"1px solid #f0f0f0"}}><span style={{fontSize:12,color:"#555",flex:1}}>{label}</span><div style={{textAlign:"right",flexShrink:0}}><div style={{fontSize:13,color:"#111",fontWeight:700}}>{holder}</div><div style={{fontSize:11,color:RED,fontWeight:700}}>{val}</div>{sub&&<div style={{fontSize:10,color:"#aaa"}}>{sub}</div>}</div></div>;
 
   return (
     <div style={{display:"flex",flexDirection:"column",gap:14}}>
-      {Object.keys(lr).length>0&&<Card><CardHead>🏆 League Records</CardHead><div style={{padding:"4px 14px 10px",display:"grid",gridTemplateColumns:isMobile?"1fr":"1fr 1fr",gap:isMobile?"0":"0 24px"}}>{lr.mostWins&&<RR label="Most Wins" holder={lr.mostWins[0]} val={lr.mostWins[1].totalWins+"W"}/>}{lr.mostPts&&<RR label="Most Pts" holder={lr.mostPts[0]} val={String(lr.mostPts[1].totalPts)}/>}{lr.mostChamps&&<RR label="Most Titles" holder={lr.mostChamps[0]} val={lr.mostChamps[1].championships+"×"}/>}{lr.bestWinPct&&<RR label="Best Win%" holder={lr.bestWinPct[0]} val={lr.bestWinPct[1].winPct+"%"}/>}{lr.longestWS&&<RR label="Win Streak" holder={lr.longestWS[0]} val={lr.longestWS[1].longestWin+"G"}/>}{lr.mostRW&&<RR label="Ranked Wins" holder={lr.mostRW[0]} val={lr.mostRW[1].rankedWins+"W"}/>}</div></Card>}
+      {Object.keys(lr).length>0&&<Card style={{overflow:"hidden"}}><CardHead bg="#111">📖 League Record Book</CardHead>
+        <div style={{padding:"10px 14px 4px",display:"flex",alignItems:"center",gap:8,flexWrap:"wrap",borderBottom:"1px solid #f0f0f0"}}>
+          <span style={{fontSize:11,fontWeight:700,color:"#555",textTransform:"uppercase",letterSpacing:0.5}}>Filter:</span>
+          {[null,...[...new Set(history.map(s=>s.year))].sort((a,b)=>b-a)].map(y=>(
+            <button key={y??'all'} onClick={()=>setLrYear(y)} style={{padding:"4px 10px",borderRadius:2,border:"1px solid",borderColor:lrYear===y?RED:"#ddd",background:lrYear===y?RED:"#fff",color:lrYear===y?"#fff":"#555",cursor:"pointer",fontSize:11,fontFamily:ff,fontWeight:700}}>{y==null?"All Time":y}</button>
+          ))}
+        </div>
+        <div style={{padding:"4px 14px 6px",fontSize:10,color:"#aaa",fontStyle:"italic",borderBottom:"1px solid #f5f5f5"}}>Rivalry and game records are user vs user matchups only. Win streaks count all games.</div>
+        <div style={{padding:"4px 14px 10px",display:"grid",gridTemplateColumns:isMobile?"1fr":"1fr 1fr",gap:isMobile?"0":"0 24px"}}>
+          <div style={{gridColumn:"1/-1",padding:"6px 0 2px",fontSize:10,fontWeight:800,color:"#aaa",textTransform:"uppercase",letterSpacing:1,borderBottom:"1px solid #f0f0f0",marginBottom:2}}>CAREER RECORDS</div>
+          {lr.mostWins&&<RR label="Most Wins" holder={lr.mostWins[0]} val={lr.mostWins[1].totalWins+"W"}/>}
+          {lr.mostLosses&&<RR label="Most Losses" holder={lr.mostLosses[0]} val={lr.mostLosses[1].totalLosses+"L"}/>}
+          {lr.mostPts&&<RR label="Most Pts" holder={lr.mostPts[0]} val={String(lr.mostPts[1].totalPts)}/>}
+          {lr.mostChamps&&<RR label="Most Titles" holder={lr.mostChamps[0]} val={lr.mostChamps[1].championships+"×"}/>}
+          {lr.bestWinPct&&<RR label="Best Win%" holder={lr.bestWinPct[0]} val={lr.bestWinPct[1].winPct+"%"}/>}
+          {lr.mostRW&&<RR label="Most Ranked Wins" holder={lr.mostRW[0]} val={lr.mostRW[1].rankedWins+"W"}/>}
+          {lr.mostBowlWins&&lr.mostBowlWins[1].bowlWins>0&&<RR label="Most Bowl Wins" holder={lr.mostBowlWins[0]} val={lr.mostBowlWins[1].bowlWins+"W"}/>}
+          {lr.mostPlayoffApp&&(lr.mostPlayoffApp[1].careerPlayoffWins+lr.mostPlayoffApp[1].careerPlayoffLosses)>0&&<RR label="Most Playoff Apps" holder={lr.mostPlayoffApp[0]} val={(lr.mostPlayoffApp[1].careerPlayoffWins+lr.mostPlayoffApp[1].careerPlayoffLosses)+"×"}/>}
+          {lr.mostConfApp?.n>0&&<RR label="Most Conf Champ Apps" holder={lr.mostConfApp.name} val={lr.mostConfApp.n+"×"}/>}
+          {lr.mostNattyApp?.n>0&&<RR label="Most Natty Apps" holder={lr.mostNattyApp.name} val={lr.mostNattyApp.n+"×"}/>}
+
+          <div style={{gridColumn:"1/-1",padding:"10px 0 2px",fontSize:10,fontWeight:800,color:"#aaa",textTransform:"uppercase",letterSpacing:1,borderBottom:"1px solid #f0f0f0",marginBottom:2}}>SINGLE SEASON RECORDS</div>
+          {lr.bestSeason&&<RR label="Best Season (UvU)" holder={lr.bestSeason.name} val={`${lr.bestSeason.w}W-${lr.bestSeason.l}L`} sub={`${lr.bestSeason.teamName} · ${lr.bestSeason.year}`}/>}
+          {lr.worstSeason&&<RR label="Worst Season (UvU)" holder={lr.worstSeason.name} val={`${lr.worstSeason.w}W-${lr.worstSeason.l}L`} sub={`${lr.worstSeason.teamName} · ${lr.worstSeason.year}`}/>}
+          {lr.mostSeasonLosses&&lr.mostSeasonLosses.l>0&&<RR label="Most Losses in a Season" holder={lr.mostSeasonLosses.name} val={lr.mostSeasonLosses.l+"L"} sub={`${lr.mostSeasonLosses.teamName} · ${lr.mostSeasonLosses.year}`}/>}
+
+          <div style={{gridColumn:"1/-1",padding:"10px 0 2px",fontSize:10,fontWeight:800,color:"#aaa",textTransform:"uppercase",letterSpacing:1,borderBottom:"1px solid #f0f0f0",marginBottom:2}}>WIN STREAKS</div>
+          {lr.bestStreakAllTime&&<RR label="Longest Win Streak All Time" holder={lr.bestStreakAllTime.name} val={lr.bestStreakAllTime.data.len+"G"} sub={lr.bestStreakAllTime.data.years?`${lr.bestStreakAllTime.data.teamName} · ${lr.bestStreakAllTime.data.years}`:""}/>}
+          {lr.bestStreakSeason&&<RR label="Longest Win Streak (Season)" holder={lr.bestStreakSeason.name} val={lr.bestStreakSeason.data.len+"G"} sub={`${lr.bestStreakSeason.data.teamName} · ${lr.bestStreakSeason.data.year}`}/>}
+
+          <div style={{gridColumn:"1/-1",padding:"10px 0 2px",fontSize:10,fontWeight:800,color:"#aaa",textTransform:"uppercase",letterSpacing:1,borderBottom:"1px solid #f0f0f0",marginBottom:2}}>RIVALRY RECORDS (UvU)</div>
+          {lr.mostH2HWins&&lr.mostH2HWins.wins>0&&<RR label="Most Wins vs Single Opponent" holder={lr.mostH2HWins.name} val={lr.mostH2HWins.wins+"W"} sub={`vs ${lr.mostH2HWins.opp}`}/>}
+          {lr.longestH2HStreak&&lr.longestH2HStreak.len>0&&<RR label="Longest Streak vs Opponent" holder={lr.longestH2HStreak.name} val={lr.longestH2HStreak.len+"W"} sub={`vs ${lr.longestH2HStreak.opp}`}/>}
+        </div>
+      </Card>}
       <SL>Select User</SL>
       <div style={{display:"grid",gridTemplateColumns:isMobile?"1fr 1fr":"repeat(auto-fill,minmax(160px,1fr))",gap:8}}>
         {allUsers.map(u=>{const key=u.userId||u.userName;const curEntry=currentEntries.find(e=>u.userId?e.userId===u.userId:e.userName===u.userName);return(<button key={key} onClick={()=>{setSel(sel===key?null:key);setPTab("overview");}} style={{padding:"10px 14px",borderRadius:2,border:"1px solid",borderColor:sel===key?RED:"#ddd",background:sel===key?RED:"#fff",color:sel===key?"#fff":"#333",cursor:"pointer",fontFamily:ff,textAlign:"left"}}><div style={{fontWeight:800,fontSize:13}}>{curEntry?.userName||u.userName}</div><div style={{fontSize:10,color:sel===key?"rgba(255,255,255,0.7)":"#999",marginTop:2,textTransform:"uppercase"}}>{curEntry?.teamName||u.teamName}</div></button>);})}
@@ -1246,10 +1380,40 @@ function ProfileTab({history,setupRows,currentEntries,season,year,permanentUsers
             {profile.seasons.length===0&&!profile.cur&&<div style={{color:"#888",fontSize:13,padding:"12px 0"}}>No seasons recorded yet.</div>}
           </div>}
 
-          {pTab==="streaks"&&<div style={{display:"flex",flexDirection:"column",gap:16}}>
-            <div><SL>Streak Records</SL><div style={{display:"grid",gridTemplateColumns:"repeat(auto-fill,minmax(120px,1fr))",gap:8}}><SB label="Longest Win Streak" val={profile.longestWin+"W"} color="#007a00"/><SB label="Longest Loss Streak" val={profile.longestLoss+"L"} color={RED}/><SB label="Current Streak" val={profile.curStreak>0?`${profile.curStreak}${profile.curStreakType==="win"?"W":"L"}`:"—"} color={profile.curStreakType==="win"?"#007a00":RED}/><SB label="Ranked Wins" val={profile.rankedWins} color="#cc7700"/></div></div>
-            {profile.cur?.weekLog?.length>0&&<div><SL>Current Season Game Log</SL><table style={{width:"100%",borderCollapse:"collapse",fontSize:13}}><thead><tr style={{borderBottom:`2px solid ${RED}`,background:"#f7f7f7"}}>{["Week","Result","Opp Rank","Pts"].map(h=><th key={h} style={{padding:"7px 8px",textAlign:"center",color:"#555",fontSize:9,letterSpacing:1,textTransform:"uppercase",fontWeight:700}}>{h}</th>)}</tr></thead><tbody>{profile.cur.weekLog.map((w,i)=><tr key={i} style={{borderBottom:"1px solid #eee",background:w.result==="win"?"#f0f8f0":"#fff8f8"}}><td style={{padding:"7px 8px",textAlign:"center",color:"#888"}}>Wk {w.week}</td><td style={{padding:"7px 8px",textAlign:"center",fontWeight:800,color:w.result==="win"?"#007a00":RED,textTransform:"uppercase"}}>{w.result}</td><td style={{padding:"7px 8px",textAlign:"center",color:w.ranked10?RED:w.ranked25?"#cc7700":"#ccc"}}>{w.ranked10?"Top 10":w.ranked25?"Top 25":"Unranked"}</td><td style={{padding:"7px 8px",textAlign:"center",color:RED,fontWeight:700}}>+{w.pts}</td></tr>)}</tbody></table></div>}
-          </div>}
+          {pTab==="streaks"&&(()=>{
+            // Compute per-profile streak details
+            const allLogs=[];
+            profile.seasons.filter(s=>!s.isHistorical).forEach(s=>(s.weekLog||[]).forEach(w=>allLogs.push({...w,year:s.year,seasonNum:s.seasonNum,teamName:s.teamName})));
+            if(profile.cur)(profile.cur.weekLog||[]).forEach(w=>allLogs.push({...w,year,seasonNum:season,teamName:profile.cur.teamName}));
+            // Find longest win streak with span
+            let maxW=0,curW=0,startI=0,bestWS=0,bestWE=0;
+            allLogs.forEach((w,i)=>{if(w.result==="win"){if(curW===0)startI=i;curW++;if(curW>maxW){maxW=curW;bestWS=startI;bestWE=i;}}else curW=0;});
+            const wsSpan=maxW>0?[...new Set(allLogs.slice(bestWS,bestWE+1).map(w=>w.year))].join("–"):"";
+            const wsTeam=maxW>0?(allLogs[bestWS]?.teamName||""):"";
+            // Longest loss streak
+            let maxL=0,curL=0;
+            allLogs.forEach(w=>{if(w.result==="loss"){curL++;if(curL>maxL)maxL=curL;}else curL=0;});
+            // Current active streak
+            let activeCnt=0,activeType="";
+            for(let i=allLogs.length-1;i>=0;i--){const r=allLogs[i].result;if(!activeType){activeType=r;activeCnt=1;}else if(r===activeType)activeCnt++;else break;}
+            // Best single-season win streak
+            let bestSSnLen=0,bestSSnYear=null,bestSSnTeam="";
+            const ssnSrc=[...profile.seasons.filter(s=>!s.isHistorical)];
+            if(profile.cur)ssnSrc.push({...profile.cur,year,seasonNum:season});
+            ssnSrc.forEach(s=>{let c=0,m=0;(s.weekLog||[]).forEach(w=>{if(w.result==="win"){c++;if(c>m)m=c;}else c=0;});if(m>bestSSnLen){bestSSnLen=m;bestSSnYear=s.year;bestSSnTeam=s.teamName;}});
+            return(
+            <div style={{display:"flex",flexDirection:"column",gap:16}}>
+              <div><SL>Streak Records</SL>
+                <div style={{display:"grid",gridTemplateColumns:"repeat(auto-fill,minmax(140px,1fr))",gap:8}}>
+                  <SB label="Longest Win Streak" val={maxW>0?maxW+"W":"—"} color="#007a00" sub={maxW>0?`${wsTeam} · ${wsSpan}`:""}/>
+                  <SB label="Longest Loss Streak" val={maxL>0?maxL+"L":"—"} color={RED}/>
+                  <SB label="Current Streak" val={activeCnt>0?`${activeCnt}${activeType==="win"?"W":"L"}`:"—"} color={activeType==="win"?"#007a00":RED}/>
+                  <SB label="Best Season Streak" val={bestSSnLen>0?bestSSnLen+"W":"—"} color="#007a00" sub={bestSSnLen>0?`${bestSSnTeam} · ${bestSSnYear}`:""}/>
+                </div>
+              </div>
+              {profile.cur?.weekLog?.length>0&&<div><SL>Current Season Game Log</SL><table style={{width:"100%",borderCollapse:"collapse",fontSize:13}}><thead><tr style={{borderBottom:`2px solid ${RED}`,background:"#f7f7f7"}}>{["Week","Result","Opponent","Opp Rank","Pts"].map(h=><th key={h} style={{padding:"7px 8px",textAlign:"center",color:"#555",fontSize:9,letterSpacing:1,textTransform:"uppercase",fontWeight:700}}>{h}</th>)}</tr></thead><tbody>{profile.cur.weekLog.map((w,i)=><tr key={i} style={{borderBottom:"1px solid #eee",background:w.result==="win"?"#f0f8f0":"#fff8f8"}}><td style={{padding:"7px 8px",textAlign:"center",color:"#888"}}>Wk {w.week}</td><td style={{padding:"7px 8px",textAlign:"center",fontWeight:800,color:w.result==="win"?"#007a00":RED,textTransform:"uppercase"}}>{w.result}</td><td style={{padding:"7px 8px",textAlign:"center",color:"#555",fontSize:11}}>{w.opponent||"—"}</td><td style={{padding:"7px 8px",textAlign:"center",color:w.ranked10?RED:w.ranked25?"#cc7700":"#ccc"}}>{w.ranked10?"Top 10":w.ranked25?"Top 25":"Unranked"}</td><td style={{padding:"7px 8px",textAlign:"center",color:RED,fontWeight:700}}>+{w.pts}</td></tr>)}</tbody></table></div>}
+            </div>);
+          })()}
 
           {pTab==="points"&&<div style={{display:"flex",flexDirection:"column",gap:14}}><SL>All-Time Points Breakdown</SL>{[["Game Wins",profile.ptBreakdown.game,"#007a00"],["Ranked Bonuses",profile.ptBreakdown.bonus,"#cc7700"],["Conf Standings",profile.ptBreakdown.conf,"#111"],["Conf Championship",profile.ptBreakdown.cc,"#111"],["Bowl & Playoff",profile.ptBreakdown.bowl,"#0066cc"],["Recruiting",profile.ptBreakdown.rec,"#111"],["Awards",profile.ptBreakdown.awards,"#cc7700"]].map(([label,val,color])=>{const pct=profile.totalPts>0?Math.round((val/profile.totalPts)*100):0;return(<div key={label} style={{padding:"8px 0",borderBottom:"1px solid #f0f0f0"}}><div style={{display:"flex",justifyContent:"space-between",marginBottom:4}}><span style={{fontSize:13,color:"#333"}}>{label}</span><span style={{fontSize:13,fontWeight:800,color}}>{val} <span style={{fontSize:11,color:"#aaa",fontWeight:400}}>({pct}%)</span></span></div><div style={{background:"#eee",borderRadius:2,height:6,overflow:"hidden"}}><div style={{width:`${pct}%`,height:"100%",background:color,borderRadius:2}}/></div></div>);})}
           <div style={{display:"flex",justifyContent:"space-between",padding:"10px 0"}}><span style={{fontSize:14,fontWeight:800}}>TOTAL</span><span style={{fontSize:16,fontWeight:900,color:RED}}>{profile.totalPts}</span></div></div>}
