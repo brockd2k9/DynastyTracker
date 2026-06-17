@@ -90,6 +90,20 @@ function calcTotal(t) {
   return (t.gamePts||0)+(t.rankedBonusPts||0)+(t.confStandPts||0)+(t.confChampPts||0)+(t.bowlPts||0)+(t.recruitingPts||0)+(t.prestigePts||0)+(t.heismanPts||0);
 }
 
+// Numeric input that allows free backspace/delete without React fighting the cursor
+function NumField({value, onChange, width=52, style={}, fontSize=12, bold=true}) {
+  const [str, setStr] = useState(String(value??0));
+  const focused = useRef(false);
+  useEffect(()=>{if(!focused.current)setStr(String(value??0));},[value]);
+  const ff2="'Helvetica Neue',Arial,sans-serif";
+  return <input type="text" inputMode="numeric" pattern="[0-9]*"
+    value={str}
+    onFocus={e=>{focused.current=true;setStr(String(value??0));e.target.select();}}
+    onChange={e=>{const v=e.target.value;if(/^\d*$/.test(v)){setStr(v);onChange(v===''?0:parseInt(v,10));}}}
+    onBlur={e=>{focused.current=false;const n=parseInt(e.target.value,10);const safe=isNaN(n)?0:n;setStr(String(safe));onChange(safe);}}
+    style={{width,padding:"3px 5px",border:"1px solid #ddd",borderRadius:2,fontSize,fontWeight:bold?700:400,textAlign:"center",fontFamily:ff2,...style}}/>;
+}
+
 function cleanArticle(text) {
   return text
     .replace(/#{1,6}\s*/g, "")        // remove # headings
@@ -574,8 +588,7 @@ function HistoryTab({history, setHistory, saveToDb, commUnlocked, entries, setEn
   // Sort history by year descending
   const sortedHistory=[...history].sort((a,b)=>(b.year||0)-(a.year||0));
 
-  const numI=(val,onChange,w=52)=><input type="text" inputMode="numeric" pattern="[0-9]*" value={val??""} onChange={e=>{const v=e.target.value;if(v===""||/^\d+$/.test(v))onChange(v===""?"":Number(v));}} onBlur={e=>{if(e.target.value===""||e.target.value==="-")onChange(0);}}
-    style={{width:w,padding:"3px 5px",border:"1px solid #ddd",borderRadius:2,fontSize:12,fontWeight:700,textAlign:"center",fontFamily:ff}}/>;
+  const numI=(val,onChange,w=52)=><NumField value={val} onChange={onChange} width={w}/>;
 
   return (
     <div style={{display:"flex",flexDirection:"column",gap:14}}>
@@ -721,9 +734,7 @@ function HistoryTab({history, setHistory, saveToDb, commUnlocked, entries, setEn
           const srt=[...(active.length?active:displayData.finalStandings)].sort((a,b)=>calcTotal(b)-calcTotal(a));
           const top=calcTotal(srt[0]);
 
-          const numInp=(val,onChange,w=52)=><input type="text" inputMode="numeric" pattern="[0-9]*" min="0" value={val??""} onChange={e=>{const v=e.target.value;if(v===""||/^\d+$/.test(v))onChange(v===""?"":Number(v));}}
-            onBlur={e=>{if(e.target.value===""||e.target.value==="-")onChange(0);}}
-            style={{width:w,padding:"3px 5px",border:"1px solid #ddd",borderRadius:2,fontSize:12,fontWeight:700,textAlign:"center",fontFamily:ff}}/>;
+          const numInp=(val,onChange,w=52)=><NumField value={val} onChange={onChange} width={w}/>;
 
           // Multi-select toggle buttons for awards
           const MultiToggle=({field,label})=>{
@@ -1717,9 +1728,9 @@ function BulkResultsUploader({entries,week,teamNames,onConfirm}) {
                       {teamNames.map(t=><option key={t} value={t}>{t}</option>)}
                     </select>
                     <span style={{fontSize:10,fontWeight:800,color:hWon?"#007a00":RED,flexShrink:0}}>{hWon?"WIN":"LOSS"}</span>
-                    <input type="text" inputMode="numeric" pattern="[0-9]*" value={row.homeScore} onChange={e=>{const v=e.target.value;if(v===""||/^\d+$/.test(v))updateRow(row.id,"homeScore",v===""?"":Number(v));}} onBlur={e=>{if(e.target.value==="")updateRow(row.id,"homeScore",0);}} style={{width:42,border:"1px solid #ddd",borderRadius:2,padding:"4px",fontSize:14,fontWeight:900,textAlign:"center",color:hWon?"#007a00":RED,background:"transparent"}}/>
+                    <NumField value={row.homeScore} onChange={v=>updateRow(row.id,"homeScore",v)} width={42} fontSize={14} style={{padding:"4px",color:hWon?"#007a00":RED,background:"transparent",border:"1px solid #ddd"}}/>
                     <span style={{color:"#bbb",fontWeight:700}}>—</span>
-                    <input type="text" inputMode="numeric" pattern="[0-9]*" value={row.awayScore} onChange={e=>{const v=e.target.value;if(v===""||/^\d+$/.test(v))updateRow(row.id,"awayScore",v===""?"":Number(v));}} onBlur={e=>{if(e.target.value==="")updateRow(row.id,"awayScore",0);}} style={{width:42,border:"1px solid #ddd",borderRadius:2,padding:"4px",fontSize:14,fontWeight:900,textAlign:"center",color:!hWon?"#007a00":RED,background:"transparent"}}/>
+                    <NumField value={row.awayScore} onChange={v=>updateRow(row.id,"awayScore",v)} width={42} fontSize={14} style={{padding:"4px",color:!hWon?"#007a00":RED,background:"transparent",border:"1px solid #ddd"}}/>
                     <span style={{fontSize:10,fontWeight:800,color:!hWon?"#007a00":RED,flexShrink:0}}>{!hWon?"WIN":"LOSS"}</span>
                   </div>
                   <div style={{display:"flex",alignItems:"center",gap:8}}>
@@ -1765,11 +1776,11 @@ function BulkResultsUploader({entries,week,teamNames,onConfirm}) {
                       </td>
                       <td style={{padding:"4px 2px",textAlign:"center",fontSize:9,color:hWon?"#007a00":RED,fontWeight:800,borderRight:"1px solid #eee",whiteSpace:"nowrap"}}>{hWon?"WIN":"LOSS"}</td>
                       <td style={{padding:"7px 6px",borderRight:"1px solid #eee"}}>
-                        <input type="text" inputMode="numeric" pattern="[0-9]*" value={row.homeScore} onChange={e=>{const v=e.target.value;if(v===""||/^\d+$/.test(v))updateRow(row.id,"homeScore",v===""?"":Number(v));}} onBlur={e=>{if(e.target.value==="")updateRow(row.id,"homeScore",0);}} style={{width:44,border:"1px solid #ddd",borderRadius:2,padding:"3px 5px",fontFamily:ff,fontSize:14,fontWeight:900,textAlign:"center",color:hWon?"#007a00":RED,background:"transparent"}}/>
+                        <NumField value={row.homeScore} onChange={v=>updateRow(row.id,"homeScore",v)} width={44} fontSize={14} style={{padding:"3px 5px",color:hWon?"#007a00":RED,background:"transparent",border:"1px solid #ddd"}}/>
                       </td>
                       <td style={{padding:"4px",textAlign:"center",color:"#bbb",fontWeight:700,borderRight:"1px solid #eee"}}>—</td>
                       <td style={{padding:"7px 6px",borderRight:"1px solid #eee"}}>
-                        <input type="text" inputMode="numeric" pattern="[0-9]*" value={row.awayScore} onChange={e=>{const v=e.target.value;if(v===""||/^\d+$/.test(v))updateRow(row.id,"awayScore",v===""?"":Number(v));}} onBlur={e=>{if(e.target.value==="")updateRow(row.id,"awayScore",0);}} style={{width:44,border:"1px solid #ddd",borderRadius:2,padding:"3px 5px",fontFamily:ff,fontSize:14,fontWeight:900,textAlign:"center",color:!hWon?"#007a00":RED,background:"transparent"}}/>
+                        <NumField value={row.awayScore} onChange={v=>updateRow(row.id,"awayScore",v)} width={44} fontSize={14} style={{padding:"3px 5px",color:!hWon?"#007a00":RED,background:"transparent",border:"1px solid #ddd"}}/>
                       </td>
                       <td style={{padding:"4px 2px",textAlign:"center",fontSize:9,color:!hWon?"#007a00":RED,fontWeight:800,borderRight:"1px solid #eee",whiteSpace:"nowrap"}}>{!hWon?"WIN":"LOSS"}</td>
                       <td style={{padding:"7px 6px",borderRight:"1px solid #eee"}}>
@@ -1882,8 +1893,7 @@ function HistoricalImportPanel({setupRows, history, onImport}) {
   }
 
   const inp = (val, onChange, w=70, extra={}) => (
-    <input type="text" inputMode="numeric" pattern="[0-9]*" value={val??""} onChange={e=>{const v=e.target.value;if(v===""||/^\d+$/.test(v))onChange(v===""?"":Number(v));}} onBlur={e=>{if(e.target.value===""||e.target.value==="-")onChange(0);}}
-      style={{width:w,padding:"5px 8px",border:"1px solid #ccc",borderRadius:2,fontSize:14,fontWeight:700,textAlign:"center",fontFamily:"'Helvetica Neue',Arial,sans-serif",...extra}}/>
+    <NumField value={val} onChange={onChange} width={w} fontSize={14} style={{padding:"5px 8px",border:"1px solid #ccc",...extra}}/>
   );
   const TeamSel = ({value, onChange, placeholder="-- None --"}) => (
     <select value={value} onChange={e=>onChange(e.target.value)}
