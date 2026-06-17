@@ -1222,15 +1222,34 @@ function ProfileTab({history,setupRows,currentEntries,season,year,permanentUsers
     const bestStreakAllTime=[...e].map(([name])=>({name,data:streakAllTime[name]})).filter(x=>x.data).sort((a,b)=>b.data.len-a.data.len)[0];
     const bestStreakSeason=[...e].map(([name])=>({name,data:streakSeason[name]})).filter(x=>x.data).sort((a,b)=>b.data.len-a.data.len)[0];
 
+    // When filtering by year, compute single-season stats instead of career totals
+    const getYearStats=(prof)=>{
+      if(!filterYear) return prof;
+      const s=prof.seasons.find(s=>s.year===filterYear);
+      const w=(s?.weekLog||[]);
+      return{
+        totalWins:s?.wins||0,
+        totalLosses:s?.losses||0,
+        totalPts:s?.total||0,
+        championships:s?.champion?1:0,
+        winPct:(s&&(s.wins+s.losses)>0)?((s.wins/(s.wins+s.losses))*100).toFixed(1):"0",
+        bowlWins:s?(s.bowlWins!=null?s.bowlWins:(s.bowlResult==="win"?1:0)):0,
+        careerPlayoffWins:s?.playoffWins||0,
+        careerPlayoffLosses:s?.playoffLosses||0,
+        rankedWins:w.filter(wk=>wk.result==="win"&&(wk.ranked25||wk.ranked10)).length,
+      };
+    };
+    const eys=e.map(([name,prof])=>[name,getYearStats(prof)]);
+
     return{
-      mostWins:[...e].sort((a,b)=>b[1].totalWins-a[1].totalWins)[0],
-      mostLosses:[...e].sort((a,b)=>b[1].totalLosses-a[1].totalLosses)[0],
-      mostPts:[...e].sort((a,b)=>b[1].totalPts-a[1].totalPts)[0],
-      mostChamps:[...e].sort((a,b)=>b[1].championships-a[1].championships)[0],
-      bestWinPct:[...e].filter(([,p])=>p.totalWins+p.totalLosses>0).sort((a,b)=>parseFloat(b[1].winPct)-parseFloat(a[1].winPct))[0],
-      mostBowlWins:[...e].sort((a,b)=>b[1].bowlWins-a[1].bowlWins)[0],
-      mostPlayoffApp:[...e].sort((a,b)=>(b[1].careerPlayoffWins+b[1].careerPlayoffLosses)-(a[1].careerPlayoffWins+a[1].careerPlayoffLosses))[0],
-      mostRW:[...e].sort((a,b)=>b[1].rankedWins-a[1].rankedWins)[0],
+      mostWins:[...eys].sort((a,b)=>b[1].totalWins-a[1].totalWins)[0],
+      mostLosses:[...eys].sort((a,b)=>b[1].totalLosses-a[1].totalLosses)[0],
+      mostPts:[...eys].sort((a,b)=>b[1].totalPts-a[1].totalPts)[0],
+      mostChamps:[...eys].sort((a,b)=>b[1].championships-a[1].championships)[0],
+      bestWinPct:[...eys].filter(([,p])=>p.totalWins+p.totalLosses>0).sort((a,b)=>parseFloat(b[1].winPct)-parseFloat(a[1].winPct))[0],
+      mostBowlWins:[...eys].sort((a,b)=>b[1].bowlWins-a[1].bowlWins)[0],
+      mostPlayoffApp:[...eys].sort((a,b)=>(b[1].careerPlayoffWins+b[1].careerPlayoffLosses)-(a[1].careerPlayoffWins+a[1].careerPlayoffLosses))[0],
+      mostRW:[...eys].sort((a,b)=>b[1].rankedWins-a[1].rankedWins)[0],
       mostConfApp,mostNattyApp,
       bestSeason,worstSeason,mostSeasonLosses,
       mostH2HWins,longestH2HStreak,
