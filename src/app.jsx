@@ -1167,7 +1167,7 @@ function LeagueRecordBook({history,currentEntries,season,year,permanentUsers,set
   );
 }
 
-function ProfileTab({history,setupRows,currentEntries,season,year,permanentUsers,sel,setSel,pTab,setPTab}) {
+function ProfileTab({history,setupRows,currentEntries,season,year,permanentUsers,sel,setSel,pTab,setPTab,articles,setActiveArticle}) {
   const isMobile = useIsMobile();
   const [expandedSeasons,setExpandedSeasons] = useState({});
   // Use permanentUsers if available, otherwise fall back to setupRows
@@ -1237,7 +1237,7 @@ function ProfileTab({history,setupRows,currentEntries,season,year,permanentUsers
           );})()}
         </div>
         <div style={{display:"flex",borderBottom:"1px solid #eee",background:"#fff",overflowX:"auto"}}>
-          {["overview","seasons","h2h","streaks","points"].map(t=><button key={t} onClick={()=>setPTab(t)} style={{padding:isMobile?"10px 10px":"10px 14px",background:"transparent",border:"none",borderBottom:pTab===t?`3px solid ${RED}`:"3px solid transparent",color:pTab===t?"#111":"#888",cursor:"pointer",fontSize:isMobile?10:11,fontWeight:700,fontFamily:ff,textTransform:"uppercase",letterSpacing:0.5,whiteSpace:"nowrap"}}>{isMobile?(t==="overview"?"OVR":t==="seasons"?"SEASONS":t==="h2h"?"H2H":t==="streaks"?"STREAKS":"PTS"):(t==="h2h"?"H2H Records":t)}</button>)}
+          {["overview","seasons","h2h","streaks","points","news"].map(t=><button key={t} onClick={()=>setPTab(t)} style={{padding:isMobile?"10px 10px":"10px 14px",background:"transparent",border:"none",borderBottom:pTab===t?`3px solid ${RED}`:"3px solid transparent",color:pTab===t?"#111":"#888",cursor:"pointer",fontSize:isMobile?10:11,fontWeight:700,fontFamily:ff,textTransform:"uppercase",letterSpacing:0.5,whiteSpace:"nowrap"}}>{isMobile?(t==="overview"?"OVR":t==="seasons"?"SEASONS":t==="h2h"?"H2H":t==="streaks"?"STREAKS":t==="points"?"PTS":"NEWS"):(t==="h2h"?"H2H Records":t==="news"?"📰 News":t)}</button>)}
         </div>
         <div style={{padding:isMobile?12:18}}>
           {pTab==="overview"&&<div style={{display:"flex",flexDirection:"column",gap:16}}>
@@ -1375,6 +1375,31 @@ function ProfileTab({history,setupRows,currentEntries,season,year,permanentUsers
 
           {pTab==="points"&&<div style={{display:"flex",flexDirection:"column",gap:14}}><SL>All-Time Points Breakdown</SL>{[["Game Wins",profile.ptBreakdown.game,"#007a00"],["Ranked Bonuses",profile.ptBreakdown.bonus,"#cc7700"],["Conf Standings",profile.ptBreakdown.conf,"#111"],["Conf Championship",profile.ptBreakdown.cc,"#111"],["Bowl & Playoff",profile.ptBreakdown.bowl,"#0066cc"],["Recruiting",profile.ptBreakdown.rec,"#111"],["Awards",profile.ptBreakdown.awards,"#cc7700"]].map(([label,val,color])=>{const pct=profile.totalPts>0?Math.round((val/profile.totalPts)*100):0;return(<div key={label} style={{padding:"8px 0",borderBottom:"1px solid #f0f0f0"}}><div style={{display:"flex",justifyContent:"space-between",marginBottom:4}}><span style={{fontSize:13,color:"#333"}}>{label}</span><span style={{fontSize:13,fontWeight:800,color}}>{val} <span style={{fontSize:11,color:"#aaa",fontWeight:400}}>({pct}%)</span></span></div><div style={{background:"#eee",borderRadius:2,height:6,overflow:"hidden"}}><div style={{width:`${pct}%`,height:"100%",background:color,borderRadius:2}}/></div></div>);})}
           <div style={{display:"flex",justifyContent:"space-between",padding:"10px 0"}}><span style={{fontSize:14,fontWeight:800}}>TOTAL</span><span style={{fontSize:16,fontWeight:900,color:RED}}>{profile.totalPts}</span></div></div>}
+
+          {pTab==="news"&&(()=>{
+            const curEntry=currentEntries.find(e=>user.userId?e.userId===user.userId:e.userName===user.userName);
+            const names=[curEntry?.userName,curEntry?.teamName,user.userName].filter(Boolean);
+            const allSeasonNames=[...new Set([...names,...profile.seasons.map(s=>s.teamName).filter(Boolean)])];
+            const playerArticles=(articles||[]).filter(a=>allSeasonNames.some(n=>a.body?.includes(n)||a.headline?.includes(n)));
+            if(!playerArticles.length)return <div style={{color:"#888",fontSize:13,padding:"16px 0",textAlign:"center"}}>No articles mention {curEntry?.userName||user.userName} yet.</div>;
+            return(
+              <div style={{display:"flex",flexDirection:"column",gap:10}}>
+                <SL>{playerArticles.length} Article{playerArticles.length!==1?"s":""} Mentioning {curEntry?.userName||user.userName}</SL>
+                {playerArticles.map(a=>(
+                  <div key={a.id} onClick={()=>setActiveArticle&&setActiveArticle(a)} style={{border:"1px solid #eee",borderRadius:2,overflow:"hidden",cursor:"pointer"}} onMouseEnter={e=>e.currentTarget.style.background="#fafafa"} onMouseLeave={e=>e.currentTarget.style.background="#fff"}>
+                    <div style={{background:a.reporterColor||"#111",padding:"8px 12px",display:"flex",alignItems:"center",gap:8}}>
+                      <div style={{width:24,height:24,borderRadius:"50%",background:"rgba(255,255,255,0.2)",display:"flex",alignItems:"center",justifyContent:"center",fontSize:9,fontWeight:800,color:"#fff",flexShrink:0}}>{a.reporterAvatar||"DC"}</div>
+                      <div style={{fontSize:11,fontWeight:800,color:"#fff",flex:1,minWidth:0}}>{a.reporter||"Dynasty Central"}</div>
+                      <div style={{fontSize:10,color:"rgba(255,255,255,0.7)",flexShrink:0}}>S{a.season} Wk{a.week}</div>
+                    </div>
+                    <div style={{padding:"10px 12px"}}>
+                      <div style={{fontSize:13,fontWeight:800,color:"#111",lineHeight:1.3}}>{a.headline}</div>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            );
+          })()}
         </div>
       </Card>}
     </div>
@@ -3021,7 +3046,7 @@ export default function App() {
           </>)}
 
           {tab==="History"&&<HistoryTab history={history} setHistory={setHistory} saveToDb={saveToDb} commUnlocked={commUnlocked} yearRosters={setup?.yearRosters} permanentUsers={setup?.permanentUsers} currentEntries={entries} season={season} year={year} setupRows={setup?.rows||[]}/>}
-          {tab==="Profiles"&&<ProfileTab history={history} setupRows={setup?.rows||[]} currentEntries={entries} season={season} year={year} permanentUsers={setup?.permanentUsers} sel={profileSel} setSel={setProfileSel} pTab={profilePTab} setPTab={setProfilePTab}/>}
+          {tab==="Profiles"&&<ProfileTab history={history} setupRows={setup?.rows||[]} currentEntries={entries} season={season} year={year} permanentUsers={setup?.permanentUsers} sel={profileSel} setSel={setProfileSel} pTab={profilePTab} setPTab={setProfilePTab} articles={articles} setActiveArticle={setActiveArticle}/>}
           {tab==="Schedule"&&<ScheduleTab schedule={schedule} entries={activeEntries} week={week} season={season}/>}
           {tab==="Rules"&&<div style={{display:"grid",gridTemplateColumns:isMobile?"1fr":"repeat(auto-fill,minmax(250px,1fr))",gap:10}}>
             {[["🏈 Regular Season",[["Win","15 pts"],["Win vs Top 25","+5 bonus"],["Win vs Top 10","+10 bonus"],["Loss","0 pts"]]],["📊 Conference Standings",[["1st","50"],["2nd","43"],["3rd","36"],["4th","30"],["5th","24"],["6th","18"],["7th","14"],["8th","10"],["9th","7"],["10th","5"],["11th","3"],["12th","1"]]],["🏆 Conference Championship",[["Make the Game","10 pts"],["Win the Game","15 pts"]]],["🥣 Bowl & Playoff",[["Make a Bowl","5 pts"],["Win a Bowl","+10 pts"],["Make CFP","15 pts"],["Win National Championship","+25 pts"]]],["🎓 Recruiting (Top 5 Users)",[["#1","15 pts"],["#2","10 pts"],["#3","7 pts"],["#4","5 pts"],["#5","3 pts"]]],["🏅 Dynasty Top 5",[["#1 in Dynasty","15 pts"],["#2 in Dynasty","10 pts"],["#3 in Dynasty","7 pts"],["#4 in Dynasty","5 pts"],["#5 in Dynasty","3 pts"]]],["⭐ Prestige & Awards",[["Gain a Prestige Star","10 pts"],["Reach Max Prestige","10 pts"],["Heisman Winner","15 pts"]]]].map(([title,rows])=><Card key={title} style={{overflow:"hidden"}}><CardHead bg={RED}>{title}</CardHead><table style={{width:"100%",borderCollapse:"collapse"}}><tbody>{rows.map(([l,p])=><tr key={l} style={{borderBottom:"1px solid #f0f0f0"}}><td style={{padding:"8px 12px",color:"#333",fontSize:13}}>{l}</td><td style={{padding:"8px 12px",textAlign:"right",color:RED,fontWeight:800,fontSize:13}}>{p}</td></tr>)}</tbody></table></Card>)}
