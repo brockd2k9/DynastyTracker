@@ -721,7 +721,8 @@ function HistoryTab({history, setHistory, saveToDb, commUnlocked, entries, setEn
           const srt=[...(active.length?active:displayData.finalStandings)].sort((a,b)=>calcTotal(b)-calcTotal(a));
           const top=calcTotal(srt[0]);
 
-          const numInp=(val,onChange,w=52)=><input type="number" min="0" value={val??""} onChange={e=>onChange(e.target.value)}
+          const numInp=(val,onChange,w=52)=><input type="text" inputMode="numeric" pattern="[0-9]*" min="0" value={val??""} onChange={e=>{const v=e.target.value;if(v===""||/^\d+$/.test(v))onChange(v===""?"":Number(v));}}
+            onBlur={e=>{if(e.target.value===""||e.target.value==="-")onChange(0);}}
             style={{width:w,padding:"3px 5px",border:"1px solid #ddd",borderRadius:2,fontSize:12,fontWeight:700,textAlign:"center",fontFamily:ff}}/>;
 
           // Multi-select toggle buttons for awards
