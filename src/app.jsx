@@ -574,7 +574,7 @@ function HistoryTab({history, setHistory, saveToDb, commUnlocked, entries, setEn
   // Sort history by year descending
   const sortedHistory=[...history].sort((a,b)=>(b.year||0)-(a.year||0));
 
-  const numI=(val,onChange,w=52)=><input type="number" min="0" value={val??""} onChange={e=>onChange(e.target.value)}
+  const numI=(val,onChange,w=52)=><input type="text" inputMode="numeric" pattern="[0-9]*" value={val??""} onChange={e=>{const v=e.target.value;if(v===""||/^\d+$/.test(v))onChange(v===""?"":Number(v));}} onBlur={e=>{if(e.target.value===""||e.target.value==="-")onChange(0);}}
     style={{width:w,padding:"3px 5px",border:"1px solid #ddd",borderRadius:2,fontSize:12,fontWeight:700,textAlign:"center",fontFamily:ff}}/>;
 
   return (
@@ -1717,9 +1717,9 @@ function BulkResultsUploader({entries,week,teamNames,onConfirm}) {
                       {teamNames.map(t=><option key={t} value={t}>{t}</option>)}
                     </select>
                     <span style={{fontSize:10,fontWeight:800,color:hWon?"#007a00":RED,flexShrink:0}}>{hWon?"WIN":"LOSS"}</span>
-                    <input type="number" value={row.homeScore} onChange={e=>updateRow(row.id,"homeScore",parseInt(e.target.value)||0)} style={{width:42,border:"1px solid #ddd",borderRadius:2,padding:"4px",fontSize:14,fontWeight:900,textAlign:"center",color:hWon?"#007a00":RED,background:"transparent"}}/>
+                    <input type="text" inputMode="numeric" pattern="[0-9]*" value={row.homeScore} onChange={e=>{const v=e.target.value;if(v===""||/^\d+$/.test(v))updateRow(row.id,"homeScore",v===""?"":Number(v));}} onBlur={e=>{if(e.target.value==="")updateRow(row.id,"homeScore",0);}} style={{width:42,border:"1px solid #ddd",borderRadius:2,padding:"4px",fontSize:14,fontWeight:900,textAlign:"center",color:hWon?"#007a00":RED,background:"transparent"}}/>
                     <span style={{color:"#bbb",fontWeight:700}}>—</span>
-                    <input type="number" value={row.awayScore} onChange={e=>updateRow(row.id,"awayScore",parseInt(e.target.value)||0)} style={{width:42,border:"1px solid #ddd",borderRadius:2,padding:"4px",fontSize:14,fontWeight:900,textAlign:"center",color:!hWon?"#007a00":RED,background:"transparent"}}/>
+                    <input type="text" inputMode="numeric" pattern="[0-9]*" value={row.awayScore} onChange={e=>{const v=e.target.value;if(v===""||/^\d+$/.test(v))updateRow(row.id,"awayScore",v===""?"":Number(v));}} onBlur={e=>{if(e.target.value==="")updateRow(row.id,"awayScore",0);}} style={{width:42,border:"1px solid #ddd",borderRadius:2,padding:"4px",fontSize:14,fontWeight:900,textAlign:"center",color:!hWon?"#007a00":RED,background:"transparent"}}/>
                     <span style={{fontSize:10,fontWeight:800,color:!hWon?"#007a00":RED,flexShrink:0}}>{!hWon?"WIN":"LOSS"}</span>
                   </div>
                   <div style={{display:"flex",alignItems:"center",gap:8}}>
@@ -1765,11 +1765,11 @@ function BulkResultsUploader({entries,week,teamNames,onConfirm}) {
                       </td>
                       <td style={{padding:"4px 2px",textAlign:"center",fontSize:9,color:hWon?"#007a00":RED,fontWeight:800,borderRight:"1px solid #eee",whiteSpace:"nowrap"}}>{hWon?"WIN":"LOSS"}</td>
                       <td style={{padding:"7px 6px",borderRight:"1px solid #eee"}}>
-                        <input type="number" value={row.homeScore} onChange={e=>updateRow(row.id,"homeScore",parseInt(e.target.value)||0)} style={{width:44,border:"1px solid #ddd",borderRadius:2,padding:"3px 5px",fontFamily:ff,fontSize:14,fontWeight:900,textAlign:"center",color:hWon?"#007a00":RED,background:"transparent"}}/>
+                        <input type="text" inputMode="numeric" pattern="[0-9]*" value={row.homeScore} onChange={e=>{const v=e.target.value;if(v===""||/^\d+$/.test(v))updateRow(row.id,"homeScore",v===""?"":Number(v));}} onBlur={e=>{if(e.target.value==="")updateRow(row.id,"homeScore",0);}} style={{width:44,border:"1px solid #ddd",borderRadius:2,padding:"3px 5px",fontFamily:ff,fontSize:14,fontWeight:900,textAlign:"center",color:hWon?"#007a00":RED,background:"transparent"}}/>
                       </td>
                       <td style={{padding:"4px",textAlign:"center",color:"#bbb",fontWeight:700,borderRight:"1px solid #eee"}}>—</td>
                       <td style={{padding:"7px 6px",borderRight:"1px solid #eee"}}>
-                        <input type="number" value={row.awayScore} onChange={e=>updateRow(row.id,"awayScore",parseInt(e.target.value)||0)} style={{width:44,border:"1px solid #ddd",borderRadius:2,padding:"3px 5px",fontFamily:ff,fontSize:14,fontWeight:900,textAlign:"center",color:!hWon?"#007a00":RED,background:"transparent"}}/>
+                        <input type="text" inputMode="numeric" pattern="[0-9]*" value={row.awayScore} onChange={e=>{const v=e.target.value;if(v===""||/^\d+$/.test(v))updateRow(row.id,"awayScore",v===""?"":Number(v));}} onBlur={e=>{if(e.target.value==="")updateRow(row.id,"awayScore",0);}} style={{width:44,border:"1px solid #ddd",borderRadius:2,padding:"3px 5px",fontFamily:ff,fontSize:14,fontWeight:900,textAlign:"center",color:!hWon?"#007a00":RED,background:"transparent"}}/>
                       </td>
                       <td style={{padding:"4px 2px",textAlign:"center",fontSize:9,color:!hWon?"#007a00":RED,fontWeight:800,borderRight:"1px solid #eee",whiteSpace:"nowrap"}}>{!hWon?"WIN":"LOSS"}</td>
                       <td style={{padding:"7px 6px",borderRight:"1px solid #eee"}}>
@@ -1882,7 +1882,7 @@ function HistoricalImportPanel({setupRows, history, onImport}) {
   }
 
   const inp = (val, onChange, w=70, extra={}) => (
-    <input type="number" min="0" max="999" value={val} onChange={e=>onChange(e.target.value)}
+    <input type="text" inputMode="numeric" pattern="[0-9]*" value={val??""} onChange={e=>{const v=e.target.value;if(v===""||/^\d+$/.test(v))onChange(v===""?"":Number(v));}} onBlur={e=>{if(e.target.value===""||e.target.value==="-")onChange(0);}}
       style={{width:w,padding:"5px 8px",border:"1px solid #ccc",borderRadius:2,fontSize:14,fontWeight:700,textAlign:"center",fontFamily:"'Helvetica Neue',Arial,sans-serif",...extra}}/>
   );
   const TeamSel = ({value, onChange, placeholder="-- None --"}) => (
