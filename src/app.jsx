@@ -2181,6 +2181,7 @@ function ContentHub({sorted,entries,week,season,year,leagueName,history,leader,a
   const [contentType,setContentType] = useState("powerrankings");
   const [breakingSubject,setBreakingSubject] = useState("");
   const [breakingGuidance,setBreakingGuidance] = useState("");
+  const [articleGuidance,setArticleGuidance] = useState("");
   const [articleLength,setArticleLength] = useState("medium");
   const [draftArticle,setDraftArticle] = useState(null);
   const [draftText,setDraftText] = useState("");
@@ -2319,15 +2320,15 @@ function ContentHub({sorted,entries,week,season,year,leagueName,history,leader,a
     const lengthMap = {short:"150-200 words",medium:"350-450 words",long:"650-800 words"};
     const wordTarget = lengthMap[articleLength]||"350-450 words";
     const prompts = {
-      powerrankings: `${byline}Write weekly power rankings after Season ${season} Week ${week-1}.\n\nCurrent points standings:\n${standingsText}\n\nLast week's matchups:\n${lastWeekMatchups}${scheduleContext}\n\nTarget length: ${wordTarget}. Rank all ${entries.length} teams 1-${entries.length} with punchy blurbs. Reference actual matchups and upcoming schedules. Rankings can differ from points based on momentum and schedule difficulty. Be opinionated. Format as:\n1. [Team] — [blurb]\n2. etc.`,
+      powerrankings: `${byline}Write weekly power rankings after Season ${season} Week ${week-1}.\n\nCurrent points standings:\n${standingsText}\n\nLast week's matchups:\n${lastWeekMatchups}${scheduleContext}${articleGuidance.trim()?`\n\nEDITOR'S DIRECTION: ${articleGuidance.trim()}`:""}\n\nTarget length: ${wordTarget}. Rank all ${entries.length} teams 1-${entries.length} with punchy blurbs. Reference actual matchups and upcoming schedules. Rankings can differ from points based on momentum and schedule difficulty. Be opinionated. Format as:\n1. [Team] — [blurb]\n2. etc.`,
 
-      preview: `${byline}Write a Week ${week} game preview article for the "${leagueName}" dynasty, Season ${season}.\n\nCurrent standings:\n${standingsText}\n\nTHIS WEEK'S ACTUAL MATCHUPS:\n${thisWeekMatchups}\n\nTarget length: ${wordTarget}. Preview the actual scheduled matchups. Discuss storylines, what's at stake for each team, who has the edge. Reference the real games — do not make up different matchups. Write in your distinct voice.`,
+      preview: `${byline}Write a Week ${week} game preview article for the "${leagueName}" dynasty, Season ${season}.\n\nCurrent standings:\n${standingsText}\n\nTHIS WEEK'S ACTUAL MATCHUPS:\n${thisWeekMatchups}${articleGuidance.trim()?`\n\nEDITOR'S DIRECTION: ${articleGuidance.trim()}`:""}\n\nTarget length: ${wordTarget}. Preview the actual scheduled matchups. Discuss storylines, what's at stake for each team, who has the edge. Reference the real games — do not make up different matchups. Write in your distinct voice.`,
 
-      recap: `${byline}Write a dramatic weekly recap for Season ${season} Week ${week-1} of the "${leagueName}" dynasty.\n\nStandings after this week:\n${standingsText}\n\nLast week's matchups:\n${lastWeekMatchups}\n\nTarget length: ${wordTarget}. Recap last week's actual games. Make up exciting scores and game details for the real matchups listed above. Highlight upsets, dominant performances, and dynasty implications. Write in your distinct voice.`,
+      recap: `${byline}Write a dramatic weekly recap for Season ${season} Week ${week-1} of the "${leagueName}" dynasty.\n\nStandings after this week:\n${standingsText}\n\nLast week's matchups:\n${lastWeekMatchups}${articleGuidance.trim()?`\n\nEDITOR'S DIRECTION: ${articleGuidance.trim()}`:""}\n\nTarget length: ${wordTarget}. Recap last week's actual games. Make up exciting scores and game details for the real matchups listed above. Highlight upsets, dominant performances, and dynasty implications. Write in your distinct voice.`,
 
-      seasonpreview: `${byline}Write a Season ${season} (${year}) preview for the "${leagueName}" dynasty.\n\nTeams:\n${entries.map(e=>e.teamName).join("\n")}\n${history.length>0?`\nDefending champion: ${history[history.length-1].champion}`:"This is the inaugural season."}\n${upcomingSchedule?`\nEarly schedule:\n${upcomingSchedule}`:""}\n\nTarget length: ${wordTarget}. Give each team a one-line outlook, predict a champion, name dark horses and sleepers, and build excitement. Write in your distinct voice.`,
+      seasonpreview: `${byline}Write a Season ${season} (${year}) preview for the "${leagueName}" dynasty.\n\nTeams:\n${entries.map(e=>e.teamName).join("\n")}\n${history.length>0?`\nDefending champion: ${history[history.length-1].champion}`:"This is the inaugural season."}\n${upcomingSchedule?`\nEarly schedule:\n${upcomingSchedule}`:""}\n${articleGuidance.trim()?`\nEDITOR'S DIRECTION: ${articleGuidance.trim()}`:""}\n\nTarget length: ${wordTarget}. Give each team a one-line outlook, predict a champion, name dark horses and sleepers, and build excitement. Write in your distinct voice.`,
 
-      hotakes: `${byline}Write a spicy hot takes column for Season ${season} Week ${week-1} of the "${leagueName}" dynasty.\n\nStandings:\n${standingsText}\n\nLast week's matchups:\n${lastWeekMatchups}\n\nTarget length: ${wordTarget}. Write bold, controversial hot takes. Reference real matchups and team names. Each take 2-3 sentences, provocative and specific. Number them. Write in your distinct voice.`,
+      hotakes: `${byline}Write a spicy hot takes column for Season ${season} Week ${week-1} of the "${leagueName}" dynasty.\n\nStandings:\n${standingsText}\n\nLast week's matchups:\n${lastWeekMatchups}${articleGuidance.trim()?`\n\nEDITOR'S DIRECTION: ${articleGuidance.trim()}`:""}\n\nTarget length: ${wordTarget}. Write bold, controversial hot takes. Reference real matchups and team names. Each take 2-3 sentences, provocative and specific. Number them. Write in your distinct voice.`,
 
       breaking: `${byline}Write a BREAKING NEWS article for the "${leagueName}" dynasty, Season ${season} Week ${week}.${subjectContext}\n\nSUBJECT: ${breakingSubject}${subjectRecord}\nBREAKING NEWS ANGLE: ${breakingGuidance}\n\nCurrent standings context:\n${standingsText}\n\nTarget length: ${wordTarget}. Write in a breathless breaking-news style — urgent, dramatic, with a punchy headline in ALL CAPS. Let the subject's personality and known traits color the narrative heavily. Be wild, irreverent, and entertaining. Reference their standing in the league and what this news means for the dynasty season. Make it feel like a legitimate sports scandal or bombshell dropped mid-season. Write in your distinct voice.`,
     };
@@ -2396,6 +2397,13 @@ function ContentHub({sorted,entries,week,season,year,leagueName,history,leader,a
               <div style={{fontSize:11,color:"#555",marginBottom:5,fontWeight:600}}>What's the story? <span style={{color:"#999",fontWeight:400}}>(give the AI direction — wild, specific, or both)</span></div>
               <textarea value={breakingGuidance} onChange={e=>setBreakingGuidance(e.target.value)} placeholder={`e.g. "Got caught trying to poach a recruit at a Waffle House" or "Called out the entire league in a post-game rant" or "Mysteriously benched his entire starting lineup in Week 3"`} style={{width:"100%",minHeight:72,padding:"8px 10px",border:"1px solid #ddd",borderRadius:2,fontSize:12,fontFamily:ff,lineHeight:1.5,resize:"vertical",boxSizing:"border-box",color:"#222"}}/>
             </div>
+          </div>
+        )}
+
+        {contentType!=="breaking"&&(
+          <div style={{marginBottom:14}}>
+            <div style={{fontSize:11,color:"#555",marginBottom:5,fontWeight:600}}>Direction <span style={{color:"#999",fontWeight:400}}>(optional — give the writer a specific angle, storyline, or focus)</span></div>
+            <textarea value={articleGuidance} onChange={e=>setArticleGuidance(e.target.value)} placeholder={contentType==="powerrankings"?"e.g. \"Focus on the surprising rise of Jelly Roll\" or \"Hammer whoever is in last place\"":contentType==="recap"?"e.g. \"Big Johnson's blowout loss was the story of the week\"":contentType==="preview"?"e.g. \"Hype up the rivalry game between Dirt McSquirt and Jeff Fisher\"":contentType==="hotakes"?"e.g. \"Go hard on the team that keeps scheduling cupcakes\"":"e.g. \"Pick Jelly Roll as a dark horse\"" } style={{width:"100%",minHeight:60,padding:"8px 10px",border:`1px solid ${reporter.color}44`,borderRadius:2,fontSize:12,fontFamily:ff,lineHeight:1.5,resize:"vertical",boxSizing:"border-box",color:"#222"}}/>
           </div>
         )}
 
