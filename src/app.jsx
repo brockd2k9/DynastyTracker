@@ -49,6 +49,16 @@ async function ensureScheduleColumn() {
 
 const CONF_STAND_PTS = [50,43,36,30,24,18,14,10,7,5,3,1];
 const RECRUITING_PTS = [15,10,7,5,3,0,0,0,0,0,0,0];
+const DEFAULT_PTS_CONFIG = {
+  win:15, top25Bonus:5, top10Bonus:10,
+  confStand:[50,43,36,30,24,18,14,10,7,5,3,1],
+  confChampApp:10, confChampWin:15,
+  bowlApp:5, bowlWin:10,
+  playoffApp:15, playoffWin:10, playoffSemiWin:15, nattyWin:25,
+  recruiting:[15,10,7,5,3],
+  dynastyTop5:[15,10,7,5,3],
+  prestigeGain:10, prestigeMax:10, heisman:15,
+};
 const START_YEAR = 2024;
 const PASS = "RatedRKO99";
 const MODEL = "claude-sonnet-4-20250514";
@@ -1414,6 +1424,12 @@ function SetupPanel({entries,setup,postSeasonInputs,setPSI,handleStart,setCommis
   const [rosterSeason,setRosterSeason] = useState(season+1);
   const [rosterEdits,setRosterEdits] = useState({});
   const [rosterSaved,setRosterSaved] = useState(false);
+  const [ptsSaved,setPtsSaved] = useState(false);
+  const [ptsEdit,setPtsEdit] = useState(null); // null = closed, object = editing
+  function openPtsEditor(){setPtsEdit({...DEFAULT_PTS_CONFIG,...(setup?.pointsConfig||{})});setPtsSaved(false);}
+  function savePtsConfig(){const updated={...setup,pointsConfig:ptsEdit};setSetup(updated);saveToDb({setup:updated});setPtsSaved(true);setTimeout(()=>setPtsSaved(false),2000);}
+  function setPE(key,val){setPtsEdit(p=>({...p,[key]:val}));}
+  function setPEArr(key,idx,val){setPtsEdit(p=>({...p,[key]:p[key].map((v,i)=>i===idx?val:v)}));}
   const setSR=(i,f,v)=>setSetupRows(p=>p.map((r,idx)=>idx===i?{...r,[f]:v}:r));
   const addRow=()=>setSetupRows(p=>[...p,{userId:"",userName:"",teamName:""}]);
   const removeRow=(i)=>{if(setupRows.length<=2)return alert("Minimum 2 teams.");setSetupRows(p=>p.filter((_,idx)=>idx!==i));};
@@ -1570,6 +1586,66 @@ function SetupPanel({entries,setup,postSeasonInputs,setPSI,handleStart,setCommis
           );})}
         </div>
       </Card>}
+      <Card><CardHead bg="#333">⚙️ Points Configuration</CardHead>
+        <div style={{padding:"12px 14px"}}>
+          {!ptsEdit?(
+            <div style={{display:"flex",justifyContent:"space-between",alignItems:"center"}}>
+              <div style={{fontSize:12,color:"#555"}}>Customize which actions earn points and how many.</div>
+              <button onClick={openPtsEditor} style={{background:"#333",color:"#fff",border:"none",borderRadius:2,padding:"7px 16px",cursor:"pointer",fontFamily:ff,fontSize:12,fontWeight:800}}>Edit Points</button>
+            </div>
+          ):(
+            <div style={{display:"flex",flexDirection:"column",gap:14}}>
+              <div style={{fontSize:11,fontWeight:800,color:"#555",textTransform:"uppercase",letterSpacing:0.5}}>Regular Season</div>
+              <div style={{display:"grid",gridTemplateColumns:"1fr 1fr 1fr",gap:8}}>
+                {[["Win",ptsEdit.win,"win"],["Top 25 Bonus",ptsEdit.top25Bonus,"top25Bonus"],["Top 10 Bonus",ptsEdit.top10Bonus,"top10Bonus"]].map(([label,val,key])=>(
+                  <div key={key}><div style={{fontSize:10,color:"#888",marginBottom:3}}>{label}</div><NumField value={val} onChange={v=>setPE(key,v)} width="100%" style={{width:"100%",boxSizing:"border-box"}}/></div>
+                ))}
+              </div>
+              <div style={{fontSize:11,fontWeight:800,color:"#555",textTransform:"uppercase",letterSpacing:0.5}}>Conference Standings (1st→last)</div>
+              <div style={{display:"grid",gridTemplateColumns:"repeat(6,1fr)",gap:6}}>
+                {ptsEdit.confStand.map((v,i)=>(
+                  <div key={i}><div style={{fontSize:9,color:"#999",textAlign:"center",marginBottom:2}}>{i+1}{i===0?"st":i===1?"nd":i===2?"rd":"th"}</div><NumField value={v} onChange={val=>setPEArr("confStand",i,val)} width="100%" style={{width:"100%",boxSizing:"border-box"}}/></div>
+                ))}
+              </div>
+              <div style={{fontSize:11,fontWeight:800,color:"#555",textTransform:"uppercase",letterSpacing:0.5}}>Conference Championship</div>
+              <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:8}}>
+                {[["Appear",ptsEdit.confChampApp,"confChampApp"],["Win",ptsEdit.confChampWin,"confChampWin"]].map(([label,val,key])=>(
+                  <div key={key}><div style={{fontSize:10,color:"#888",marginBottom:3}}>{label}</div><NumField value={val} onChange={v=>setPE(key,v)} width="100%" style={{width:"100%",boxSizing:"border-box"}}/></div>
+                ))}
+              </div>
+              <div style={{fontSize:11,fontWeight:800,color:"#555",textTransform:"uppercase",letterSpacing:0.5}}>Bowl & Playoff</div>
+              <div style={{display:"grid",gridTemplateColumns:"1fr 1fr 1fr 1fr 1fr",gap:8}}>
+                {[["Bowl App",ptsEdit.bowlApp,"bowlApp"],["Bowl Win",ptsEdit.bowlWin,"bowlWin"],["Playoff App",ptsEdit.playoffApp,"playoffApp"],["Playoff Win",ptsEdit.playoffWin,"playoffWin"],["Semi Win",ptsEdit.playoffSemiWin,"playoffSemiWin"],["Natty Win",ptsEdit.nattyWin,"nattyWin"]].map(([label,val,key])=>(
+                  <div key={key}><div style={{fontSize:10,color:"#888",marginBottom:3,whiteSpace:"nowrap"}}>{label}</div><NumField value={val} onChange={v=>setPE(key,v)} width="100%" style={{width:"100%",boxSizing:"border-box"}}/></div>
+                ))}
+              </div>
+              <div style={{fontSize:11,fontWeight:800,color:"#555",textTransform:"uppercase",letterSpacing:0.5}}>Recruiting Rank (1st–5th)</div>
+              <div style={{display:"grid",gridTemplateColumns:"repeat(5,1fr)",gap:6}}>
+                {ptsEdit.recruiting.map((v,i)=>(
+                  <div key={i}><div style={{fontSize:9,color:"#999",textAlign:"center",marginBottom:2}}>#{i+1}</div><NumField value={v} onChange={val=>setPEArr("recruiting",i,val)} width="100%" style={{width:"100%",boxSizing:"border-box"}}/></div>
+                ))}
+              </div>
+              <div style={{fontSize:11,fontWeight:800,color:"#555",textTransform:"uppercase",letterSpacing:0.5}}>Dynasty Top 5</div>
+              <div style={{display:"grid",gridTemplateColumns:"repeat(5,1fr)",gap:6}}>
+                {ptsEdit.dynastyTop5.map((v,i)=>(
+                  <div key={i}><div style={{fontSize:9,color:"#999",textAlign:"center",marginBottom:2}}>#{i+1}</div><NumField value={v} onChange={val=>setPEArr("dynastyTop5",i,val)} width="100%" style={{width:"100%",boxSizing:"border-box"}}/></div>
+                ))}
+              </div>
+              <div style={{fontSize:11,fontWeight:800,color:"#555",textTransform:"uppercase",letterSpacing:0.5}}>Awards</div>
+              <div style={{display:"grid",gridTemplateColumns:"1fr 1fr 1fr",gap:8}}>
+                {[["Prestige Gain",ptsEdit.prestigeGain,"prestigeGain"],["Max Prestige",ptsEdit.prestigeMax,"prestigeMax"],["Heisman",ptsEdit.heisman,"heisman"]].map(([label,val,key])=>(
+                  <div key={key}><div style={{fontSize:10,color:"#888",marginBottom:3}}>{label}</div><NumField value={val} onChange={v=>setPE(key,v)} width="100%" style={{width:"100%",boxSizing:"border-box"}}/></div>
+                ))}
+              </div>
+              <div style={{display:"flex",gap:8}}>
+                <button onClick={savePtsConfig} style={{flex:1,background:ptsSaved?"#007a00":RED,color:"#fff",border:"none",borderRadius:2,padding:"9px",cursor:"pointer",fontFamily:ff,fontSize:12,fontWeight:800}}>{ptsSaved?"✓ Saved":"Save Points Config"}</button>
+                <button onClick={()=>{setPtsEdit({...DEFAULT_PTS_CONFIG});}} style={{background:"#888",color:"#fff",border:"none",borderRadius:2,padding:"9px 14px",cursor:"pointer",fontFamily:ff,fontSize:12,fontWeight:800}}>Reset Defaults</button>
+                <button onClick={()=>setPtsEdit(null)} style={{background:"#eee",color:"#555",border:"none",borderRadius:2,padding:"9px 14px",cursor:"pointer",fontFamily:ff,fontSize:12,fontWeight:800}}>Cancel</button>
+              </div>
+            </div>
+          )}
+        </div>
+      </Card>
       <div style={{display:"flex",gap:10,flexWrap:"wrap"}}>
         <button onClick={applySetup} style={{flex:1,background:RED,color:"#fff",border:"none",borderRadius:2,padding:"13px",cursor:"pointer",fontFamily:ff,fontSize:13,fontWeight:800,textTransform:"uppercase",minWidth:140}}>{isLive?"↺ Reset & Relaunch":"Launch Dynasty →"}</button>
         {isLive&&<button onClick={addMidSeason} style={{flex:1,background:"#007a00",color:"#fff",border:"none",borderRadius:2,padding:"13px",cursor:"pointer",fontFamily:ff,fontSize:13,fontWeight:800,textTransform:"uppercase",minWidth:140}}>+ Add Team Mid-Season</button>}
@@ -2587,6 +2663,7 @@ function RightRail({sorted,articles,entries,week,season,leader,setActiveArticle}
 
 export default function App() {
   const [setup,setSetup] = useState(null);
+  const pc = {...DEFAULT_PTS_CONFIG,...(setup?.pointsConfig||{})};
   const [tab,setTab] = useState("Home");
   const [profileSel,setProfileSel] = useState(null);
   const [profilePTab,setProfilePTab] = useState("overview");
@@ -2730,7 +2807,7 @@ export default function App() {
         }
         if(!effectiveResult)return entry;
         let pts=0,bonus=0;
-        if(effectiveResult==="win"){pts=15;bonus=effectiveR10?10:effectiveR25?5:0;}
+        if(effectiveResult==="win"){pts=pc.win;bonus=effectiveR10?pc.top10Bonus:effectiveR25?pc.top25Bonus:0;}
         const log={week:targetWeek,result:effectiveResult,ranked25:effectiveR25,ranked10:effectiveR10,pts:pts+bonus,opponent:opp||"Unknown"};
         // Update H2H if opponent is a dynasty member
         const h2h={...entry.h2h||{}};
@@ -2754,7 +2831,7 @@ export default function App() {
       const r=results.find(x=>x.leagueTeam===entry.teamName);
       if(!r)return entry;
       let pts=0,bonus=0;
-      if(r.result==="win"){pts=15;bonus=r.ranked10?10:r.ranked25?5:0;}
+      if(r.result==="win"){pts=pc.win;bonus=r.ranked10?pc.top10Bonus:r.ranked25?pc.top25Bonus:0;}
       const opp=thisWeekSchedule[entry.teamName]||r.opponent;
       const log={week:targetWeek,result:r.result,ranked25:r.ranked25,ranked10:r.ranked10,pts:pts+bonus,opponent:opp,stats:r.stats};
       const h2h={...entry.h2h||{}};
@@ -2774,41 +2851,34 @@ export default function App() {
       const t=entry.teamName;
       // Conference standings
       const si=psi.confStandings.findIndex(s=>s.teamName===t);
-      const sp=si>=0?(CONF_STAND_PTS[si]||0):0;
-      // Conf championship game — appear +10, win +15 additional
+      const sp=si>=0?((pc.confStand||CONF_STAND_PTS)[si]||0):0;
+      // Conf championship game
       let cc=0;
       if(psi.confChampGame){
-        if(psi.confChampGame.teamA===t||psi.confChampGame.teamB===t){cc+=10;if(psi.confChampGame.winner===t)cc+=15;}
+        if(psi.confChampGame.teamA===t||psi.confChampGame.teamB===t){cc+=pc.confChampApp;if(psi.confChampGame.winner===t)cc+=pc.confChampWin;}
       } else if(psi.confChamp){
-        // backward compat with old format
-        if(psi.confChamp.made?.includes(t))cc+=10;if(psi.confChamp.winner===t)cc+=15;
+        if(psi.confChamp.made?.includes(t))cc+=pc.confChampApp;if(psi.confChamp.winner===t)cc+=pc.confChampWin;
       }
       // Bowl & playoff points
       let bp=0;
       if(psi.bowlGames){
-        // Bowl: appear +5, win +10 additional
-        (psi.bowlGames||[]).forEach(g=>{if(g.teamA===t||g.teamB===t){bp+=5;if(g.winner===t)bp+=10;}});
-        // Playoff R1: appear +15, win +10 additional
-        (psi.playoffR1||[]).forEach(g=>{if(g.teamA===t||g.teamB===t){bp+=15;if(g.winner===t)bp+=10;}});
-        // Playoff R2 (semis): win +15 additional (no appear bonus — already in R1)
-        (psi.playoffR2||[]).forEach(g=>{if(g.winner===t)bp+=15;});
-        // National Championship: win +25 additional
-        if(psi.nattyGame&&psi.nattyGame.winner===t)bp+=25;
+        (psi.bowlGames||[]).forEach(g=>{if(g.teamA===t||g.teamB===t){bp+=pc.bowlApp;if(g.winner===t)bp+=pc.bowlWin;}});
+        (psi.playoffR1||[]).forEach(g=>{if(g.teamA===t||g.teamB===t){bp+=pc.playoffApp;if(g.winner===t)bp+=pc.playoffWin;}});
+        (psi.playoffR2||[]).forEach(g=>{if(g.winner===t)bp+=pc.playoffSemiWin;});
+        if(psi.nattyGame&&psi.nattyGame.winner===t)bp+=pc.nattyWin;
       } else if(psi.bowls){
-        // backward compat with old per-team bowl format
         const be=psi.bowls.find(b=>b.teamName===t);
-        if(be?.bowl==="made")bp=5;if(be?.bowl==="won")bp=15;if(be?.bowl==="cfp")bp=15;if(be?.bowl==="cfpwon")bp=40;
+        if(be?.bowl==="made")bp=pc.bowlApp;if(be?.bowl==="won")bp=pc.bowlApp+pc.bowlWin;if(be?.bowl==="cfp")bp=pc.playoffApp;if(be?.bowl==="cfpwon")bp=pc.playoffApp+pc.nattyWin;
       }
       // Recruiting
       const ri=psi.recruiting.findIndex(r=>r.teamName===t);
-      const rp=ri>=0?(RECRUITING_PTS[ri]||0):0;
+      const rp=ri>=0?((pc.recruiting||RECRUITING_PTS)[ri]||0):0;
       // Prestige & Heisman
-      let pp=0;if(psi.prestigeGains.includes(t))pp+=10;if(psi.maxPrestige?.includes(t))pp+=10;
-      // Dynasty Top 5 ranking (15/10/7/5/3)
-      const DYNASTY_TOP5_PTS=[15,10,7,5,3];
+      let pp=0;if(psi.prestigeGains.includes(t))pp+=pc.prestigeGain;if(psi.maxPrestige?.includes(t))pp+=pc.prestigeMax;
+      // Dynasty Top 5
       const di=(psi.dynastyTop5||[]).findIndex(r=>r.teamName===t);
-      const dp=di>=0&&di<5?(DYNASTY_TOP5_PTS[di]||0):0;
-      const hp=(psi.heisman===t?15:0)+dp;
+      const dp=di>=0&&di<5?((pc.dynastyTop5||[15,10,7,5,3])[di]||0):0;
+      const hp=(psi.heisman===t?pc.heisman:0)+dp;
       return{...entry,confStandPts:entry.confStandPts+sp,confChampPts:entry.confChampPts+cc,bowlPts:entry.bowlPts+bp,recruitingPts:entry.recruitingPts+rp,prestigePts:entry.prestigePts+pp,heismanPts:entry.heismanPts+hp};
     }));
     setTimeout(()=>saveToDb(),200);
@@ -3049,7 +3119,15 @@ export default function App() {
           {tab==="Profiles"&&<ProfileTab history={history} setupRows={setup?.rows||[]} currentEntries={entries} season={season} year={year} permanentUsers={setup?.permanentUsers} sel={profileSel} setSel={setProfileSel} pTab={profilePTab} setPTab={setProfilePTab} articles={articles} setActiveArticle={setActiveArticle}/>}
           {tab==="Schedule"&&<ScheduleTab schedule={schedule} entries={activeEntries} week={week} season={season}/>}
           {tab==="Rules"&&<div style={{display:"grid",gridTemplateColumns:isMobile?"1fr":"repeat(auto-fill,minmax(250px,1fr))",gap:10}}>
-            {[["🏈 Regular Season",[["Win","15 pts"],["Win vs Top 25","+5 bonus"],["Win vs Top 10","+10 bonus"],["Loss","0 pts"]]],["📊 Conference Standings",[["1st","50"],["2nd","43"],["3rd","36"],["4th","30"],["5th","24"],["6th","18"],["7th","14"],["8th","10"],["9th","7"],["10th","5"],["11th","3"],["12th","1"]]],["🏆 Conference Championship",[["Make the Game","10 pts"],["Win the Game","15 pts"]]],["🥣 Bowl & Playoff",[["Make a Bowl","5 pts"],["Win a Bowl","+10 pts"],["Make CFP","15 pts"],["Win National Championship","+25 pts"]]],["🎓 Recruiting (Top 5 Users)",[["#1","15 pts"],["#2","10 pts"],["#3","7 pts"],["#4","5 pts"],["#5","3 pts"]]],["🏅 Dynasty Top 5",[["#1 in Dynasty","15 pts"],["#2 in Dynasty","10 pts"],["#3 in Dynasty","7 pts"],["#4 in Dynasty","5 pts"],["#5 in Dynasty","3 pts"]]],["⭐ Prestige & Awards",[["Gain a Prestige Star","10 pts"],["Reach Max Prestige","10 pts"],["Heisman Winner","15 pts"]]]].map(([title,rows])=><Card key={title} style={{overflow:"hidden"}}><CardHead bg={RED}>{title}</CardHead><table style={{width:"100%",borderCollapse:"collapse"}}><tbody>{rows.map(([l,p])=><tr key={l} style={{borderBottom:"1px solid #f0f0f0"}}><td style={{padding:"8px 12px",color:"#333",fontSize:13}}>{l}</td><td style={{padding:"8px 12px",textAlign:"right",color:RED,fontWeight:800,fontSize:13}}>{p}</td></tr>)}</tbody></table></Card>)}
+            {[
+              ["🏈 Regular Season",[["Win",`${pc.win} pts`],["Win vs Top 25",`+${pc.top25Bonus} bonus`],["Win vs Top 10",`+${pc.top10Bonus} bonus`],["Loss","0 pts"]]],
+              ["📊 Conference Standings",(pc.confStand||CONF_STAND_PTS).map((v,i)=>[`${i+1}${i===0?"st":i===1?"nd":i===2?"rd":"th"}`,String(v)])],
+              ["🏆 Conference Championship",[["Make the Game",`${pc.confChampApp} pts`],["Win the Game",`+${pc.confChampWin} pts`]]],
+              ["🥣 Bowl & Playoff",[["Make a Bowl",`${pc.bowlApp} pts`],["Win a Bowl",`+${pc.bowlWin} pts`],["Make CFP",`${pc.playoffApp} pts`],["Win Playoff Game",`+${pc.playoffWin} pts`],["Win Semifinal",`+${pc.playoffSemiWin} pts`],["Win National Championship",`+${pc.nattyWin} pts`]]],
+              ["🎓 Recruiting (Top 5 Users)",(pc.recruiting||RECRUITING_PTS).slice(0,5).map((v,i)=>[`#${i+1}`,`${v} pts`])],
+              ["🏅 Dynasty Top 5",(pc.dynastyTop5||[15,10,7,5,3]).map((v,i)=>[`#${i+1} in Dynasty`,`${v} pts`])],
+              ["⭐ Prestige & Awards",[["Gain a Prestige Star",`${pc.prestigeGain} pts`],["Reach Max Prestige",`${pc.prestigeMax} pts`],["Heisman Winner",`${pc.heisman} pts`]]],
+            ].map(([title,rows])=><Card key={title} style={{overflow:"hidden"}}><CardHead bg={RED}>{title}</CardHead><table style={{width:"100%",borderCollapse:"collapse"}}><tbody>{rows.map(([l,p])=><tr key={l} style={{borderBottom:"1px solid #f0f0f0"}}><td style={{padding:"8px 12px",color:"#333",fontSize:13}}>{l}</td><td style={{padding:"8px 12px",textAlign:"right",color:RED,fontWeight:800,fontSize:13}}>{p}</td></tr>)}</tbody></table></Card>)}
           </div>}
         </div>
 
