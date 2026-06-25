@@ -1618,12 +1618,15 @@ function SetupPanel({entries,setup,postSeasonInputs,setPSI,handleStart,setCommis
     // Skip the rows sync effect for this one update — we own these values
     skipRowsSync.current=true;
     setSetup(updated);
-    // Update live entries
+    // Build set of active userIds/teamNames from the new rows so we can remove orphaned entries
+    const activeUserIds=new Set(updatedRows.map(r=>r.userId).filter(Boolean));
+    const activeTeamNames=new Set(updatedRows.map(r=>r.teamName));
+    // Update live entries: rename + remove entries no longer in the roster
     const updatedEntries=entries.map(e=>{
       const newName=userIdToName[e.userId]||oldNameMap[e.userName]||e.userName;
       const newTeam=oldTeamMap[e.teamName]||e.teamName;
       return (newName!==e.userName||newTeam!==e.teamName)?{...e,userName:newName,teamName:newTeam}:e;
-    });
+    }).filter(e=>(e.userId&&activeUserIds.has(e.userId))||(!e.userId&&activeTeamNames.has(e.teamName)));
     setEntries(updatedEntries);
     if(history?.length){
       const updatedHistory=history.map(s=>({...s,finalStandings:s.finalStandings.map(t=>{
