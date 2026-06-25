@@ -59,6 +59,15 @@ const DEFAULT_PTS_CONFIG = {
   dynastyTop5:[15,10,7,5,3],
   prestigeGain:10, prestigeMax:10, heisman:15,
 };
+const FIXED_CATS = [
+  {key:"regular",label:"🏈 Regular Season",items:[{label:"Win",k:"win"},{label:"Top 25 Bonus",k:"top25Bonus"},{label:"Top 10 Bonus",k:"top10Bonus"}]},
+  {key:"confStand",label:"📊 Conference Standings",arrayKey:"confStand",posLabel:i=>`${i+1}${i===0?"st":i===1?"nd":i===2?"rd":"th"} place`},
+  {key:"confChamp",label:"🏆 Conference Championship",items:[{label:"Appear",k:"confChampApp"},{label:"Win",k:"confChampWin"}]},
+  {key:"bowlPlayoff",label:"🥣 Bowl & Playoff",items:[{label:"Bowl App",k:"bowlApp"},{label:"Bowl Win",k:"bowlWin"},{label:"Playoff App",k:"playoffApp"},{label:"Playoff Win",k:"playoffWin"},{label:"Semi Win",k:"playoffSemiWin"},{label:"Natty Win",k:"nattyWin"}]},
+  {key:"recruiting",label:"🎓 Recruiting",arrayKey:"recruiting",posLabel:i=>`#${i+1} Recruiting`},
+  {key:"dynastyTop5",label:"🏅 Dynasty Top 5",arrayKey:"dynastyTop5",posLabel:i=>`#${i+1} in Dynasty`},
+  {key:"awards",label:"⭐ Awards",items:[{label:"Prestige Gain",k:"prestigeGain"},{label:"Max Prestige",k:"prestigeMax"},{label:"Heisman",k:"heisman"}]},
+];
 const START_YEAR = 2024;
 const PASS = "RatedRKO99";
 const MODEL = "claude-sonnet-4-20250514";
@@ -1426,9 +1435,20 @@ function SetupPanel({entries,setup,postSeasonInputs,setPSI,handleStart,setCommis
   const [rosterSaved,setRosterSaved] = useState(false);
   const [ptsSaved,setPtsSaved] = useState(false);
   const [ptsEdit,setPtsEdit] = useState(null); // null = closed, object = editing
-  function openPtsEditor(){setPtsEdit({...DEFAULT_PTS_CONFIG,...(setup?.pointsConfig||{})});setPtsSaved(false);}
+  function openPtsEditor(){const base={...DEFAULT_PTS_CONFIG,...(setup?.pointsConfig||{})};if(!base.customCategories)base.customCategories=[];setPtsEdit(base);setPtsSaved(false);}
   function savePtsConfig(){const updated={...setup,pointsConfig:ptsEdit};setSetup(updated);saveToDb({setup:updated});setPtsSaved(true);setTimeout(()=>setPtsSaved(false),2000);}
   function setPE(key,val){setPtsEdit(p=>({...p,[key]:val}));}
+  function deletePtsCat(cat){if(cat.items){const p={};cat.items.forEach(it=>{p[it.k]=0;});setPtsEdit(prev=>({...prev,...p}));}else setPtsEdit(prev=>({...prev,[cat.arrayKey]:[]}));}
+  function restorePtsCat(cat){if(cat.items){const p={};cat.items.forEach(it=>{p[it.k]=DEFAULT_PTS_CONFIG[it.k]||0;});setPtsEdit(prev=>({...prev,...p}));}else setPtsEdit(prev=>({...prev,[cat.arrayKey]:[...(DEFAULT_PTS_CONFIG[cat.arrayKey]||[])]}));}
+  function deletePtsAward(k){setPtsEdit(p=>({...p,[k]:0}));}
+  function deleteArrayPos(arrayKey,i){setPtsEdit(p=>({...p,[arrayKey]:p[arrayKey].filter((_,idx)=>idx!==i)}));}
+  function addArrayPos(arrayKey){setPtsEdit(p=>({...p,[arrayKey]:[...(p[arrayKey]||[]),0]}));}
+  function addCustomCat(){setPtsEdit(p=>({...p,customCategories:[...(p.customCategories||[]),{name:"New Category",awards:[]}]}));}
+  function deleteCustomCat(ci){setPtsEdit(p=>({...p,customCategories:p.customCategories.filter((_,i)=>i!==ci)}));}
+  function setCustomCatName(ci,name){setPtsEdit(p=>({...p,customCategories:p.customCategories.map((c,i)=>i===ci?{...c,name}:c)}));}
+  function addCustomAward(ci){setPtsEdit(p=>({...p,customCategories:p.customCategories.map((c,i)=>i===ci?{...c,awards:[...c.awards,{label:"New Award",pts:0}]}:c)}));}
+  function deleteCustomAward(ci,ai){setPtsEdit(p=>({...p,customCategories:p.customCategories.map((c,i)=>i===ci?{...c,awards:c.awards.filter((_,j)=>j!==ai)}:c)}));}
+  function setCustomAward(ci,ai,field,val){setPtsEdit(p=>({...p,customCategories:p.customCategories.map((c,i)=>i===ci?{...c,awards:c.awards.map((a,j)=>j===ai?{...a,[field]:val}:a)}:c)}));}
   // League rules editor
   const [leagueRules,setLeagueRules] = useState(setup?.leagueRules||[]);
   const [rulesSaved,setRulesSaved] = useState(false);
@@ -1607,52 +1627,79 @@ function SetupPanel({entries,setup,postSeasonInputs,setPSI,handleStart,setCommis
               <button onClick={openPtsEditor} style={{background:"#333",color:"#fff",border:"none",borderRadius:2,padding:"7px 16px",cursor:"pointer",fontFamily:ff,fontSize:12,fontWeight:800}}>Edit Points</button>
             </div>
           ):(
-            <div style={{display:"flex",flexDirection:"column",gap:14}}>
-              <div style={{fontSize:11,fontWeight:800,color:"#555",textTransform:"uppercase",letterSpacing:0.5}}>Regular Season</div>
-              <div style={{display:"grid",gridTemplateColumns:"1fr 1fr 1fr",gap:8}}>
-                {[["Win",ptsEdit.win,"win"],["Top 25 Bonus",ptsEdit.top25Bonus,"top25Bonus"],["Top 10 Bonus",ptsEdit.top10Bonus,"top10Bonus"]].map(([label,val,key])=>(
-                  <div key={key}><div style={{fontSize:10,color:"#888",marginBottom:3}}>{label}</div><NumField value={val} onChange={v=>setPE(key,v)} width="100%" style={{width:"100%",boxSizing:"border-box"}}/></div>
-                ))}
-              </div>
-              <div style={{fontSize:11,fontWeight:800,color:"#555",textTransform:"uppercase",letterSpacing:0.5}}>Conference Standings (1st→last)</div>
-              <div style={{display:"grid",gridTemplateColumns:"repeat(6,1fr)",gap:6}}>
-                {ptsEdit.confStand.map((v,i)=>(
-                  <div key={i}><div style={{fontSize:9,color:"#999",textAlign:"center",marginBottom:2}}>{i+1}{i===0?"st":i===1?"nd":i===2?"rd":"th"}</div><NumField value={v} onChange={val=>setPEArr("confStand",i,val)} width="100%" style={{width:"100%",boxSizing:"border-box"}}/></div>
-                ))}
-              </div>
-              <div style={{fontSize:11,fontWeight:800,color:"#555",textTransform:"uppercase",letterSpacing:0.5}}>Conference Championship</div>
-              <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:8}}>
-                {[["Appear",ptsEdit.confChampApp,"confChampApp"],["Win",ptsEdit.confChampWin,"confChampWin"]].map(([label,val,key])=>(
-                  <div key={key}><div style={{fontSize:10,color:"#888",marginBottom:3}}>{label}</div><NumField value={val} onChange={v=>setPE(key,v)} width="100%" style={{width:"100%",boxSizing:"border-box"}}/></div>
-                ))}
-              </div>
-              <div style={{fontSize:11,fontWeight:800,color:"#555",textTransform:"uppercase",letterSpacing:0.5}}>Bowl & Playoff</div>
-              <div style={{display:"grid",gridTemplateColumns:"1fr 1fr 1fr 1fr 1fr",gap:8}}>
-                {[["Bowl App",ptsEdit.bowlApp,"bowlApp"],["Bowl Win",ptsEdit.bowlWin,"bowlWin"],["Playoff App",ptsEdit.playoffApp,"playoffApp"],["Playoff Win",ptsEdit.playoffWin,"playoffWin"],["Semi Win",ptsEdit.playoffSemiWin,"playoffSemiWin"],["Natty Win",ptsEdit.nattyWin,"nattyWin"]].map(([label,val,key])=>(
-                  <div key={key}><div style={{fontSize:10,color:"#888",marginBottom:3,whiteSpace:"nowrap"}}>{label}</div><NumField value={val} onChange={v=>setPE(key,v)} width="100%" style={{width:"100%",boxSizing:"border-box"}}/></div>
-                ))}
-              </div>
-              <div style={{fontSize:11,fontWeight:800,color:"#555",textTransform:"uppercase",letterSpacing:0.5}}>Recruiting Rank (1st–5th)</div>
-              <div style={{display:"grid",gridTemplateColumns:"repeat(5,1fr)",gap:6}}>
-                {ptsEdit.recruiting.map((v,i)=>(
-                  <div key={i}><div style={{fontSize:9,color:"#999",textAlign:"center",marginBottom:2}}>#{i+1}</div><NumField value={v} onChange={val=>setPEArr("recruiting",i,val)} width="100%" style={{width:"100%",boxSizing:"border-box"}}/></div>
-                ))}
-              </div>
-              <div style={{fontSize:11,fontWeight:800,color:"#555",textTransform:"uppercase",letterSpacing:0.5}}>Dynasty Top 5</div>
-              <div style={{display:"grid",gridTemplateColumns:"repeat(5,1fr)",gap:6}}>
-                {ptsEdit.dynastyTop5.map((v,i)=>(
-                  <div key={i}><div style={{fontSize:9,color:"#999",textAlign:"center",marginBottom:2}}>#{i+1}</div><NumField value={v} onChange={val=>setPEArr("dynastyTop5",i,val)} width="100%" style={{width:"100%",boxSizing:"border-box"}}/></div>
-                ))}
-              </div>
-              <div style={{fontSize:11,fontWeight:800,color:"#555",textTransform:"uppercase",letterSpacing:0.5}}>Awards</div>
-              <div style={{display:"grid",gridTemplateColumns:"1fr 1fr 1fr",gap:8}}>
-                {[["Prestige Gain",ptsEdit.prestigeGain,"prestigeGain"],["Max Prestige",ptsEdit.prestigeMax,"prestigeMax"],["Heisman",ptsEdit.heisman,"heisman"]].map(([label,val,key])=>(
-                  <div key={key}><div style={{fontSize:10,color:"#888",marginBottom:3}}>{label}</div><NumField value={val} onChange={v=>setPE(key,v)} width="100%" style={{width:"100%",boxSizing:"border-box"}}/></div>
-                ))}
-              </div>
-              <div style={{display:"flex",gap:8}}>
+            <div style={{display:"flex",flexDirection:"column",gap:10}}>
+              {/* Fixed categories */}
+              {FIXED_CATS.map(cat=>{
+                const isItems=!!cat.items;
+                const allZero=isItems?cat.items.every(it=>!ptsEdit[it.k]):(ptsEdit[cat.arrayKey]||[]).length===0||(ptsEdit[cat.arrayKey]||[]).every(v=>!v);
+                return(
+                  <div key={cat.key} style={{border:"1px solid #e0e0e0",borderRadius:3,overflow:"hidden"}}>
+                    <div style={{background:allZero?"#f0f0f0":"#fafafa",padding:"8px 12px",display:"flex",justifyContent:"space-between",alignItems:"center"}}>
+                      <div style={{fontSize:11,fontWeight:800,color:allZero?"#aaa":"#444",textTransform:"uppercase",letterSpacing:0.4}}>{cat.label}</div>
+                      <div style={{display:"flex",gap:6}}>
+                        {allZero?(
+                          <button onClick={()=>restorePtsCat(cat)} style={{background:"#e8f5e9",border:"none",borderRadius:2,padding:"3px 9px",cursor:"pointer",fontSize:11,fontWeight:700,color:"#007a00",fontFamily:ff}}>Restore</button>
+                        ):(
+                          <button onClick={()=>deletePtsCat(cat)} style={{background:"#fdecea",border:"none",borderRadius:2,padding:"3px 9px",cursor:"pointer",fontSize:11,fontWeight:700,color:RED,fontFamily:ff}}>Delete Category</button>
+                        )}
+                      </div>
+                    </div>
+                    {!allZero&&<div style={{padding:"10px 12px"}}>
+                      {isItems?(
+                        <div style={{display:"grid",gridTemplateColumns:"repeat(auto-fill,minmax(110px,1fr))",gap:6}}>
+                          {cat.items.map(it=>ptsEdit[it.k]===0?null:(
+                            <div key={it.k}>
+                              <div style={{fontSize:9,color:"#999",marginBottom:2,display:"flex",justifyContent:"space-between",alignItems:"center"}}>
+                                <span>{it.label}</span>
+                                <span onClick={()=>deletePtsAward(it.k)} style={{cursor:"pointer",color:RED,fontWeight:800,fontSize:10,marginLeft:4,lineHeight:1}}>✕</span>
+                              </div>
+                              <NumField value={ptsEdit[it.k]} onChange={v=>setPE(it.k,v)} width="100%" style={{width:"100%",boxSizing:"border-box"}}/>
+                            </div>
+                          ))}
+                        </div>
+                      ):(
+                        <div>
+                          <div style={{display:"grid",gridTemplateColumns:"repeat(auto-fill,minmax(64px,1fr))",gap:6,marginBottom:8}}>
+                            {(ptsEdit[cat.arrayKey]||[]).map((v,i)=>(
+                              <div key={i}>
+                                <div style={{fontSize:9,color:"#999",marginBottom:2,display:"flex",justifyContent:"space-between",alignItems:"center"}}>
+                                  <span style={{fontSize:8}}>{cat.posLabel(i)}</span>
+                                  <span onClick={()=>deleteArrayPos(cat.arrayKey,i)} style={{cursor:"pointer",color:RED,fontWeight:800,fontSize:10,lineHeight:1}}>✕</span>
+                                </div>
+                                <NumField value={v} onChange={val=>setPEArr(cat.arrayKey,i,val)} width="100%" style={{width:"100%",boxSizing:"border-box"}}/>
+                              </div>
+                            ))}
+                          </div>
+                          <button onClick={()=>addArrayPos(cat.arrayKey)} style={{background:"#f0f0f0",border:"none",borderRadius:2,padding:"4px 10px",cursor:"pointer",fontFamily:ff,fontSize:11,fontWeight:700,color:"#555"}}>+ Add Position</button>
+                        </div>
+                      )}
+                    </div>}
+                  </div>
+                );
+              })}
+              {/* Custom categories */}
+              {(ptsEdit.customCategories||[]).map((cat,ci)=>(
+                <div key={ci} style={{border:"1px solid #c5d0e8",borderRadius:3,overflow:"hidden",background:"#f5f7ff"}}>
+                  <div style={{padding:"8px 12px",background:"#e8ecf8",display:"flex",gap:8,alignItems:"center"}}>
+                    <input value={cat.name} onChange={e=>setCustomCatName(ci,e.target.value)} style={{flex:1,border:"1px solid #c0c8e0",borderRadius:2,padding:"4px 8px",fontSize:12,fontFamily:ff,fontWeight:800,color:"#333",background:"#fff"}}/>
+                    <button onClick={()=>deleteCustomCat(ci)} style={{background:"#fdecea",border:"none",borderRadius:2,padding:"3px 9px",cursor:"pointer",fontSize:11,fontWeight:700,color:RED,fontFamily:ff}}>Delete</button>
+                  </div>
+                  <div style={{padding:"10px 12px",display:"flex",flexDirection:"column",gap:6}}>
+                    {cat.awards.map((award,ai)=>(
+                      <div key={ai} style={{display:"flex",gap:8,alignItems:"center"}}>
+                        <input value={award.label} onChange={e=>setCustomAward(ci,ai,"label",e.target.value)} style={{flex:1,border:"1px solid #dde",borderRadius:2,padding:"5px 8px",fontSize:12,fontFamily:ff,color:"#333",background:"#fff"}} placeholder="Award name"/>
+                        <NumField value={award.pts} onChange={v=>setCustomAward(ci,ai,"pts",v)} style={{width:64}}/>
+                        <span onClick={()=>deleteCustomAward(ci,ai)} style={{cursor:"pointer",color:RED,fontWeight:800,fontSize:14,padding:"0 4px",lineHeight:1}}>✕</span>
+                      </div>
+                    ))}
+                    <button onClick={()=>addCustomAward(ci)} style={{background:"#dce3f8",border:"none",borderRadius:2,padding:"5px 10px",cursor:"pointer",fontFamily:ff,fontSize:11,fontWeight:700,color:"#446",alignSelf:"flex-start"}}>+ Add Award</button>
+                  </div>
+                </div>
+              ))}
+              <button onClick={addCustomCat} style={{background:"#f5f5f5",border:"1px dashed #bbb",borderRadius:3,padding:"8px",cursor:"pointer",fontFamily:ff,fontSize:12,fontWeight:700,color:"#666",width:"100%",textAlign:"center"}}>+ Add Custom Category</button>
+              <div style={{display:"flex",gap:8,marginTop:4}}>
                 <button onClick={savePtsConfig} style={{flex:1,background:ptsSaved?"#007a00":RED,color:"#fff",border:"none",borderRadius:2,padding:"9px",cursor:"pointer",fontFamily:ff,fontSize:12,fontWeight:800}}>{ptsSaved?"✓ Saved":"Save Points Config"}</button>
-                <button onClick={()=>{setPtsEdit({...DEFAULT_PTS_CONFIG});}} style={{background:"#888",color:"#fff",border:"none",borderRadius:2,padding:"9px 14px",cursor:"pointer",fontFamily:ff,fontSize:12,fontWeight:800}}>Reset Defaults</button>
+                <button onClick={()=>setPtsEdit({...DEFAULT_PTS_CONFIG,customCategories:[]})} style={{background:"#888",color:"#fff",border:"none",borderRadius:2,padding:"9px 14px",cursor:"pointer",fontFamily:ff,fontSize:12,fontWeight:800}}>Reset Defaults</button>
                 <button onClick={()=>setPtsEdit(null)} style={{background:"#eee",color:"#555",border:"none",borderRadius:2,padding:"9px 14px",cursor:"pointer",fontFamily:ff,fontSize:12,fontWeight:800}}>Cancel</button>
               </div>
             </div>
@@ -3166,31 +3213,38 @@ export default function App() {
           {tab==="History"&&<HistoryTab history={history} setHistory={setHistory} saveToDb={saveToDb} commUnlocked={commUnlocked} yearRosters={setup?.yearRosters} permanentUsers={setup?.permanentUsers} currentEntries={entries} season={season} year={year} setupRows={setup?.rows||[]}/>}
           {tab==="Profiles"&&<ProfileTab history={history} setupRows={setup?.rows||[]} currentEntries={entries} season={season} year={year} permanentUsers={setup?.permanentUsers} sel={profileSel} setSel={setProfileSel} pTab={profilePTab} setPTab={setProfilePTab} articles={articles} setActiveArticle={setActiveArticle}/>}
           {tab==="Schedule"&&<ScheduleTab schedule={schedule} entries={activeEntries} week={week} season={season}/>}
-          {tab==="Rules"&&<div style={{display:"flex",flexDirection:"column",gap:10}}>
-            {(setup?.leagueRules||[]).length>0&&<div>
-              <div style={{fontSize:11,fontWeight:800,color:"#888",textTransform:"uppercase",letterSpacing:1,marginBottom:8}}>League Rules</div>
-              <div style={{display:"grid",gridTemplateColumns:isMobile?"1fr":"repeat(auto-fill,minmax(300px,1fr))",gap:10,marginBottom:10}}>
-                {(setup.leagueRules).map((rule,i)=>(
-                  <Card key={i} style={{overflow:"hidden"}}>
-                    <CardHead bg="#222">📋 {rule.title}</CardHead>
-                    <div style={{padding:"12px 16px",fontSize:13,color:"#333",lineHeight:1.6,whiteSpace:"pre-wrap"}}>{rule.body}</div>
-                  </Card>
-                ))}
+          {tab==="Rules"&&(()=>{
+            const customCats=(pc.customCategories||[]);
+            const ptsCards=[
+              {title:"🏈 Regular Season",rows:[["Win",pc.win],["Win vs Top 25",pc.top25Bonus],["Win vs Top 10",pc.top10Bonus]].filter(([,v])=>v>0).map(([l,v])=>[l,`${v} pts`])},
+              {title:"📊 Conference Standings",rows:(pc.confStand||CONF_STAND_PTS).map((v,i)=>v>0?[`${i+1}${i===0?"st":i===1?"nd":i===2?"rd":"th"} Place`,`${v} pts`]:null).filter(Boolean)},
+              {title:"🏆 Conference Championship",rows:[["Make the Game",pc.confChampApp],["Win the Game",pc.confChampWin]].filter(([,v])=>v>0).map(([l,v])=>[l,`${v} pts`])},
+              {title:"🥣 Bowl & Playoff",rows:[["Make a Bowl",pc.bowlApp],["Win a Bowl",pc.bowlWin],["Make CFP",pc.playoffApp],["Win Playoff Game",pc.playoffWin],["Win Semifinal",pc.playoffSemiWin],["Win National Championship",pc.nattyWin]].filter(([,v])=>v>0).map(([l,v])=>[l,`${v} pts`])},
+              {title:"🎓 Recruiting",rows:(pc.recruiting||RECRUITING_PTS).map((v,i)=>v>0?[`#${i+1} Recruiting`,`${v} pts`]:null).filter(Boolean)},
+              {title:"🏅 Dynasty Top 5",rows:(pc.dynastyTop5||[15,10,7,5,3]).map((v,i)=>v>0?[`#${i+1} in Dynasty`,`${v} pts`]:null).filter(Boolean)},
+              {title:"⭐ Prestige & Awards",rows:[["Gain a Prestige Star",pc.prestigeGain],["Reach Max Prestige",pc.prestigeMax],["Heisman Winner",pc.heisman]].filter(([,v])=>v>0).map(([l,v])=>[l,`${v} pts`])},
+              ...customCats.map(c=>({title:`📋 ${c.name}`,rows:(c.awards||[]).filter(a=>a.pts>0).map(a=>[a.label,`${a.pts} pts`])})),
+            ].filter(c=>c.rows.length>0);
+            return(
+              <div style={{display:"flex",flexDirection:"column",gap:10}}>
+                {(setup?.leagueRules||[]).length>0&&<div>
+                  <div style={{fontSize:11,fontWeight:800,color:"#888",textTransform:"uppercase",letterSpacing:1,marginBottom:8}}>League Rules</div>
+                  <div style={{display:"grid",gridTemplateColumns:isMobile?"1fr":"repeat(auto-fill,minmax(300px,1fr))",gap:10,marginBottom:10}}>
+                    {(setup.leagueRules).map((rule,i)=>(
+                      <Card key={i} style={{overflow:"hidden"}}>
+                        <CardHead bg="#222">📋 {rule.title}</CardHead>
+                        <div style={{padding:"12px 16px",fontSize:13,color:"#333",lineHeight:1.6,whiteSpace:"pre-wrap"}}>{rule.body}</div>
+                      </Card>
+                    ))}
+                  </div>
+                </div>}
+                {ptsCards.length>0&&<div style={{fontSize:11,fontWeight:800,color:"#888",textTransform:"uppercase",letterSpacing:1,marginBottom:8}}>Points System</div>}
+                <div style={{display:"grid",gridTemplateColumns:isMobile?"1fr":"repeat(auto-fill,minmax(250px,1fr))",gap:10}}>
+                  {ptsCards.map(({title,rows})=><Card key={title} style={{overflow:"hidden"}}><CardHead bg={RED}>{title}</CardHead><table style={{width:"100%",borderCollapse:"collapse"}}><tbody>{rows.map(([l,p])=><tr key={l} style={{borderBottom:"1px solid #f0f0f0"}}><td style={{padding:"8px 12px",color:"#333",fontSize:13}}>{l}</td><td style={{padding:"8px 12px",textAlign:"right",color:RED,fontWeight:800,fontSize:13}}>{p}</td></tr>)}</tbody></table></Card>)}
+                </div>
               </div>
-            </div>}
-            <div style={{fontSize:11,fontWeight:800,color:"#888",textTransform:"uppercase",letterSpacing:1,marginBottom:8}}>Points System</div>
-            <div style={{display:"grid",gridTemplateColumns:isMobile?"1fr":"repeat(auto-fill,minmax(250px,1fr))",gap:10}}>
-            {[
-              ["🏈 Regular Season",[["Win",`${pc.win} pts`],["Win vs Top 25",`+${pc.top25Bonus} bonus`],["Win vs Top 10",`+${pc.top10Bonus} bonus`],["Loss","0 pts"]]],
-              ["📊 Conference Standings",(pc.confStand||CONF_STAND_PTS).map((v,i)=>[`${i+1}${i===0?"st":i===1?"nd":i===2?"rd":"th"}`,String(v)])],
-              ["🏆 Conference Championship",[["Make the Game",`${pc.confChampApp} pts`],["Win the Game",`+${pc.confChampWin} pts`]]],
-              ["🥣 Bowl & Playoff",[["Make a Bowl",`${pc.bowlApp} pts`],["Win a Bowl",`+${pc.bowlWin} pts`],["Make CFP",`${pc.playoffApp} pts`],["Win Playoff Game",`+${pc.playoffWin} pts`],["Win Semifinal",`+${pc.playoffSemiWin} pts`],["Win National Championship",`+${pc.nattyWin} pts`]]],
-              ["🎓 Recruiting (Top 5 Users)",(pc.recruiting||RECRUITING_PTS).slice(0,5).map((v,i)=>[`#${i+1}`,`${v} pts`])],
-              ["🏅 Dynasty Top 5",(pc.dynastyTop5||[15,10,7,5,3]).map((v,i)=>[`#${i+1} in Dynasty`,`${v} pts`])],
-              ["⭐ Prestige & Awards",[["Gain a Prestige Star",`${pc.prestigeGain} pts`],["Reach Max Prestige",`${pc.prestigeMax} pts`],["Heisman Winner",`${pc.heisman} pts`]]],
-            ].map(([title,rows])=><Card key={title} style={{overflow:"hidden"}}><CardHead bg={RED}>{title}</CardHead><table style={{width:"100%",borderCollapse:"collapse"}}><tbody>{rows.map(([l,p])=><tr key={l} style={{borderBottom:"1px solid #f0f0f0"}}><td style={{padding:"8px 12px",color:"#333",fontSize:13}}>{l}</td><td style={{padding:"8px 12px",textAlign:"right",color:RED,fontWeight:800,fontSize:13}}>{p}</td></tr>)}</tbody></table></Card>)}
-            </div>
-          </div>}
+            );
+          })()}
         </div>
 
         {/* Right rail - desktop only */}
