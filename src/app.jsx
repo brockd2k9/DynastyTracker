@@ -1479,10 +1479,13 @@ function DynastyRedzone({setup,entries,setTab,autoLiveStatuses,autoEmbedUrls}) {
     return { key, userName: r.userName, teamName: r.teamName, url: s.url, embedUrl, platform: getPlatform(s.url) };
   });
   const [activeIdx, setActiveIdx] = useState(0);
+  const [switchCount, setSwitchCount] = useState(0);
   const active = liveStreams[Math.min(activeIdx, liveStreams.length - 1)];
 
   // Reset active index if streams change
-  useEffect(()=>{ setActiveIdx(0); },[liveStreams.length]);
+  useEffect(()=>{ setActiveIdx(0); setSwitchCount(c=>c+1); },[liveStreams.length]);
+
+  function switchTo(i) { setActiveIdx(i); setSwitchCount(c=>c+1); }
 
   if (liveStreams.length === 0) {
     const checking = Object.keys(autoLiveStatuses||{}).length === 0 && (setup?.rows||[]).some(r=>streamLinks[r.userId||r.userName]?.url);
@@ -1510,7 +1513,7 @@ function DynastyRedzone({setup,entries,setTab,autoLiveStatuses,autoEmbedUrls}) {
       {/* Main player */}
       {active&&<div style={{position:"relative",width:"100%",paddingTop:"56.25%",background:"#000"}}>
         <iframe
-          key={active.embedUrl}
+          key={`${active.key}-${switchCount}`}
           src={active.embedUrl}
           style={{position:"absolute",top:0,left:0,width:"100%",height:"100%",border:"none"}}
           allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; fullscreen"
@@ -1528,7 +1531,7 @@ function DynastyRedzone({setup,entries,setTab,autoLiveStatuses,autoEmbedUrls}) {
           <div style={{fontSize:10,fontWeight:800,color:"#888",textTransform:"uppercase",letterSpacing:1.5,marginBottom:8}}>Switch Game</div>
           <div style={{display:"flex",gap:8,overflowX:"auto",paddingBottom:4}}>
             {liveStreams.map((s, i) => (
-              <button key={i} onClick={() => setActiveIdx(i)} style={{background:activeIdx===i?"#cc0000":"#1e1e1e",border:activeIdx===i?"2px solid #ff4444":"2px solid #333",borderRadius:3,padding:"8px 14px",cursor:"pointer",fontFamily:ff,minWidth:140,textAlign:"left",flexShrink:0}}>
+              <button key={i} onClick={() => switchTo(i)} style={{background:activeIdx===i?"#cc0000":"#1e1e1e",border:activeIdx===i?"2px solid #ff4444":"2px solid #333",borderRadius:3,padding:"8px 14px",cursor:"pointer",fontFamily:ff,minWidth:140,textAlign:"left",flexShrink:0}}>
                 <div style={{fontSize:10,color:activeIdx===i?"#ffaaaa":"#666",fontWeight:700,textTransform:"uppercase",letterSpacing:0.5,marginBottom:3}}>{s.platform==="twitch"?"🟣 Twitch":"🔴 YouTube"}</div>
                 <div style={{fontSize:12,fontWeight:800,color:activeIdx===i?"#fff":"#aaa"}}>{s.userName}</div>
                 <div style={{fontSize:11,color:activeIdx===i?"rgba(255,255,255,0.7)":"#666"}}>{s.teamName}</div>
