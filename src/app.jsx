@@ -1604,21 +1604,30 @@ function SetupPanel({entries,setup,postSeasonInputs,setPSI,handleStart,setCommis
       // Parse aliases field (comma-separated old names)
       (sr.aliases||"").split(",").map(a=>a.trim()).filter(Boolean).forEach(alias=>{oldNameMap[alias]=newName;});
     });
-    const updatedRows=(setup?.rows||[]).map(r=>{const sr=valid.find(s=>s.userId===r.userId);const n=userIdToName[r.userId];const base={...r};if(n)base.userName=n;if(sr?.aliases!==undefined)base.aliases=sr.aliases;return base;});
+    // Build teamName change map: oldTeamName → newTeamName (by userId)
+    const oldTeamMap={};
+    valid.forEach(sr=>{
+      const existing=(setup?.rows||[]).find(r=>r.userId===sr.userId);
+      const newTeam=sr.teamName?.trim();
+      if(existing&&newTeam&&newTeam!==existing.teamName) oldTeamMap[existing.teamName]=newTeam;
+    });
+    const updatedRows=(setup?.rows||[]).map(r=>{const sr=valid.find(s=>s.userId===r.userId);const n=userIdToName[r.userId];const base={...r};if(n)base.userName=n;if(sr?.teamName?.trim())base.teamName=sr.teamName.trim();if(sr?.aliases!==undefined)base.aliases=sr.aliases;return base;});
     const updatedPerm=(setup?.permanentUsers||[]).map(p=>{const n=userIdToName[p.id];return n?{...p,defaultName:n}:p;});
     const updated={...setup,rows:updatedRows,permanentUsers:updatedPerm};
     setSetup(updated);
-    // Normalize live entries: fix any entry whose userId is known but userName doesn't match canonical name
+    // Normalize live entries: fix userName and teamName
     const updatedEntries=entries.map(e=>{
       const n=userIdToName[e.userId]||oldNameMap[e.userName];
-      return n&&n!==e.userName?{...e,userName:n}:e;
+      const newTeam=oldTeamMap[e.teamName];
+      return {...e,...(n&&n!==e.userName?{userName:n}:{}),...(newTeam?{teamName:newTeam}:{})};
     });
     setEntries(updatedEntries);
     // Normalize all historical seasons: fix by userId (catches mismatches) then fall back to old name
     if(history?.length){
       const updatedHistory=history.map(s=>({...s,finalStandings:s.finalStandings.map(t=>{
         const n=userIdToName[t.userId]||oldNameMap[t.userName];
-        return n&&n!==t.userName?{...t,userName:n}:t;
+        const newTeam=oldTeamMap[t.teamName];
+        return {...t,...(n&&n!==t.userName?{userName:n}:{}),...(newTeam?{teamName:newTeam}:{})};
       }),
       // Also rename season-level champion/heisman fields (stored as userName strings)
       champion: (()=>{const n=userIdToName[Object.keys(userIdToName).find(id=>(setup?.permanentUsers||[]).find(p=>p.id===id)?.defaultName===s.champion)]||oldNameMap[s.champion];return n||s.champion;})(),
