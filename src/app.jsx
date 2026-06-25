@@ -1429,6 +1429,19 @@ function SetupPanel({entries,setup,postSeasonInputs,setPSI,handleStart,setCommis
   function openPtsEditor(){setPtsEdit({...DEFAULT_PTS_CONFIG,...(setup?.pointsConfig||{})});setPtsSaved(false);}
   function savePtsConfig(){const updated={...setup,pointsConfig:ptsEdit};setSetup(updated);saveToDb({setup:updated});setPtsSaved(true);setTimeout(()=>setPtsSaved(false),2000);}
   function setPE(key,val){setPtsEdit(p=>({...p,[key]:val}));}
+  // League rules editor
+  const [leagueRules,setLeagueRules] = useState(setup?.leagueRules||[]);
+  const [rulesSaved,setRulesSaved] = useState(false);
+  const [newRuleTitle,setNewRuleTitle] = useState("");
+  const [newRuleBody,setNewRuleBody] = useState("");
+  const [editingRule,setEditingRule] = useState(null); // index being edited
+  useEffect(()=>{if(setup?.leagueRules)setLeagueRules(setup.leagueRules);},[setup?.leagueRules]);
+  function saveLeagueRules(rules){const updated={...setup,leagueRules:rules};setSetup(updated);saveToDb({setup:updated});setRulesSaved(true);setTimeout(()=>setRulesSaved(false),2000);}
+  function addRule(){if(!newRuleTitle.trim()||!newRuleBody.trim())return;const updated=[...leagueRules,{title:newRuleTitle.trim(),body:newRuleBody.trim()}];setLeagueRules(updated);saveLeagueRules(updated);setNewRuleTitle("");setNewRuleBody("");}
+  function deleteRule(i){if(!window.confirm("Delete this rule?"))return;const updated=leagueRules.filter((_,idx)=>idx!==i);setLeagueRules(updated);saveLeagueRules(updated);}
+  function startEditRule(i){setEditingRule(i);setNewRuleTitle(leagueRules[i].title);setNewRuleBody(leagueRules[i].body);}
+  function saveEditRule(){if(!newRuleTitle.trim()||!newRuleBody.trim())return;const updated=leagueRules.map((r,i)=>i===editingRule?{title:newRuleTitle.trim(),body:newRuleBody.trim()}:r);setLeagueRules(updated);saveLeagueRules(updated);setEditingRule(null);setNewRuleTitle("");setNewRuleBody("");}
+  function cancelEditRule(){setEditingRule(null);setNewRuleTitle("");setNewRuleBody("");}
   function setPEArr(key,idx,val){setPtsEdit(p=>({...p,[key]:p[key].map((v,i)=>i===idx?val:v)}));}
   const setSR=(i,f,v)=>setSetupRows(p=>p.map((r,idx)=>idx===i?{...r,[f]:v}:r));
   const addRow=()=>setSetupRows(p=>[...p,{userId:"",userName:"",teamName:""}]);
@@ -1644,6 +1657,41 @@ function SetupPanel({entries,setup,postSeasonInputs,setPSI,handleStart,setCommis
               </div>
             </div>
           )}
+        </div>
+      </Card>
+      <Card>
+        <CardHead bg="#333">📋 League Rules</CardHead>
+        <div style={{padding:"14px 16px"}}>
+          <div style={{fontSize:12,color:"#666",marginBottom:12}}>Add custom rules that all league members can see on the Rules page.</div>
+          {leagueRules.length>0&&<div style={{display:"flex",flexDirection:"column",gap:8,marginBottom:14}}>
+            {leagueRules.map((rule,i)=>(
+              <div key={i} style={{background:"#f7f7f7",border:"1px solid #e5e5e5",borderRadius:3,padding:"10px 12px"}}>
+                <div style={{display:"flex",justifyContent:"space-between",alignItems:"flex-start",gap:8}}>
+                  <div style={{fontWeight:800,fontSize:13,color:"#111",flex:1}}>{rule.title}</div>
+                  <div style={{display:"flex",gap:6,flexShrink:0}}>
+                    <button onClick={()=>startEditRule(i)} style={{background:"#eee",border:"none",borderRadius:2,padding:"3px 8px",cursor:"pointer",fontSize:11,fontWeight:700,color:"#444",fontFamily:ff}}>Edit</button>
+                    <button onClick={()=>deleteRule(i)} style={{background:"#fdecea",border:"none",borderRadius:2,padding:"3px 8px",cursor:"pointer",fontSize:11,fontWeight:700,color:RED,fontFamily:ff}}>✕</button>
+                  </div>
+                </div>
+                <div style={{fontSize:12,color:"#555",marginTop:5,lineHeight:1.5,whiteSpace:"pre-wrap"}}>{rule.body}</div>
+              </div>
+            ))}
+          </div>}
+          <div style={{borderTop:leagueRules.length>0?"1px solid #eee":"none",paddingTop:leagueRules.length>0?12:0}}>
+            <div style={{fontSize:11,fontWeight:800,color:"#444",textTransform:"uppercase",letterSpacing:0.5,marginBottom:8}}>{editingRule!==null?"Edit Rule":"Add Rule"}</div>
+            <input value={newRuleTitle} onChange={e=>setNewRuleTitle(e.target.value)} placeholder="Rule title (e.g. Trade Deadline)" style={{width:"100%",boxSizing:"border-box",border:"1px solid #ddd",borderRadius:2,padding:"8px 10px",fontSize:13,fontFamily:ff,marginBottom:6,color:"#111"}}/>
+            <textarea value={newRuleBody} onChange={e=>setNewRuleBody(e.target.value)} placeholder="Rule details..." rows={3} style={{width:"100%",boxSizing:"border-box",border:"1px solid #ddd",borderRadius:2,padding:"8px 10px",fontSize:13,fontFamily:ff,resize:"vertical",lineHeight:1.5,color:"#111"}}/>
+            <div style={{display:"flex",gap:8,marginTop:8}}>
+              {editingRule!==null?(
+                <>
+                  <button onClick={saveEditRule} style={{flex:1,background:rulesSaved?"#007a00":RED,color:"#fff",border:"none",borderRadius:2,padding:"8px",cursor:"pointer",fontFamily:ff,fontSize:12,fontWeight:800}}>{rulesSaved?"✓ Saved":"Save Changes"}</button>
+                  <button onClick={cancelEditRule} style={{flex:1,background:"#eee",color:"#444",border:"none",borderRadius:2,padding:"8px",cursor:"pointer",fontFamily:ff,fontSize:12,fontWeight:700}}>Cancel</button>
+                </>
+              ):(
+                <button onClick={addRule} style={{flex:1,background:newRuleTitle.trim()&&newRuleBody.trim()?RED:"#ccc",color:"#fff",border:"none",borderRadius:2,padding:"8px",cursor:newRuleTitle.trim()&&newRuleBody.trim()?"pointer":"default",fontFamily:ff,fontSize:12,fontWeight:800}}>+ Add Rule</button>
+              )}
+            </div>
+          </div>
         </div>
       </Card>
       <div style={{display:"flex",gap:10,flexWrap:"wrap"}}>
@@ -3118,7 +3166,20 @@ export default function App() {
           {tab==="History"&&<HistoryTab history={history} setHistory={setHistory} saveToDb={saveToDb} commUnlocked={commUnlocked} yearRosters={setup?.yearRosters} permanentUsers={setup?.permanentUsers} currentEntries={entries} season={season} year={year} setupRows={setup?.rows||[]}/>}
           {tab==="Profiles"&&<ProfileTab history={history} setupRows={setup?.rows||[]} currentEntries={entries} season={season} year={year} permanentUsers={setup?.permanentUsers} sel={profileSel} setSel={setProfileSel} pTab={profilePTab} setPTab={setProfilePTab} articles={articles} setActiveArticle={setActiveArticle}/>}
           {tab==="Schedule"&&<ScheduleTab schedule={schedule} entries={activeEntries} week={week} season={season}/>}
-          {tab==="Rules"&&<div style={{display:"grid",gridTemplateColumns:isMobile?"1fr":"repeat(auto-fill,minmax(250px,1fr))",gap:10}}>
+          {tab==="Rules"&&<div style={{display:"flex",flexDirection:"column",gap:10}}>
+            {(setup?.leagueRules||[]).length>0&&<div>
+              <div style={{fontSize:11,fontWeight:800,color:"#888",textTransform:"uppercase",letterSpacing:1,marginBottom:8}}>League Rules</div>
+              <div style={{display:"grid",gridTemplateColumns:isMobile?"1fr":"repeat(auto-fill,minmax(300px,1fr))",gap:10,marginBottom:10}}>
+                {(setup.leagueRules).map((rule,i)=>(
+                  <Card key={i} style={{overflow:"hidden"}}>
+                    <CardHead bg="#222">📋 {rule.title}</CardHead>
+                    <div style={{padding:"12px 16px",fontSize:13,color:"#333",lineHeight:1.6,whiteSpace:"pre-wrap"}}>{rule.body}</div>
+                  </Card>
+                ))}
+              </div>
+            </div>}
+            <div style={{fontSize:11,fontWeight:800,color:"#888",textTransform:"uppercase",letterSpacing:1,marginBottom:8}}>Points System</div>
+            <div style={{display:"grid",gridTemplateColumns:isMobile?"1fr":"repeat(auto-fill,minmax(250px,1fr))",gap:10}}>
             {[
               ["🏈 Regular Season",[["Win",`${pc.win} pts`],["Win vs Top 25",`+${pc.top25Bonus} bonus`],["Win vs Top 10",`+${pc.top10Bonus} bonus`],["Loss","0 pts"]]],
               ["📊 Conference Standings",(pc.confStand||CONF_STAND_PTS).map((v,i)=>[`${i+1}${i===0?"st":i===1?"nd":i===2?"rd":"th"}`,String(v)])],
@@ -3128,6 +3189,7 @@ export default function App() {
               ["🏅 Dynasty Top 5",(pc.dynastyTop5||[15,10,7,5,3]).map((v,i)=>[`#${i+1} in Dynasty`,`${v} pts`])],
               ["⭐ Prestige & Awards",[["Gain a Prestige Star",`${pc.prestigeGain} pts`],["Reach Max Prestige",`${pc.prestigeMax} pts`],["Heisman Winner",`${pc.heisman} pts`]]],
             ].map(([title,rows])=><Card key={title} style={{overflow:"hidden"}}><CardHead bg={RED}>{title}</CardHead><table style={{width:"100%",borderCollapse:"collapse"}}><tbody>{rows.map(([l,p])=><tr key={l} style={{borderBottom:"1px solid #f0f0f0"}}><td style={{padding:"8px 12px",color:"#333",fontSize:13}}>{l}</td><td style={{padding:"8px 12px",textAlign:"right",color:RED,fontWeight:800,fontSize:13}}>{p}</td></tr>)}</tbody></table></Card>)}
+            </div>
           </div>}
         </div>
 
