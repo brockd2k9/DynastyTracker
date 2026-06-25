@@ -1460,7 +1460,7 @@ function toYouTubeChannelLiveUrl(url) {
   return null;
 }
 
-function DynastyRedzone({setup,entries,setTab,autoLiveStatuses,autoEmbedUrls}) {
+function DynastyRedzone({setup,entries,setTab,autoLiveStatuses,autoEmbedUrls,schedule,week}) {
   const isMobile = useIsMobile();
   const streamLinks = setup?.streamLinks || {};
   const rows = setup?.rows || [];
@@ -1476,7 +1476,9 @@ function DynastyRedzone({setup,entries,setTab,autoLiveStatuses,autoEmbedUrls}) {
     const key = r.userId || r.userName;
     const s = streamLinks[key];
     const embedUrl = (autoEmbedUrls||{})[key] || getEmbedUrl(s.url);
-    return { key, userName: r.userName, teamName: r.teamName, url: s.url, embedUrl, platform: getPlatform(s.url) };
+    const opponent = (schedule||{})[week]?.[r.teamName];
+    const matchup = opponent && opponent !== "BYE" && opponent !== "CPU" ? `${r.teamName} vs ${opponent}` : r.teamName;
+    return { key, userName: r.userName, teamName: r.teamName, url: s.url, embedUrl, platform: getPlatform(s.url), matchup };
   });
   const [activeIdx, setActiveIdx] = useState(0);
   const [switchCount, setSwitchCount] = useState(0);
@@ -1521,8 +1523,8 @@ function DynastyRedzone({setup,entries,setTab,autoLiveStatuses,autoEmbedUrls}) {
         />
         {/* Overlay label */}
         <div style={{position:"absolute",bottom:0,left:0,right:0,background:"linear-gradient(transparent,rgba(0,0,0,0.85))",padding:"24px 16px 12px",pointerEvents:"none"}}>
-          <div style={{fontSize:11,color:"#ff6666",fontWeight:800,textTransform:"uppercase",letterSpacing:1,marginBottom:3}}>{active.platform==="twitch"?"🟣 Twitch":"🔴 YouTube"}</div>
-          <div style={{fontSize:isMobile?14:18,fontWeight:900,color:"#fff"}}>{active.userName} — {active.teamName}</div>
+          <div style={{fontSize:11,color:"#ff6666",fontWeight:800,textTransform:"uppercase",letterSpacing:1,marginBottom:3}}>{active.platform==="twitch"?"🟣 Twitch":"🔴 YouTube"} · {active.userName}</div>
+          <div style={{fontSize:isMobile?14:18,fontWeight:900,color:"#fff"}}>{active.matchup}</div>
         </div>
       </div>}
       {/* Game switcher */}
@@ -1531,10 +1533,9 @@ function DynastyRedzone({setup,entries,setTab,autoLiveStatuses,autoEmbedUrls}) {
           <div style={{fontSize:10,fontWeight:800,color:"#888",textTransform:"uppercase",letterSpacing:1.5,marginBottom:8}}>Switch Game</div>
           <div style={{display:"flex",gap:8,overflowX:"auto",paddingBottom:4}}>
             {liveStreams.map((s, i) => (
-              <button key={i} onClick={() => switchTo(i)} style={{background:activeIdx===i?"#cc0000":"#1e1e1e",border:activeIdx===i?"2px solid #ff4444":"2px solid #333",borderRadius:3,padding:"8px 14px",cursor:"pointer",fontFamily:ff,minWidth:140,textAlign:"left",flexShrink:0}}>
-                <div style={{fontSize:10,color:activeIdx===i?"#ffaaaa":"#666",fontWeight:700,textTransform:"uppercase",letterSpacing:0.5,marginBottom:3}}>{s.platform==="twitch"?"🟣 Twitch":"🔴 YouTube"}</div>
-                <div style={{fontSize:12,fontWeight:800,color:activeIdx===i?"#fff":"#aaa"}}>{s.userName}</div>
-                <div style={{fontSize:11,color:activeIdx===i?"rgba(255,255,255,0.7)":"#666"}}>{s.teamName}</div>
+              <button key={i} onClick={() => switchTo(i)} style={{background:activeIdx===i?"#cc0000":"#1e1e1e",border:activeIdx===i?"2px solid #ff4444":"2px solid #333",borderRadius:3,padding:"8px 14px",cursor:"pointer",fontFamily:ff,minWidth:160,textAlign:"left",flexShrink:0}}>
+                <div style={{fontSize:10,color:activeIdx===i?"#ffaaaa":"#888",fontWeight:800,textTransform:"uppercase",letterSpacing:1,marginBottom:4}}>CH {i+1} — {s.userName}</div>
+                <div style={{fontSize:12,fontWeight:800,color:activeIdx===i?"#fff":"#aaa",lineHeight:1.3}}>{s.matchup}</div>
               </button>
             ))}
           </div>
@@ -3494,7 +3495,7 @@ export default function App() {
               </div>
             );
           })()}
-          {tab==="Redzone"&&<DynastyRedzone setup={setup} entries={activeEntries} setTab={setTab} autoLiveStatuses={autoLiveStatuses} autoEmbedUrls={autoEmbedUrls}/>}
+          {tab==="Redzone"&&<DynastyRedzone setup={setup} entries={activeEntries} setTab={setTab} autoLiveStatuses={autoLiveStatuses} autoEmbedUrls={autoEmbedUrls} schedule={schedule} week={week}/>}
         </div>
 
         {/* Right rail - desktop only */}
