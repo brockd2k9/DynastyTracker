@@ -1548,7 +1548,8 @@ function DynastyRedzone({setup,entries,setTab,autoLiveStatuses,autoEmbedUrls,sch
 // ── SetupPanel ────────────────────────────────────────────────────────────
 function SetupPanel({entries,setup,postSeasonInputs,setPSI,handleStart,setCommissionerUnlocked,season,year,setEntries,setWeekResults,setSetup,saveToDb,history,setHistory,autoLiveStatuses,autoEmbedUrls}) {
   const [setupRows,setSetupRows] = useState(setup?.rows?.length?setup.rows.map(r=>({userId:r.userId||"",userName:r.userName,teamName:r.teamName,aliases:r.aliases||""})):Array.from({length:4},()=>({userId:"",userName:"",teamName:"",aliases:""})));
-  useEffect(()=>{if(setup?.rows?.length)setSetupRows(setup.rows.map(r=>({userId:r.userId||"",userName:r.userName,teamName:r.teamName,aliases:r.aliases||""})));},[setup?.rows]);
+  const skipRowsSync = useRef(false);
+  useEffect(()=>{if(skipRowsSync.current){skipRowsSync.current=false;return;}if(setup?.rows?.length)setSetupRows(setup.rows.map(r=>({userId:r.userId||"",userName:r.userName,teamName:r.teamName,aliases:r.aliases||""})));},[setup?.rows]);
   const [setupLeague,setSetupLeague] = useState(setup?.leagueName||"");
   const [rosterSeason,setRosterSeason] = useState(season+1);
   const [rosterEdits,setRosterEdits] = useState({});
@@ -1590,49 +1591,46 @@ function SetupPanel({entries,setup,postSeasonInputs,setPSI,handleStart,setCommis
   function addMidSeason(){const last=setupRows[setupRows.length-1];if(!last?.userName?.trim()||!last?.teamName?.trim())return alert("Fill in the last row first.");if(entries.find(e=>e.teamName===last.teamName))return alert("That team is already in the dynasty.");const uid=last.userId||genId();const newE=INITIAL_ENTRY(last.userName.trim(),last.teamName.trim(),uid);setEntries(prev=>[...prev,newE]);setWeekResults(prev=>[...prev,{teamName:newE.teamName,userName:newE.userName,result:"none",ranked25:false,ranked10:false}]);if(postSeasonInputs)setPSI(prev=>({...prev,confStandings:[...prev.confStandings,{teamName:newE.teamName,rank:prev.confStandings.length+1}],bowls:[...prev.bowls,{teamName:newE.teamName,bowl:"none"}],recruiting:[...prev.recruiting,{teamName:newE.teamName,rank:prev.recruiting.length+1}]}));const newRow={userId:uid,userName:newE.userName,teamName:newE.teamName};const pUser={id:uid,defaultName:newE.userName};setSetup(prev=>{const updated={...prev,rows:[...(prev?.rows||[]),newRow],permanentUsers:[...(prev?.permanentUsers||[]),pUser]};setTimeout(()=>saveToDb({setup:updated}),100);return updated;});alert(`${newE.userName} (${newE.teamName}) added!`);}
   const [permSaved,setPermSaved] = useState(false);
   function savePermNames(){
-    const valid=setupRows.filter(r=>r.userName.trim());
+    const valid=setupRows.filter(r=>r.userName.trim()&&r.teamName.trim());
     if(valid.length<2)return alert("Need at least 2 users.");
-    // Map userId→canonicalName for ALL permanent users (not just changed ones)
-    // Also map any aliases or old defaultNames → canonical name for history entries without userId
-    const userIdToName={}, oldNameMap={};
+    // Detect old→new name/team changes by comparing with current setup.rows
+    const oldNameMap={}, oldTeamMap={}, userIdToName={};
     valid.forEach(sr=>{
-      const pu=(setup?.permanentUsers||[]).find(p=>p.id===sr.userId);
+      // Match existing row by userId, then by teamName as fallback
+      const ex=(setup?.rows||[]).find(r=>r.userId&&r.userId===sr.userId)||(setup?.rows||[]).find(r=>!sr.userId&&r.teamName===sr.teamName);
       const newName=sr.userName.trim();
-      if(!newName||!sr.userId)return;
-      userIdToName[sr.userId]=newName;
-      if(pu&&newName!==pu.defaultName) oldNameMap[pu.defaultName]=newName;
-      // Parse aliases field (comma-separated old names)
+      const newTeam=sr.teamName.trim();
+      if(sr.userId) userIdToName[sr.userId]=newName;
+      if(ex){
+        if(newName&&newName!==ex.userName) oldNameMap[ex.userName]=newName;
+        if(newTeam&&newTeam!==ex.teamName) oldTeamMap[ex.teamName]=newTeam;
+      }
+      // aliases as old names
       (sr.aliases||"").split(",").map(a=>a.trim()).filter(Boolean).forEach(alias=>{oldNameMap[alias]=newName;});
     });
-    // Build teamName change map: oldTeamName → newTeamName (by userId)
-    const oldTeamMap={};
-    valid.forEach(sr=>{
-      const existing=(setup?.rows||[]).find(r=>r.userId===sr.userId);
-      const newTeam=sr.teamName?.trim();
-      if(existing&&newTeam&&newTeam!==existing.teamName) oldTeamMap[existing.teamName]=newTeam;
+    // Build new rows directly from setupRows (source of truth), preserving active/metadata from existing rows
+    const updatedRows=valid.map(sr=>{
+      const ex=(setup?.rows||[]).find(r=>r.userId&&r.userId===sr.userId)||(setup?.rows||[]).find(r=>r.teamName===sr.teamName)||(setup?.rows||[]).find(r=>oldTeamMap[r.teamName]===sr.teamName.trim());
+      return {...(ex||{}),userId:sr.userId||ex?.userId||"",userName:sr.userName.trim(),teamName:sr.teamName.trim(),aliases:sr.aliases||""};
     });
-    const updatedRows=(setup?.rows||[]).map(r=>{const sr=valid.find(s=>s.userId===r.userId);const n=userIdToName[r.userId];const base={...r};if(n)base.userName=n;if(sr?.teamName?.trim())base.teamName=sr.teamName.trim();if(sr?.aliases!==undefined)base.aliases=sr.aliases;return base;});
     const updatedPerm=(setup?.permanentUsers||[]).map(p=>{const n=userIdToName[p.id];return n?{...p,defaultName:n}:p;});
     const updated={...setup,rows:updatedRows,permanentUsers:updatedPerm};
+    // Skip the rows sync effect for this one update — we own these values
+    skipRowsSync.current=true;
     setSetup(updated);
-    // Normalize live entries: fix userName and teamName
+    // Update live entries
     const updatedEntries=entries.map(e=>{
-      const n=userIdToName[e.userId]||oldNameMap[e.userName];
-      const newTeam=oldTeamMap[e.teamName];
-      return {...e,...(n&&n!==e.userName?{userName:n}:{}),...(newTeam?{teamName:newTeam}:{})};
+      const newName=userIdToName[e.userId]||oldNameMap[e.userName]||e.userName;
+      const newTeam=oldTeamMap[e.teamName]||e.teamName;
+      return (newName!==e.userName||newTeam!==e.teamName)?{...e,userName:newName,teamName:newTeam}:e;
     });
     setEntries(updatedEntries);
-    // Normalize all historical seasons: fix by userId (catches mismatches) then fall back to old name
     if(history?.length){
       const updatedHistory=history.map(s=>({...s,finalStandings:s.finalStandings.map(t=>{
-        const n=userIdToName[t.userId]||oldNameMap[t.userName];
-        const newTeam=oldTeamMap[t.teamName];
-        return {...t,...(n&&n!==t.userName?{userName:n}:{}),...(newTeam?{teamName:newTeam}:{})};
-      }),
-      // Also rename season-level champion/heisman fields (stored as userName strings)
-      champion: (()=>{const n=userIdToName[Object.keys(userIdToName).find(id=>(setup?.permanentUsers||[]).find(p=>p.id===id)?.defaultName===s.champion)]||oldNameMap[s.champion];return n||s.champion;})(),
-      heisman: oldNameMap[s.heisman]||s.heisman,
-    }));
+        const newName=userIdToName[t.userId]||oldNameMap[t.userName]||t.userName;
+        const newTeam=oldTeamMap[t.teamName]||t.teamName;
+        return (newName!==t.userName||newTeam!==t.teamName)?{...t,userName:newName,teamName:newTeam}:t;
+      }),champion:oldNameMap[s.champion]||s.champion,heisman:oldNameMap[s.heisman]||s.heisman}));
       setHistory(updatedHistory);
       saveToDb({setup:updated,entries:updatedEntries,history:updatedHistory});
     } else {
