@@ -1449,26 +1449,48 @@ function getPlatform(url) {
   if (/youtube\.com|youtu\.be/i.test(url)) return "youtube";
   return null;
 }
-function DynastyRedzone({setup,entries,setTab}) {
+function toYouTubeChannelLiveUrl(url) {
+  if (!url) return null;
+  const handle = url.match(/youtube\.com\/@([^/?#\s]+)/i);
+  if (handle) return `https://www.youtube.com/@${handle[1]}/live`;
+  const channel = url.match(/youtube\.com\/channel\/([^/?#\s]+)/i);
+  if (channel) return `https://www.youtube.com/channel/${channel[1]}/live`;
+  const custom = url.match(/youtube\.com\/c\/([^/?#\s]+)/i);
+  if (custom) return `https://www.youtube.com/c/${custom[1]}/live`;
+  return null;
+}
+
+function DynastyRedzone({setup,entries,setTab,autoLiveStatuses,autoEmbedUrls}) {
   const isMobile = useIsMobile();
   const streamLinks = setup?.streamLinks || {};
   const rows = setup?.rows || [];
   const liveStreams = rows.filter(r => {
-    const s = streamLinks[r.userId || r.userName];
-    return s?.isLive && getEmbedUrl(s.url);
+    const key = r.userId || r.userName;
+    const s = streamLinks[key];
+    if (!s?.url) return false;
+    // Auto-detected status takes precedence; fall back to manual toggle
+    const live = key in (autoLiveStatuses||{}) ? autoLiveStatuses[key] : s.isLive;
+    const embedUrl = (autoEmbedUrls||{})[key] || getEmbedUrl(s.url);
+    return live && embedUrl;
   }).map(r => {
-    const s = streamLinks[r.userId || r.userName];
-    return { userName: r.userName, teamName: r.teamName, url: s.url, embedUrl: getEmbedUrl(s.url), platform: getPlatform(s.url) };
+    const key = r.userId || r.userName;
+    const s = streamLinks[key];
+    const embedUrl = (autoEmbedUrls||{})[key] || getEmbedUrl(s.url);
+    return { key, userName: r.userName, teamName: r.teamName, url: s.url, embedUrl, platform: getPlatform(s.url) };
   });
   const [activeIdx, setActiveIdx] = useState(0);
   const active = liveStreams[Math.min(activeIdx, liveStreams.length - 1)];
 
+  // Reset active index if streams change
+  useEffect(()=>{ setActiveIdx(0); },[liveStreams.length]);
+
   if (liveStreams.length === 0) {
+    const checking = Object.keys(autoLiveStatuses||{}).length === 0 && (setup?.rows||[]).some(r=>streamLinks[r.userId||r.userName]?.url);
     return (
       <div style={{display:"flex",flexDirection:"column",alignItems:"center",justifyContent:"center",minHeight:400,gap:20,padding:32}}>
-        <div style={{fontSize:48}}>📺</div>
-        <div style={{fontSize:isMobile?20:28,fontWeight:900,color:"#111",textTransform:"uppercase",letterSpacing:1,textAlign:"center"}}>No Games Live</div>
-        <div style={{fontSize:14,color:"#888",textAlign:"center",maxWidth:360}}>Dynasty Redzone will show live streams here when league members are playing. Check back when games are in progress.</div>
+        <div style={{fontSize:48}}>{checking?"⏳":"📺"}</div>
+        <div style={{fontSize:isMobile?20:28,fontWeight:900,color:"#111",textTransform:"uppercase",letterSpacing:1,textAlign:"center"}}>{checking?"Checking Streams…":"No Games Live"}</div>
+        <div style={{fontSize:14,color:"#888",textAlign:"center",maxWidth:360}}>{checking?"Detecting live streams from configured channels…":"Dynasty Redzone will show live streams here when league members are playing. Check back when games are in progress."}</div>
         <div style={{fontSize:12,color:"#aaa",marginTop:8}}>Stream links are managed by the Commissioner in Admin Controls.</div>
       </div>
     );
@@ -1520,7 +1542,7 @@ function DynastyRedzone({setup,entries,setTab}) {
 }
 
 // ── SetupPanel ────────────────────────────────────────────────────────────
-function SetupPanel({entries,setup,postSeasonInputs,setPSI,handleStart,setCommissionerUnlocked,season,year,setEntries,setWeekResults,setSetup,saveToDb,history,setHistory}) {
+function SetupPanel({entries,setup,postSeasonInputs,setPSI,handleStart,setCommissionerUnlocked,season,year,setEntries,setWeekResults,setSetup,saveToDb,history,setHistory,autoLiveStatuses,autoEmbedUrls}) {
   const [setupRows,setSetupRows] = useState(setup?.rows?.length?setup.rows.map(r=>({userId:r.userId||"",userName:r.userName,teamName:r.teamName,aliases:r.aliases||""})):Array.from({length:4},()=>({userId:"",userName:"",teamName:"",aliases:""})));
   useEffect(()=>{if(setup?.rows?.length)setSetupRows(setup.rows.map(r=>({userId:r.userId||"",userName:r.userName,teamName:r.teamName,aliases:r.aliases||""})));},[setup?.rows]);
   const [setupLeague,setSetupLeague] = useState(setup?.leagueName||"");
@@ -1803,31 +1825,42 @@ function SetupPanel({entries,setup,postSeasonInputs,setPSI,handleStart,setCommis
       <Card>
         <CardHead bg="#111">📺 Dynasty RedZone — Stream Links</CardHead>
         <div style={{padding:"14px 16px"}}>
-          <div style={{fontSize:12,color:"#666",marginBottom:12}}>Set each player's stream URL (YouTube or Twitch). Toggle Live when they're playing — they'll appear on the Dynasty RedZone page.</div>
+          <div style={{fontSize:12,color:"#666",marginBottom:4}}>Set each player's channel URL. Streams are auto-detected when live — no manual toggling needed. Use Force Live as an override.</div>
+          <div style={{fontSize:11,color:"#888",marginBottom:12}}>YouTube: paste channel URL (e.g. youtube.com/@handle) &nbsp;|&nbsp; Twitch: paste channel URL (e.g. twitch.tv/username)</div>
           <div style={{display:"flex",flexDirection:"column",gap:8}}>
             {(setup?.rows||[]).map(r=>{
               const key=r.userId||r.userName;
               const s=(setup?.streamLinks||{})[key]||{url:"",isLive:false};
+              const autoLive=(autoLiveStatuses||{})[key];
+              const hasAutoCheck=key in (autoLiveStatuses||{});
+              const effectiveLive=hasAutoCheck?autoLive:s.isLive;
               function setStream(field,val){const updated={...setup,streamLinks:{...(setup.streamLinks||{}),[key]:{...s,[field]:val}}};setSetup(updated);saveToDb({setup:updated});}
               return(
-                <div key={key} style={{background:"#fafafa",border:"1px solid #e5e5e5",borderRadius:3,padding:"10px 12px"}}>
-                  <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:8}}>
-                    <div>
+                <div key={key} style={{background:"#fafafa",border:`1px solid ${effectiveLive?"#cc0000":"#e5e5e5"}`,borderRadius:3,padding:"10px 12px"}}>
+                  <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:8,gap:8}}>
+                    <div style={{flex:1,minWidth:0}}>
                       <div style={{fontSize:13,fontWeight:800,color:"#111"}}>{r.userName}</div>
                       <div style={{fontSize:11,color:"#888"}}>{r.teamName}</div>
                     </div>
-                    <button onClick={()=>setStream("isLive",!s.isLive)} style={{background:s.isLive?"#cc0000":"#1e1e1e",color:"#fff",border:"none",borderRadius:2,padding:"5px 12px",cursor:"pointer",fontSize:11,fontWeight:800,fontFamily:ff,letterSpacing:0.5,minWidth:64}}>
-                      {s.isLive?"● LIVE":"○ OFF"}
-                    </button>
+                    <div style={{display:"flex",gap:6,alignItems:"center",flexShrink:0}}>
+                      {hasAutoCheck&&(
+                        <div style={{background:autoLive?"#cc0000":"#1e1e1e",color:"#fff",borderRadius:2,padding:"3px 8px",fontSize:10,fontWeight:800,letterSpacing:0.5}}>
+                          {autoLive?"● AUTO LIVE":"○ AUTO OFF"}
+                        </div>
+                      )}
+                      <button onClick={()=>setStream("isLive",!s.isLive)} title="Force Live override — use if auto-detection isn't working" style={{background:s.isLive?"#7a0000":"#444",color:"#fff",border:"none",borderRadius:2,padding:"3px 9px",cursor:"pointer",fontSize:10,fontWeight:800,fontFamily:ff,letterSpacing:0.3}}>
+                        {s.isLive?"⚡ FORCED":"⚡ Force Live"}
+                      </button>
+                    </div>
                   </div>
                   <input
                     value={s.url||""}
                     onChange={e=>setStream("url",e.target.value)}
-                    placeholder="YouTube or Twitch URL (e.g. twitch.tv/username)"
+                    placeholder="youtube.com/@channelname or twitch.tv/username"
                     style={{width:"100%",boxSizing:"border-box",border:"1px solid #ddd",borderRadius:2,padding:"7px 10px",fontSize:12,fontFamily:ff,color:"#111",background:"#fff"}}
                   />
-                  {s.url&&!getEmbedUrl(s.url)&&<div style={{fontSize:11,color:"#e67e00",marginTop:4}}>⚠ URL not recognized — paste a YouTube or Twitch link</div>}
-                  {s.url&&getEmbedUrl(s.url)&&<div style={{fontSize:11,color:"#007a00",marginTop:4}}>✓ {getPlatform(s.url)==="twitch"?"Twitch":"YouTube"} stream ready</div>}
+                  {s.url&&!getEmbedUrl(s.url)&&!toYouTubeChannelLiveUrl(s.url)&&<div style={{fontSize:11,color:"#e67e00",marginTop:4}}>⚠ URL not recognized — paste a YouTube channel or Twitch channel link</div>}
+                  {s.url&&(getEmbedUrl(s.url)||toYouTubeChannelLiveUrl(s.url))&&<div style={{fontSize:11,color:"#007a00",marginTop:4}}>✓ {getPlatform(s.url)==="twitch"?"Twitch — auto-detecting via embed events":"YouTube — auto-detecting every 90 seconds"}</div>}
                 </div>
               );
             })}
@@ -2916,6 +2949,11 @@ export default function App() {
   const [dbLoading,setDbLoading] = useState(true);
   const [dbError,setDbError] = useState(null);
   const [lastSaved,setLastSaved] = useState(null);
+  // Stream auto-detection
+  const [autoLiveStatuses,setAutoLiveStatuses] = useState({}); // {userKey: bool}
+  const [autoEmbedUrls,setAutoEmbedUrls] = useState({}); // {userKey: embedUrl}
+  const twitchPlayersRef = useRef({});
+  const twitchScriptRef = useRef(false);
 
   // ── Load from Supabase on mount ──
   useEffect(function() {
@@ -2956,6 +2994,86 @@ export default function App() {
       setDbLoading(false);
     });
   }, []);
+
+  // ── YouTube live auto-detection (poll oEmbed every 90s) ──
+  useEffect(()=>{
+    const rows=setup?.rows||[];
+    const streamLinks=setup?.streamLinks||{};
+    const ytRows=rows.filter(r=>{const s=streamLinks[r.userId||r.userName];return s?.url&&getPlatform(s.url)==="youtube";});
+    if(!ytRows.length)return;
+    async function checkYT(){
+      for(const r of ytRows){
+        const key=r.userId||r.userName;
+        const url=streamLinks[key]?.url;
+        const liveUrl=toYouTubeChannelLiveUrl(url);
+        if(!liveUrl)continue;
+        try{
+          const resp=await fetch(`https://www.youtube.com/oembed?url=${encodeURIComponent(liveUrl)}&format=json`);
+          if(resp.ok){
+            const data=await resp.json();
+            const vidMatch=data.html?.match(/embed\/([A-Za-z0-9_-]{11})/);
+            const embedUrl=vidMatch?`https://www.youtube.com/embed/${vidMatch[1]}?autoplay=1&rel=0`:null;
+            setAutoLiveStatuses(p=>({...p,[key]:true}));
+            if(embedUrl)setAutoEmbedUrls(p=>({...p,[key]:embedUrl}));
+          }else{
+            setAutoLiveStatuses(p=>({...p,[key]:false}));
+            setAutoEmbedUrls(p=>{const n={...p};delete n[key];return n;});
+          }
+        }catch{setAutoLiveStatuses(p=>({...p,[key]:false}));}
+      }
+    }
+    checkYT();
+    const iv=setInterval(checkYT,90000);
+    return()=>clearInterval(iv);
+  },[setup?.streamLinks,setup?.rows]);
+
+  // ── Twitch live auto-detection (Twitch embed player events) ──
+  useEffect(()=>{
+    const rows=setup?.rows||[];
+    const streamLinks=setup?.streamLinks||{};
+    const tRows=rows.filter(r=>{const s=streamLinks[r.userId||r.userName];return s?.url&&getPlatform(s.url)==="twitch";});
+    if(!tRows.length)return;
+    function initPlayers(){
+      if(!window.Twitch)return;
+      tRows.forEach(r=>{
+        const key=r.userId||r.userName;
+        const url=streamLinks[key]?.url;
+        const m=url?.match(/twitch\.tv\/([^/?#\s]+)/i);
+        if(!m)return;
+        const channel=m[1];
+        // Clean up old player for this key
+        if(twitchPlayersRef.current[key]){try{twitchPlayersRef.current[key].destroy();}catch{}}
+        let div=document.getElementById(`tz-hidden-${key}`);
+        if(!div){div=document.createElement("div");div.id=`tz-hidden-${key}`;div.style.cssText="position:fixed;width:1px;height:1px;opacity:0;pointer-events:none;left:-9999px;top:-9999px;";document.body.appendChild(div);}
+        try{
+          const parent=window.location.hostname||"localhost";
+          const player=new window.Twitch.Player(`tz-hidden-${key}`,{channel,width:400,height:300,muted:true,autoplay:true,parent:[parent]});
+          const setLive=v=>{setAutoLiveStatuses(p=>({...p,[key]:v}));if(v)setAutoEmbedUrls(p=>({...p,[key]:getEmbedUrl(url)}));};
+          player.addEventListener(window.Twitch.Player.ONLINE,()=>setLive(true));
+          player.addEventListener(window.Twitch.Player.OFFLINE,()=>setLive(false));
+          // Check initial state after player loads
+          player.addEventListener(window.Twitch.Player.READY,()=>{setTimeout(()=>setLive(!player.isPaused()),4000);});
+          twitchPlayersRef.current[key]=player;
+        }catch(e){console.warn("Twitch player init failed",e);}
+      });
+    }
+    if(window.Twitch){initPlayers();}
+    else if(!twitchScriptRef.current){
+      twitchScriptRef.current=true;
+      const s=document.createElement("script");
+      s.src="https://embed.twitch.tv/embed/v1.js";
+      s.onload=initPlayers;
+      document.head.appendChild(s);
+    }
+    return()=>{
+      Object.entries(twitchPlayersRef.current).forEach(([k,p])=>{
+        try{p.destroy();}catch{}
+        const d=document.getElementById(`tz-hidden-${k}`);
+        if(d)d.remove();
+      });
+      twitchPlayersRef.current={};
+    };
+  },[setup?.streamLinks,setup?.rows]);
 
   // ── Save to Supabase whenever key state changes ──
   // saveToDb defined after render to access latest state
@@ -3373,7 +3491,7 @@ export default function App() {
               </div>
             );
           })()}
-          {tab==="Redzone"&&<DynastyRedzone setup={setup} entries={activeEntries} setTab={setTab}/>}
+          {tab==="Redzone"&&<DynastyRedzone setup={setup} entries={activeEntries} setTab={setTab} autoLiveStatuses={autoLiveStatuses} autoEmbedUrls={autoEmbedUrls}/>}
         </div>
 
         {/* Right rail - desktop only */}
@@ -3444,7 +3562,7 @@ export default function App() {
           {commTab==="Enter Results"&&<EnterResultsPanel entries={activeEntries} weekResults={weekResults} setWeekResults={setWeekResults} week={week} setWeek={setWeek} applyBulkResults={applyBulkResults} applyWeekResults={applyWeekResults} postSeasonInputs={postSeasonInputs} setPSI={setPSI} applyPostSeason={applyPostSeason} finalizeSeason={finalizeSeason} season={season} setSeason={setSeason} year={year} setYear={setYear} teamNames={teamNames} schedule={schedule} history={history} onImportHistory={importHistoricalSeason} setupRows={setup?.rows||[]} saveToDb={saveToDb}/>}
           {commTab==="Schedule"&&<SchedulePanel entries={activeEntries} schedule={schedule} setSchedule={setSchedule}/>}
           {commTab==="Content"&&<ContentHub sorted={sorted} entries={activeEntries} week={week} season={season} year={year} leagueName={leagueName} history={history} leader={leader} articles={articles} setArticles={setArticles} setActiveArticle={setActiveArticle} schedule={schedule} setup={setup} setSetup={setSetup} saveToDb={saveToDb}/>}
-          {commTab==="League Setup"&&<SetupPanel entries={entries} setup={setup} postSeasonInputs={postSeasonInputs} setPSI={setPSI} handleStart={handleStart} setCommissionerUnlocked={setCommUnlocked} season={season} year={year} setEntries={setEntries} setWeekResults={setWeekResults} setSetup={setSetup} saveToDb={saveToDb} history={history} setHistory={setHistory}/>}
+          {commTab==="League Setup"&&<SetupPanel entries={entries} setup={setup} postSeasonInputs={postSeasonInputs} setPSI={setPSI} handleStart={handleStart} setCommissionerUnlocked={setCommUnlocked} season={season} year={year} setEntries={setEntries} setWeekResults={setWeekResults} setSetup={setSetup} saveToDb={saveToDb} history={history} setHistory={setHistory} autoLiveStatuses={autoLiveStatuses} autoEmbedUrls={autoEmbedUrls}/>}
         </div>
       </div>}
     </div>
