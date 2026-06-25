@@ -1425,6 +1425,100 @@ function ProfileTab({history,setupRows,currentEntries,season,year,permanentUsers
   );
 }
 
+// ── Dynasty Redzone ───────────────────────────────────────────────────────
+function getEmbedUrl(url) {
+  if (!url) return null;
+  const twitchMatch = url.match(/twitch\.tv\/([^/?#\s]+)/i);
+  if (twitchMatch) {
+    const parent = typeof window !== "undefined" ? window.location.hostname : "localhost";
+    return `https://player.twitch.tv/?channel=${twitchMatch[1]}&parent=${parent}&autoplay=true`;
+  }
+  const ytWatch = url.match(/[?&]v=([A-Za-z0-9_-]{11})/);
+  if (ytWatch) return `https://www.youtube.com/embed/${ytWatch[1]}?autoplay=1&rel=0`;
+  const ytLive = url.match(/youtube\.com\/live\/([A-Za-z0-9_-]{11})/);
+  if (ytLive) return `https://www.youtube.com/embed/${ytLive[1]}?autoplay=1&rel=0`;
+  const ytEmbed = url.match(/youtube\.com\/embed\/([A-Za-z0-9_-]{11})/);
+  if (ytEmbed) return url;
+  const ytShort = url.match(/youtu\.be\/([A-Za-z0-9_-]{11})/);
+  if (ytShort) return `https://www.youtube.com/embed/${ytShort[1]}?autoplay=1&rel=0`;
+  return null;
+}
+function getPlatform(url) {
+  if (!url) return null;
+  if (/twitch\.tv/i.test(url)) return "twitch";
+  if (/youtube\.com|youtu\.be/i.test(url)) return "youtube";
+  return null;
+}
+function DynastyRedzone({setup,entries,setTab}) {
+  const isMobile = useIsMobile();
+  const streamLinks = setup?.streamLinks || {};
+  const rows = setup?.rows || [];
+  const liveStreams = rows.filter(r => {
+    const s = streamLinks[r.userId || r.userName];
+    return s?.isLive && getEmbedUrl(s.url);
+  }).map(r => {
+    const s = streamLinks[r.userId || r.userName];
+    return { userName: r.userName, teamName: r.teamName, url: s.url, embedUrl: getEmbedUrl(s.url), platform: getPlatform(s.url) };
+  });
+  const [activeIdx, setActiveIdx] = useState(0);
+  const active = liveStreams[Math.min(activeIdx, liveStreams.length - 1)];
+
+  if (liveStreams.length === 0) {
+    return (
+      <div style={{display:"flex",flexDirection:"column",alignItems:"center",justifyContent:"center",minHeight:400,gap:20,padding:32}}>
+        <div style={{fontSize:48}}>📺</div>
+        <div style={{fontSize:isMobile?20:28,fontWeight:900,color:"#111",textTransform:"uppercase",letterSpacing:1,textAlign:"center"}}>No Games Live</div>
+        <div style={{fontSize:14,color:"#888",textAlign:"center",maxWidth:360}}>Dynasty Redzone will show live streams here when league members are playing. Check back when games are in progress.</div>
+        <div style={{fontSize:12,color:"#aaa",marginTop:8}}>Stream links are managed by the Commissioner in Admin Controls.</div>
+      </div>
+    );
+  }
+
+  return (
+    <div style={{display:"flex",flexDirection:"column",gap:0,background:"#0a0a0a",minHeight:400,borderRadius:4,overflow:"hidden"}}>
+      {/* Header bar */}
+      <div style={{background:"linear-gradient(135deg,#cc0000,#8b0000)",padding:"10px 16px",display:"flex",alignItems:"center",gap:12}}>
+        <div style={{display:"flex",alignItems:"center",gap:8}}>
+          <div style={{background:"#ff3333",borderRadius:3,padding:"2px 8px",fontSize:10,fontWeight:900,color:"#fff",letterSpacing:1.5,animation:"pulse 1.5s ease-in-out infinite"}}>● LIVE</div>
+          <div style={{fontSize:16,fontWeight:900,color:"#fff",letterSpacing:2,textTransform:"uppercase"}}>Dynasty RedZone</div>
+        </div>
+        <div style={{flex:1}}/>
+        <div style={{fontSize:12,color:"rgba(255,255,255,0.7)"}}>{liveStreams.length} game{liveStreams.length>1?"s":""} live</div>
+      </div>
+      {/* Main player */}
+      {active&&<div style={{position:"relative",width:"100%",paddingTop:"56.25%",background:"#000"}}>
+        <iframe
+          key={active.embedUrl}
+          src={active.embedUrl}
+          style={{position:"absolute",top:0,left:0,width:"100%",height:"100%",border:"none"}}
+          allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; fullscreen"
+          allowFullScreen
+        />
+        {/* Overlay label */}
+        <div style={{position:"absolute",bottom:0,left:0,right:0,background:"linear-gradient(transparent,rgba(0,0,0,0.85))",padding:"24px 16px 12px",pointerEvents:"none"}}>
+          <div style={{fontSize:11,color:"#ff6666",fontWeight:800,textTransform:"uppercase",letterSpacing:1,marginBottom:3}}>{active.platform==="twitch"?"🟣 Twitch":"🔴 YouTube"}</div>
+          <div style={{fontSize:isMobile?14:18,fontWeight:900,color:"#fff"}}>{active.userName} — {active.teamName}</div>
+        </div>
+      </div>}
+      {/* Game switcher */}
+      {liveStreams.length > 1 && (
+        <div style={{background:"#111",padding:"10px 12px"}}>
+          <div style={{fontSize:10,fontWeight:800,color:"#888",textTransform:"uppercase",letterSpacing:1.5,marginBottom:8}}>Switch Game</div>
+          <div style={{display:"flex",gap:8,overflowX:"auto",paddingBottom:4}}>
+            {liveStreams.map((s, i) => (
+              <button key={i} onClick={() => setActiveIdx(i)} style={{background:activeIdx===i?"#cc0000":"#1e1e1e",border:activeIdx===i?"2px solid #ff4444":"2px solid #333",borderRadius:3,padding:"8px 14px",cursor:"pointer",fontFamily:ff,minWidth:140,textAlign:"left",flexShrink:0}}>
+                <div style={{fontSize:10,color:activeIdx===i?"#ffaaaa":"#666",fontWeight:700,textTransform:"uppercase",letterSpacing:0.5,marginBottom:3}}>{s.platform==="twitch"?"🟣 Twitch":"🔴 YouTube"}</div>
+                <div style={{fontSize:12,fontWeight:800,color:activeIdx===i?"#fff":"#aaa"}}>{s.userName}</div>
+                <div style={{fontSize:11,color:activeIdx===i?"rgba(255,255,255,0.7)":"#666"}}>{s.teamName}</div>
+              </button>
+            ))}
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
 // ── SetupPanel ────────────────────────────────────────────────────────────
 function SetupPanel({entries,setup,postSeasonInputs,setPSI,handleStart,setCommissionerUnlocked,season,year,setEntries,setWeekResults,setSetup,saveToDb,history,setHistory}) {
   const [setupRows,setSetupRows] = useState(setup?.rows?.length?setup.rows.map(r=>({userId:r.userId||"",userName:r.userName,teamName:r.teamName,aliases:r.aliases||""})):Array.from({length:4},()=>({userId:"",userName:"",teamName:"",aliases:""})));
@@ -1704,6 +1798,40 @@ function SetupPanel({entries,setup,postSeasonInputs,setPSI,handleStart,setCommis
               </div>
             </div>
           )}
+        </div>
+      </Card>
+      <Card>
+        <CardHead bg="#111">📺 Dynasty RedZone — Stream Links</CardHead>
+        <div style={{padding:"14px 16px"}}>
+          <div style={{fontSize:12,color:"#666",marginBottom:12}}>Set each player's stream URL (YouTube or Twitch). Toggle Live when they're playing — they'll appear on the Dynasty RedZone page.</div>
+          <div style={{display:"flex",flexDirection:"column",gap:8}}>
+            {(setup?.rows||[]).map(r=>{
+              const key=r.userId||r.userName;
+              const s=(setup?.streamLinks||{})[key]||{url:"",isLive:false};
+              function setStream(field,val){const updated={...setup,streamLinks:{...(setup.streamLinks||{}),[key]:{...s,[field]:val}}};setSetup(updated);saveToDb({setup:updated});}
+              return(
+                <div key={key} style={{background:"#fafafa",border:"1px solid #e5e5e5",borderRadius:3,padding:"10px 12px"}}>
+                  <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:8}}>
+                    <div>
+                      <div style={{fontSize:13,fontWeight:800,color:"#111"}}>{r.userName}</div>
+                      <div style={{fontSize:11,color:"#888"}}>{r.teamName}</div>
+                    </div>
+                    <button onClick={()=>setStream("isLive",!s.isLive)} style={{background:s.isLive?"#cc0000":"#1e1e1e",color:"#fff",border:"none",borderRadius:2,padding:"5px 12px",cursor:"pointer",fontSize:11,fontWeight:800,fontFamily:ff,letterSpacing:0.5,minWidth:64}}>
+                      {s.isLive?"● LIVE":"○ OFF"}
+                    </button>
+                  </div>
+                  <input
+                    value={s.url||""}
+                    onChange={e=>setStream("url",e.target.value)}
+                    placeholder="YouTube or Twitch URL (e.g. twitch.tv/username)"
+                    style={{width:"100%",boxSizing:"border-box",border:"1px solid #ddd",borderRadius:2,padding:"7px 10px",fontSize:12,fontFamily:ff,color:"#111",background:"#fff"}}
+                  />
+                  {s.url&&!getEmbedUrl(s.url)&&<div style={{fontSize:11,color:"#e67e00",marginTop:4}}>⚠ URL not recognized — paste a YouTube or Twitch link</div>}
+                  {s.url&&getEmbedUrl(s.url)&&<div style={{fontSize:11,color:"#007a00",marginTop:4}}>✓ {getPlatform(s.url)==="twitch"?"Twitch":"YouTube"} stream ready</div>}
+                </div>
+              );
+            })}
+          </div>
         </div>
       </Card>
       <Card>
@@ -3045,7 +3173,7 @@ export default function App() {
 
       {/* Nav tabs */}
       <div style={{background:RED,display:"flex",alignItems:"center",overflowX:"auto",WebkitOverflowScrolling:"touch"}}>
-        {(isMobile?[["Home","Home"],["Stndgs","Standings"],["Sched","Schedule"],["History","History"],["Profiles","Profiles"],["Rules","Rules"]]:[["Home","Home"],["Standings","Standings"],["Schedule","Schedule"],["History","History"],["Profiles","Profiles"],["Rules","Rules"]]).map(([label,val])=>(
+        {(isMobile?[["Home","Home"],["Stndgs","Standings"],["Sched","Schedule"],["History","History"],["Profiles","Profiles"],["Rules","Rules"],["RedZone","Redzone"]]:[["Home","Home"],["Standings","Standings"],["Schedule","Schedule"],["History","History"],["Profiles","Profiles"],["Rules","Rules"],["RedZone","Redzone"]]).map(([label,val])=>(
           <button key={val} onClick={()=>setTab(val)} style={{flex:"0 0 auto",padding:isMobile?"0 10px":"0 14px",height:isMobile?38:40,background:tab===val?"rgba(255,255,255,0.18)":"transparent",border:"none",borderBottom:tab===val?"3px solid #fff":"3px solid transparent",color:"#fff",cursor:"pointer",fontSize:isMobile?10:11,fontWeight:tab===val?800:500,fontFamily:ff,textTransform:"uppercase",letterSpacing:0.3,whiteSpace:"nowrap"}}>{label}</button>
         ))}
       </div>
@@ -3082,7 +3210,7 @@ export default function App() {
         {/* Left sidebar - desktop only */}
         {isMobile?null:<div style={{display:"flex",flexDirection:"column",gap:12}}>
           <Card><CardHead>Dynasty Info</CardHead><div style={{padding:"8px 0"}}>{[["Season",season],["Year",year],["Week",week>12?"Post":week],["Teams",entries.length]].map(([l,v])=><div key={l} style={{display:"flex",justifyContent:"space-between",padding:"6px 12px",borderBottom:"1px solid #f5f5f5"}}><span style={{fontSize:12,color:"#888"}}>{l}</span><span style={{fontSize:12,fontWeight:700,color:"#111"}}>{v}</span></div>)}</div></Card>
-          <Card><CardHead>Quick Links</CardHead><div style={{padding:"4px 0"}}>{["Home","Standings","Schedule","History","Profiles","Rules"].map(l=><div key={l} onClick={()=>setTab(l)} style={{padding:"8px 12px",fontSize:12,color:RED,cursor:"pointer",borderBottom:"1px solid #f5f5f5",fontWeight:500}}>🏈 {l}</div>)}</div></Card>
+          <Card><CardHead>Quick Links</CardHead><div style={{padding:"4px 0"}}>{["Home","Standings","Schedule","History","Profiles","Rules","Redzone"].map(l=><div key={l} onClick={()=>setTab(l)} style={{padding:"8px 12px",fontSize:12,color:RED,cursor:"pointer",borderBottom:"1px solid #f5f5f5",fontWeight:500}}>🏈 {l}</div>)}</div></Card>
           <Card><CardHead bg={RED}>Points Leader</CardHead>{sorted.length===0?<div style={{padding:"14px 12px",textAlign:"center",color:"#bbb",fontSize:12}}>Not started</div>:sorted.slice(0,1).map(t=><div key={t.teamName} style={{padding:"14px 12px",textAlign:"center"}}><div style={{fontSize:26,fontWeight:900,color:RED}}>{calcTotal(t)}</div><div style={{fontSize:14,fontWeight:700,color:"#111",marginTop:2}}>{t.teamName}</div><div style={{fontSize:11,color:"#555",marginTop:4}}>{t.wins}W - {t.losses}L</div></div>)}</Card>
         </div>}
 
@@ -3091,7 +3219,7 @@ export default function App() {
 
           {/* Page header - compact on mobile */}
           <Card style={{padding:isMobile?"10px 12px":"14px 16px",borderLeft:`4px solid ${RED}`}}>
-            <div style={{fontSize:isMobile?15:18,fontWeight:900,color:"#111",textTransform:"uppercase"}}>{tab==="Home"?"Dynasty Home":tab==="Standings"?"Dynasty Standings":tab==="Schedule"?"Season Schedule":tab==="History"?"Season History":tab==="Profiles"?"Player Profiles":"Points System Rules"}</div>
+            <div style={{fontSize:isMobile?15:18,fontWeight:900,color:"#111",textTransform:"uppercase"}}>{tab==="Home"?"Dynasty Home":tab==="Standings"?"Dynasty Standings":tab==="Schedule"?"Season Schedule":tab==="History"?"Season History":tab==="Profiles"?"Player Profiles":tab==="Redzone"?"Dynasty RedZone":"Points System Rules"}</div>
             <div style={{fontSize:10,color:"#888",marginTop:2}}>{leagueName} · S{season} · {year} · {week>12?"Post":`Wk ${week}`}</div>
           </Card>
 
@@ -3245,10 +3373,11 @@ export default function App() {
               </div>
             );
           })()}
+          {tab==="Redzone"&&<DynastyRedzone setup={setup} entries={activeEntries} setTab={setTab}/>}
         </div>
 
         {/* Right rail - desktop only */}
-        {!isMobile&&<RightRail sorted={sorted} articles={articles} entries={activeEntries} week={week} season={season} leader={leader} setActiveArticle={setActiveArticle}/>}
+        {tab!=="Redzone"&&!isMobile&&<RightRail sorted={sorted} articles={articles} entries={activeEntries} week={week} season={season} leader={leader} setActiveArticle={setActiveArticle}/>}
       </div>
 
       {/* Hidden footer */}
