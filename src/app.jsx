@@ -3134,8 +3134,9 @@ export default function App() {
     dbSave({setup:newSetup,season:1,week:1,entries:initial,history:[],post_season_inputs:newPSI,articles:[]});
   }
 
-  const inactiveTeamNames=new Set((setup?.rows||[]).filter(r=>r.active===false).map(r=>r.teamName));
-  const activeEntries=inactiveTeamNames.size>0?entries.filter(e=>!inactiveTeamNames.has(e.teamName)):entries;
+  const activeUserIds=new Set((setup?.rows||[]).filter(r=>r.active!==false&&r.userId).map(r=>r.userId));
+  const activeUserNames=new Set((setup?.rows||[]).filter(r=>r.active!==false).map(r=>r.userName));
+  const activeEntries=entries.filter(e=>(e.userId&&activeUserIds.has(e.userId))||(!e.userId&&activeUserNames.has(e.userName)));
   const sorted=[...activeEntries].sort((a,b)=>calcTotal(b)-calcTotal(a));
   const leader=sorted[0]?calcTotal(sorted[0]):0;
   const teamNames=activeEntries.map(e=>e.teamName);
