@@ -580,6 +580,7 @@ function HistoryTab({history, setHistory, saveToDb, commUnlocked, entries, setEn
   const [expandTeam,setExpandTeam] = useState({});
   const [liveEdit,setLiveEdit] = useState(false);
   const [liveData,setLiveData] = useState(null);
+  const [showAllWins,setShowAllWins] = useState(false);
   // Aggregate all-time stats — userName is permanent, only teamName changes per season
   const allWins={}, confT={}, nattyT={};
   history.forEach(s=>{
@@ -674,10 +675,14 @@ function HistoryTab({history, setHistory, saveToDb, commUnlocked, entries, setEn
       {/* All-Time Leaders */}
       {history.length>0&&<div style={{display:"grid",gridTemplateColumns:isMobile?"1fr":"1fr 1fr 1fr",gap:14}}>
         <Card><CardHead bg={RED}>All-Time Wins</CardHead><div style={{padding:"4px 0"}}>
-          {wList.map(([u,w],i)=><div key={u} style={{display:"flex",justifyContent:"space-between",alignItems:"center",padding:"7px 12px",borderBottom:"1px solid #f5f5f5"}}>
-            <span style={{fontSize:12,color:i===0?"#111":"#555",fontWeight:i===0?700:400}}>{i+1}. {u}</span>
-            <span style={{fontSize:13,fontWeight:800,color:"#007a00"}}>{w}W</span>
-          </div>)}
+          {(()=>{const filtered=wList.filter(([,w])=>w>0);const display=showAllWins?filtered:filtered.slice(0,5);return(<>
+            {display.length===0&&<div style={{padding:"10px 12px",fontSize:12,color:"#aaa"}}>No wins recorded yet</div>}
+            {display.map(([u,w],i)=><div key={u} style={{display:"flex",justifyContent:"space-between",alignItems:"center",padding:"7px 12px",borderBottom:"1px solid #f5f5f5"}}>
+              <span style={{fontSize:12,color:i===0?"#111":"#555",fontWeight:i===0?700:400}}>{i+1}. {u}</span>
+              <span style={{fontSize:13,fontWeight:800,color:"#007a00"}}>{w}W</span>
+            </div>)}
+            {filtered.length>5&&<button onClick={()=>setShowAllWins(v=>!v)} style={{width:"100%",padding:"8px",background:"none",border:"none",borderTop:"1px solid #f0f0f0",color:RED,fontSize:11,fontWeight:800,cursor:"pointer",fontFamily:ff,textTransform:"uppercase",letterSpacing:0.5}}>{showAllWins?`Show Less ▲`:`Show All (${filtered.length}) ▼`}</button>}
+          </>);})()}
         </div></Card>
         <Card><CardHead bg="#1a3a6b">National Titles</CardHead><div style={{padding:"4px 0"}}>
           {Object.keys(nattyT).length===0&&<div style={{padding:"10px 12px",fontSize:12,color:"#aaa"}}>None recorded</div>}
