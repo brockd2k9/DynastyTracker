@@ -1524,7 +1524,7 @@ function DynastyRedzone({setup,entries,setTab,autoLiveStatuses,autoEmbedUrls,sch
           </div>
           {checking&&<div style={{fontSize:12,color:"#cc0000",fontWeight:800,letterSpacing:1,textTransform:"uppercase",animation:"pulse 1.5s ease-in-out infinite"}}>● Checking Streams…</div>}
         </div>
-        <RedzoneVoice leagueName={setup?.leagueName}/>
+        <RedzoneVoice/>
         <RedzoneChat setupRows={setup?.rows}/>
       </div>
     );
@@ -1582,43 +1582,22 @@ function DynastyRedzone({setup,entries,setTab,autoLiveStatuses,autoEmbedUrls,sch
           </div>
         </div>
       )}
-      <RedzoneVoice leagueName={setup?.leagueName}/>
+      <RedzoneVoice/>
       <RedzoneChat setupRows={setup?.rows}/>
     </div>
   );
 }
 
 // ── RedZone Voice ─────────────────────────────────────────────────────────
-function RedzoneVoice({leagueName}) {
+function RedzoneVoice() {
   const ff = "'Helvetica Neue',Arial,sans-serif";
-  const [joined, setJoined] = useState(false);
-  const roomName = (leagueName||"DynastyLeague").replace(/[^a-zA-Z0-9]/g,"").toLowerCase() + "redzone";
   return (
-    <div style={{background:"#0a0a0a",borderTop:"2px solid #1a1a1a"}}>
-      {!joined ? (
-        <div style={{padding:"12px 14px",display:"flex",alignItems:"center",gap:12}}>
-          <div style={{flex:1,minWidth:0}}>
-            <div style={{fontSize:11,fontWeight:900,color:"#fff",textTransform:"uppercase",letterSpacing:1.5}}>🎙️ Voice Chat</div>
-            <div style={{fontSize:10,color:"#555",marginTop:2}}>Talk with your league while watching</div>
-          </div>
-          <button onClick={()=>setJoined(true)} style={{background:"#1a6b1a",color:"#fff",border:"none",borderRadius:3,padding:"8px 18px",cursor:"pointer",fontFamily:ff,fontSize:12,fontWeight:800,flexShrink:0}}>Join Voice</button>
-        </div>
-      ) : (
-        <div style={{display:"flex",flexDirection:"column"}}>
-          <div style={{padding:"8px 14px",display:"flex",alignItems:"center",gap:10,borderBottom:"1px solid #1a1a1a"}}>
-            <div style={{width:8,height:8,borderRadius:"50%",background:"#00cc44",flexShrink:0}}/>
-            <div style={{fontSize:11,fontWeight:900,color:"#fff",textTransform:"uppercase",letterSpacing:1}}>Voice Chat — Live</div>
-            <div style={{flex:1}}/>
-            <button onClick={()=>setJoined(false)} style={{background:"transparent",border:"1px solid #333",color:"#888",borderRadius:3,padding:"4px 10px",cursor:"pointer",fontFamily:ff,fontSize:11,fontWeight:700}}>Leave</button>
-          </div>
-          <iframe
-            src={`https://meet.jit.si/${roomName}#config.startWithVideoMuted=true&config.startWithAudioMuted=false&config.prejoinPageEnabled=false&config.toolbarButtons=["microphone","hangup"]&interfaceConfig.SHOW_JITSI_WATERMARK=false`}
-            style={{width:"100%",height:260,border:"none"}}
-            allow="camera; microphone; display-capture; autoplay"
-            allowFullScreen
-          />
-        </div>
-      )}
+    <div style={{background:"#0a0a0a",borderTop:"2px solid #1a1a1a",padding:"12px 14px",display:"flex",alignItems:"center",gap:12}}>
+      <div style={{flex:1,minWidth:0}}>
+        <div style={{fontSize:11,fontWeight:900,color:"#fff",textTransform:"uppercase",letterSpacing:1.5}}>🎙️ Voice Chat</div>
+        <div style={{fontSize:10,color:"#555",marginTop:2}}>Join the league voice channel on Discord</div>
+      </div>
+      <a href="https://discord.com/channels/1400879892614217728/1400879894396801088" target="_blank" rel="noopener noreferrer" style={{background:"#5865F2",color:"#fff",border:"none",borderRadius:3,padding:"8px 18px",cursor:"pointer",fontFamily:ff,fontSize:12,fontWeight:800,flexShrink:0,textDecoration:"none",display:"inline-block"}}>Join Discord</a>
     </div>
   );
 }
