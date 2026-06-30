@@ -1763,6 +1763,77 @@ function RedzoneChat({setupRows}) {
   );
 }
 
+// ── Discord Tab ───────────────────────────────────────────────────────────
+function DiscordTab() {
+  const isMobile = useIsMobile();
+  const ff = "'Helvetica Neue',Arial,sans-serif";
+  const DISCORD = "#5865F2";
+  const DISCORD_URL = "https://discord.com/channels/1400879892614217728/1400879894396801088";
+
+  const Step = ({n, text}) => (
+    <div style={{display:"flex",gap:12,alignItems:"flex-start"}}>
+      <div style={{width:24,height:24,borderRadius:"50%",background:DISCORD,color:"#fff",fontWeight:900,fontSize:12,display:"flex",alignItems:"center",justifyContent:"center",flexShrink:0,marginTop:1}}>{n}</div>
+      <div style={{fontSize:13,color:"#333",lineHeight:1.6,flex:1}}>{text}</div>
+    </div>
+  );
+
+  return (
+    <div style={{display:"flex",flexDirection:"column",gap:14,maxWidth:700}}>
+      {/* Join card */}
+      <div style={{background:"linear-gradient(135deg,#5865F2,#404EED)",borderRadius:4,padding:isMobile?"20px 18px":"28px 32px",display:"flex",flexDirection:isMobile?"column":"row",alignItems:isMobile?"flex-start":"center",gap:20}}>
+        <div style={{flex:1}}>
+          <div style={{fontSize:isMobile?20:26,fontWeight:900,color:"#fff",marginBottom:6}}>Join the League Discord</div>
+          <div style={{fontSize:13,color:"rgba(255,255,255,0.75)",lineHeight:1.5}}>Jump into the voice channel to talk trash, call plays, and hang with the league while games are live.</div>
+        </div>
+        <a href={DISCORD_URL} target="_blank" rel="noopener noreferrer" style={{background:"#fff",color:DISCORD,borderRadius:3,padding:"12px 28px",fontFamily:ff,fontSize:14,fontWeight:900,textDecoration:"none",flexShrink:0,display:"inline-block",textAlign:"center"}}>🎙️ Join Voice Channel</a>
+      </div>
+
+      {/* PlayStation guide */}
+      <div style={{background:"#fff",border:"1px solid #e5e5e5",borderRadius:4,overflow:"hidden"}}>
+        <div style={{background:"#003087",padding:"12px 18px",display:"flex",alignItems:"center",gap:10}}>
+          <div style={{fontSize:20}}>🎮</div>
+          <div style={{fontSize:14,fontWeight:900,color:"#fff",letterSpacing:0.5}}>Link Discord to PlayStation</div>
+        </div>
+        <div style={{padding:"18px 20px",display:"flex",flexDirection:"column",gap:12}}>
+          <Step n="1" text={<>On your PS5, go to <strong>Settings</strong> → <strong>Users and Accounts</strong> → <strong>Linked Services</strong>.</>}/>
+          <Step n="2" text={<>Select <strong>Discord</strong> and choose <strong>Link Account</strong>.</>}/>
+          <Step n="3" text={<>A code will appear on your TV. Open the <strong>Discord app</strong> on your phone → tap your profile picture → <strong>Connections</strong> → <strong>Connect to PlayStation</strong> → enter the code.</>}/>
+          <Step n="4" text={<>Once linked, open the Discord app, join the league voice channel, then tap <strong>Transfer to PlayStation</strong> to move the call to your PS5.</>}/>
+          <div style={{background:"#f0f4ff",border:"1px solid #c5d0f5",borderRadius:3,padding:"10px 14px",fontSize:12,color:"#444",marginTop:4}}>
+            💡 <strong>Tip:</strong> You can also start voice chat directly from the PS5 Control Center — swipe down, select the Discord icon, and join any channel without touching your phone.
+          </div>
+        </div>
+      </div>
+
+      {/* Xbox guide */}
+      <div style={{background:"#fff",border:"1px solid #e5e5e5",borderRadius:4,overflow:"hidden"}}>
+        <div style={{background:"#107C10",padding:"12px 18px",display:"flex",alignItems:"center",gap:10}}>
+          <div style={{fontSize:20}}>🎮</div>
+          <div style={{fontSize:14,fontWeight:900,color:"#fff",letterSpacing:0.5}}>Link Discord to Xbox</div>
+        </div>
+        <div style={{padding:"18px 20px",display:"flex",flexDirection:"column",gap:12}}>
+          <Step n="1" text={<>Open the <strong>Discord app</strong> on your phone or PC and go to <strong>User Settings</strong> → <strong>Connections</strong>.</>}/>
+          <Step n="2" text={<>Tap <strong>Xbox</strong> and sign in with your Microsoft account to link the two accounts.</>}/>
+          <Step n="3" text={<>On your Xbox, press the <strong>Xbox button</strong> to open the guide, go to <strong>Parties &amp; chats</strong>.</>}/>
+          <Step n="4" text={<>Select <strong>Discord Voice</strong>, pick the league voice channel, and join. Your voice chat will now run through Discord on your Xbox.</>}/>
+          <div style={{background:"#f0fff0",border:"1px solid #b0ddb0",borderRadius:3,padding:"10px 14px",fontSize:12,color:"#444",marginTop:4}}>
+            💡 <strong>Tip:</strong> Xbox displays Discord voice activity on your profile so other league members can see when you're in the channel gaming.
+          </div>
+        </div>
+      </div>
+
+      {/* Mobile note */}
+      <div style={{background:"#fafafa",border:"1px solid #eee",borderRadius:4,padding:"14px 18px",display:"flex",gap:12,alignItems:"flex-start"}}>
+        <div style={{fontSize:20,flexShrink:0}}>📱</div>
+        <div>
+          <div style={{fontSize:13,fontWeight:800,color:"#111",marginBottom:4}}>On Mobile?</div>
+          <div style={{fontSize:12,color:"#555",lineHeight:1.6}}>Just tap <strong>Join Voice Channel</strong> above — it opens directly in the Discord app. Make sure you have Discord installed on your phone.</div>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 // ── SetupPanel ────────────────────────────────────────────────────────────
 function SetupPanel({entries,setup,postSeasonInputs,setPSI,handleStart,setCommissionerUnlocked,season,year,setEntries,setWeekResults,setSetup,saveToDb,history,setHistory,autoLiveStatuses,autoEmbedUrls}) {
   const [setupRows,setSetupRows] = useState(setup?.rows?.length?setup.rows.map(r=>({userId:r.userId||"",userName:r.userName,teamName:r.teamName,aliases:r.aliases||""})):Array.from({length:4},()=>({userId:"",userName:"",teamName:"",aliases:""})));
@@ -3562,7 +3633,7 @@ export default function App() {
 
       {/* Nav tabs */}
       <div style={{background:RED,display:"flex",alignItems:"center",overflowX:"auto",WebkitOverflowScrolling:"touch"}}>
-        {(isMobile?[["Home","Home"],["Stndgs","Standings"],["Sched","Schedule"],["History","History"],["Profiles","Profiles"],["Rules","Rules"],["RedZone","Redzone"]]:[["Home","Home"],["Standings","Standings"],["Schedule","Schedule"],["History","History"],["Profiles","Profiles"],["Rules","Rules"],["RedZone","Redzone"]]).map(([label,val])=>(
+        {(isMobile?[["Home","Home"],["Stndgs","Standings"],["Sched","Schedule"],["History","History"],["Profiles","Profiles"],["Rules","Rules"],["RedZone","Redzone"],["Discord","Discord"]]:[["Home","Home"],["Standings","Standings"],["Schedule","Schedule"],["History","History"],["Profiles","Profiles"],["Rules","Rules"],["RedZone","Redzone"],["Discord","Discord"]]).map(([label,val])=>(
           <button key={val} onClick={()=>setTab(val)} style={{flex:"0 0 auto",padding:isMobile?"0 10px":"0 14px",height:isMobile?38:40,background:tab===val?"rgba(255,255,255,0.18)":"transparent",border:"none",borderBottom:tab===val?"3px solid #fff":"3px solid transparent",color:"#fff",cursor:"pointer",fontSize:isMobile?10:11,fontWeight:tab===val?800:500,fontFamily:ff,textTransform:"uppercase",letterSpacing:0.3,whiteSpace:"nowrap"}}>{label}</button>
         ))}
       </div>
@@ -3599,7 +3670,7 @@ export default function App() {
         {/* Left sidebar - desktop only */}
         {isMobile?null:<div style={{display:"flex",flexDirection:"column",gap:12}}>
           <Card><CardHead>Dynasty Info</CardHead><div style={{padding:"8px 0"}}>{[["Season",season],["Year",year],["Week",week>12?"Post":week],["Teams",entries.length]].map(([l,v])=><div key={l} style={{display:"flex",justifyContent:"space-between",padding:"6px 12px",borderBottom:"1px solid #f5f5f5"}}><span style={{fontSize:12,color:"#888"}}>{l}</span><span style={{fontSize:12,fontWeight:700,color:"#111"}}>{v}</span></div>)}</div></Card>
-          <Card><CardHead>Quick Links</CardHead><div style={{padding:"4px 0"}}>{["Home","Standings","Schedule","History","Profiles","Rules","Redzone"].map(l=><div key={l} onClick={()=>setTab(l)} style={{padding:"8px 12px",fontSize:12,color:RED,cursor:"pointer",borderBottom:"1px solid #f5f5f5",fontWeight:500}}>🏈 {l}</div>)}</div></Card>
+          <Card><CardHead>Quick Links</CardHead><div style={{padding:"4px 0"}}>{["Home","Standings","Schedule","History","Profiles","Rules","Redzone","Discord"].map(l=><div key={l} onClick={()=>setTab(l)} style={{padding:"8px 12px",fontSize:12,color:RED,cursor:"pointer",borderBottom:"1px solid #f5f5f5",fontWeight:500}}>🏈 {l}</div>)}</div></Card>
           <Card><CardHead bg={RED}>Points Leader</CardHead>{sorted.length===0?<div style={{padding:"14px 12px",textAlign:"center",color:"#bbb",fontSize:12}}>Not started</div>:sorted.slice(0,1).map(t=><div key={t.teamName} style={{padding:"14px 12px",textAlign:"center"}}><div style={{fontSize:26,fontWeight:900,color:RED}}>{calcTotal(t)}</div><div style={{fontSize:14,fontWeight:700,color:"#111",marginTop:2}}>{t.teamName}</div><div style={{fontSize:11,color:"#555",marginTop:4}}>{t.wins}W - {t.losses}L</div></div>)}</Card>
         </div>}
 
@@ -3617,7 +3688,7 @@ export default function App() {
             </Card>
           ):(
             <Card style={{padding:isMobile?"10px 12px":"14px 16px",borderLeft:`4px solid ${RED}`}}>
-              <div style={{fontSize:isMobile?15:18,fontWeight:900,color:"#111",textTransform:"uppercase"}}>{tab==="Standings"?"Dynasty Standings":tab==="Schedule"?"Season Schedule":tab==="History"?"Season History":tab==="Profiles"?"Player Profiles":tab==="Redzone"?"Dynasty RedZone":"Points System Rules"}</div>
+              <div style={{fontSize:isMobile?15:18,fontWeight:900,color:"#111",textTransform:"uppercase"}}>{tab==="Standings"?"Dynasty Standings":tab==="Schedule"?"Season Schedule":tab==="History"?"Season History":tab==="Profiles"?"Player Profiles":tab==="Redzone"?"Dynasty RedZone":tab==="Discord"?"Discord":"Points System Rules"}</div>
               <div style={{fontSize:10,color:"#888",marginTop:2}}>{leagueName} · S{season} · {year} · {week>12?"Post":`Wk ${week}`}</div>
             </Card>
           )}
@@ -3773,10 +3844,11 @@ export default function App() {
             );
           })()}
           {tab==="Redzone"&&<DynastyRedzone setup={setup} entries={activeEntries} setTab={setTab} autoLiveStatuses={autoLiveStatuses} autoEmbedUrls={autoEmbedUrls} schedule={schedule} week={week}/>}
+          {tab==="Discord"&&<DiscordTab/>}
         </div>
 
         {/* Right rail - desktop only */}
-        {tab!=="Redzone"&&!isMobile&&<RightRail sorted={sorted} articles={articles} entries={activeEntries} week={week} season={season} leader={leader} setActiveArticle={setActiveArticle} setupRows={setup?.rows}/>}
+        {tab!=="Redzone"&&tab!=="Discord"&&!isMobile&&<RightRail sorted={sorted} articles={articles} entries={activeEntries} week={week} season={season} leader={leader} setActiveArticle={setActiveArticle} setupRows={setup?.rows}/>}
       </div>
 
       {/* Hidden footer */}
