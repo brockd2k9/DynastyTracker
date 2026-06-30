@@ -1549,22 +1549,28 @@ function DynastyRedzone({setup,entries,setTab,autoLiveStatuses,autoEmbedUrls,sch
             />
           </div>
         ))}
-        {/* Overlay label */}
-        {active&&<div style={{position:"absolute",bottom:0,left:0,right:0,background:"linear-gradient(transparent,rgba(0,0,0,0.85))",padding:"24px 16px 12px",pointerEvents:"none"}}>
+        {/* Overlay label — desktop only, hidden on mobile to keep video clear */}
+        {active&&!isMobile&&<div style={{position:"absolute",bottom:0,left:0,right:0,background:"linear-gradient(transparent,rgba(0,0,0,0.85))",padding:"24px 16px 12px",pointerEvents:"none"}}>
           <div style={{fontSize:11,color:"#ff6666",fontWeight:800,textTransform:"uppercase",letterSpacing:1,marginBottom:3}}>{active.platform==="twitch"?"🟣 Twitch":"🔴 YouTube"} · {active.userName}</div>
-          <div style={{fontSize:isMobile?14:18,fontWeight:900,color:"#fff"}}>{active.matchup}</div>
+          <div style={{fontSize:18,fontWeight:900,color:"#fff"}}>{active.matchup}</div>
         </div>}
       </div>
+      {/* Mobile: slim now-watching bar below video */}
+      {active&&isMobile&&<div style={{background:"#1a0000",borderBottom:"1px solid #330000",padding:"7px 12px",display:"flex",alignItems:"center",gap:8}}>
+        <div style={{background:"#cc0000",borderRadius:2,padding:"2px 6px",fontSize:9,fontWeight:900,color:"#fff",letterSpacing:1,flexShrink:0}}>● LIVE</div>
+        <div style={{fontSize:11,fontWeight:800,color:"#fff",flex:1,minWidth:0,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{active.matchup}</div>
+        <div style={{fontSize:10,color:"#888",flexShrink:0}}>{active.platform==="twitch"?"🟣":"🔴"} {active.userName}</div>
+      </div>}
       {/* Game switcher */}
       {liveStreams.length > 1 && (
         <div style={{background:"#111",padding:"10px 12px"}}>
           <div style={{display:"flex",alignItems:"center",gap:10,marginBottom:8}}>
             <div style={{fontSize:10,fontWeight:800,color:"#888",textTransform:"uppercase",letterSpacing:1.5}}>Switch Game</div>
-            <div style={{fontSize:10,color:"#555",fontStyle:"italic"}}>📺 Cast via the player controls · switching won't interrupt your cast</div>
+            {!isMobile&&<div style={{fontSize:10,color:"#555",fontStyle:"italic"}}>📺 Cast via the player controls · switching won't interrupt your cast</div>}
           </div>
           <div style={{display:"flex",gap:8,overflowX:"auto",paddingBottom:4}}>
             {liveStreams.map((s, i) => (
-              <button key={i} onClick={() => switchTo(i)} style={{background:activeIdx===i?"#cc0000":"#1e1e1e",border:activeIdx===i?"2px solid #ff4444":"2px solid #333",borderRadius:3,padding:"8px 14px",cursor:"pointer",fontFamily:ff,minWidth:160,textAlign:"left",flexShrink:0}}>
+              <button key={i} onClick={() => switchTo(i)} style={{background:activeIdx===i?"#cc0000":"#1e1e1e",border:activeIdx===i?"2px solid #ff4444":"2px solid #333",borderRadius:3,padding:"8px 14px",cursor:"pointer",fontFamily:ff,minWidth:isMobile?130:160,textAlign:"left",flexShrink:0}}>
                 <div style={{fontSize:10,color:activeIdx===i?"#ffaaaa":"#888",fontWeight:800,textTransform:"uppercase",letterSpacing:1,marginBottom:4}}>CH {i+1} — {s.userName}</div>
                 <div style={{fontSize:12,fontWeight:800,color:activeIdx===i?"#fff":"#aaa",lineHeight:1.3}}>{s.matchup}</div>
               </button>
