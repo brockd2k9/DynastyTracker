@@ -1580,6 +1580,7 @@ function SetupPanel({entries,setup,postSeasonInputs,setPSI,handleStart,setCommis
   function saveLeagueRules(rules){const updated={...setup,leagueRules:rules};setSetup(updated);saveToDb({setup:updated});setRulesSaved(true);setTimeout(()=>setRulesSaved(false),2000);}
   function addRule(){if(!newRuleTitle.trim()||!newRuleBody.trim())return;const updated=[...leagueRules,{title:newRuleTitle.trim(),body:newRuleBody.trim()}];setLeagueRules(updated);saveLeagueRules(updated);setNewRuleTitle("");setNewRuleBody("");}
   function deleteRule(i){if(!window.confirm("Delete this rule?"))return;const updated=leagueRules.filter((_,idx)=>idx!==i);setLeagueRules(updated);saveLeagueRules(updated);}
+  function moveRule(i,dir){const updated=[...leagueRules];const j=i+dir;if(j<0||j>=updated.length)return;[updated[i],updated[j]]=[updated[j],updated[i]];setLeagueRules(updated);saveLeagueRules(updated);}
   function startEditRule(i){setEditingRule(i);setNewRuleTitle(leagueRules[i].title);setNewRuleBody(leagueRules[i].body);}
   function saveEditRule(){if(!newRuleTitle.trim()||!newRuleBody.trim())return;const updated=leagueRules.map((r,i)=>i===editingRule?{title:newRuleTitle.trim(),body:newRuleBody.trim()}:r);setLeagueRules(updated);saveLeagueRules(updated);setEditingRule(null);setNewRuleTitle("");setNewRuleBody("");}
   function cancelEditRule(){setEditingRule(null);setNewRuleTitle("");setNewRuleBody("");}
@@ -1890,7 +1891,9 @@ function SetupPanel({entries,setup,postSeasonInputs,setPSI,handleStart,setCommis
               <div key={i} style={{background:"#f7f7f7",border:"1px solid #e5e5e5",borderRadius:3,padding:"10px 12px"}}>
                 <div style={{display:"flex",justifyContent:"space-between",alignItems:"flex-start",gap:8}}>
                   <div style={{fontWeight:800,fontSize:13,color:"#111",flex:1}}>{rule.title}</div>
-                  <div style={{display:"flex",gap:6,flexShrink:0}}>
+                  <div style={{display:"flex",gap:4,flexShrink:0,alignItems:"center"}}>
+                    <button onClick={()=>moveRule(i,-1)} disabled={i===0} style={{background:"#eee",border:"none",borderRadius:2,padding:"3px 6px",cursor:i===0?"default":"pointer",fontSize:11,fontWeight:700,color:i===0?"#bbb":"#444",fontFamily:ff}}>▲</button>
+                    <button onClick={()=>moveRule(i,1)} disabled={i===leagueRules.length-1} style={{background:"#eee",border:"none",borderRadius:2,padding:"3px 6px",cursor:i===leagueRules.length-1?"default":"pointer",fontSize:11,fontWeight:700,color:i===leagueRules.length-1?"#bbb":"#444",fontFamily:ff}}>▼</button>
                     <button onClick={()=>startEditRule(i)} style={{background:"#eee",border:"none",borderRadius:2,padding:"3px 8px",cursor:"pointer",fontSize:11,fontWeight:700,color:"#444",fontFamily:ff}}>Edit</button>
                     <button onClick={()=>deleteRule(i)} style={{background:"#fdecea",border:"none",borderRadius:2,padding:"3px 8px",cursor:"pointer",fontSize:11,fontWeight:700,color:RED,fontFamily:ff}}>✕</button>
                   </div>
