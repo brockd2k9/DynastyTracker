@@ -3688,7 +3688,7 @@ export default function App() {
             </Card>
           ):(
             <Card style={{padding:isMobile?"10px 12px":"14px 16px",borderLeft:`4px solid ${RED}`}}>
-              <div style={{fontSize:isMobile?15:18,fontWeight:900,color:"#111",textTransform:"uppercase"}}>{tab==="Standings"?"Dynasty Standings":tab==="Schedule"?"Season Schedule":tab==="History"?"Season History":tab==="Profiles"?"Player Profiles":tab==="Redzone"?"Dynasty RedZone":tab==="Discord"?"Discord":"Points System Rules"}</div>
+              <div style={{fontSize:isMobile?15:18,fontWeight:900,color:"#111",textTransform:"uppercase"}}>{tab==="Standings"?"Dynasty Standings":tab==="Schedule"?"Season Schedule":tab==="History"?"League History":tab==="Profiles"?"Player Profiles":tab==="Redzone"?"Dynasty RedZone":tab==="Discord"?"Join Discord & Voice Chat":"League Rules"}</div>
               <div style={{fontSize:10,color:"#888",marginTop:2}}>{leagueName} · S{season} · {year} · {week>12?"Post":`Wk ${week}`}</div>
             </Card>
           )}
