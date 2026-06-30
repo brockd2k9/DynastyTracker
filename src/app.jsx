@@ -1492,11 +1492,12 @@ function DynastyRedzone({setup,entries,setTab,autoLiveStatuses,autoEmbedUrls,sch
   if (liveStreams.length === 0) {
     const checking = Object.keys(autoLiveStatuses||{}).length === 0 && (setup?.rows||[]).some(r=>streamLinks[r.userId||r.userName]?.url);
     return (
-      <div style={{display:"flex",flexDirection:"column",alignItems:"center",justifyContent:"center",minHeight:400,gap:20,padding:32}}>
-        <div style={{fontSize:48}}>{checking?"⏳":"📺"}</div>
-        <div style={{fontSize:isMobile?20:28,fontWeight:900,color:"#111",textTransform:"uppercase",letterSpacing:1,textAlign:"center"}}>{checking?"Checking Streams…":"No Games Live"}</div>
-        <div style={{fontSize:14,color:"#888",textAlign:"center",maxWidth:360}}>{checking?"Detecting live streams from configured channels…":"Dynasty Redzone will show live streams here when league members are playing. Check back when games are in progress."}</div>
-        <div style={{fontSize:12,color:"#aaa",marginTop:8}}>Stream links are managed by the Commissioner in Admin Controls.</div>
+      <div style={{background:"#0a0a0a",borderRadius:4,overflow:"hidden",minHeight:400,display:"flex",flexDirection:"column",alignItems:"center",justifyContent:"center",padding:"32px 24px",gap:16}}>
+        <img src="/redzone-tv.png" alt="Dynasty RedZone TV" style={{width:"100%",maxWidth:420,objectFit:"contain"}}/>
+        <div style={{fontSize:isMobile?13:15,fontWeight:700,color:"rgba(255,255,255,0.55)",textAlign:"center",maxWidth:340,marginTop:4}}>
+          {checking?"Detecting live streams from configured channels…":"Dynasty RedZone goes live when league members are streaming. Check back when games are in progress."}
+        </div>
+        {checking&&<div style={{fontSize:12,color:"#cc0000",fontWeight:800,letterSpacing:1,textTransform:"uppercase",animation:"pulse 1.5s ease-in-out infinite"}}>● Checking Streams…</div>}
       </div>
     );
   }
@@ -1504,13 +1505,13 @@ function DynastyRedzone({setup,entries,setTab,autoLiveStatuses,autoEmbedUrls,sch
   return (
     <div style={{display:"flex",flexDirection:"column",gap:0,background:"#0a0a0a",minHeight:400,borderRadius:4,overflow:"hidden"}}>
       {/* Header bar */}
-      <div style={{background:"linear-gradient(135deg,#cc0000,#8b0000)",padding:"10px 16px",display:"flex",alignItems:"center",gap:12}}>
-        <div style={{display:"flex",alignItems:"center",gap:8}}>
-          <div style={{background:"#ff3333",borderRadius:3,padding:"2px 8px",fontSize:10,fontWeight:900,color:"#fff",letterSpacing:1.5,animation:"pulse 1.5s ease-in-out infinite"}}>● LIVE</div>
-          <div style={{fontSize:16,fontWeight:900,color:"#fff",letterSpacing:2,textTransform:"uppercase"}}>Dynasty RedZone</div>
-        </div>
+      <div style={{background:"linear-gradient(135deg,#1a0000,#0a0a0a)",padding:"8px 16px",display:"flex",alignItems:"center",gap:12,borderBottom:"2px solid #cc0000"}}>
+        <img src="/redzone-tv.png" alt="Dynasty RedZone TV" style={{height:isMobile?40:52,width:"auto",objectFit:"contain",flexShrink:0}}/>
         <div style={{flex:1}}/>
-        <div style={{fontSize:12,color:"rgba(255,255,255,0.7)"}}>{liveStreams.length} game{liveStreams.length>1?"s":""} live</div>
+        <div style={{display:"flex",flexDirection:"column",alignItems:"flex-end",gap:3}}>
+          <div style={{background:"#cc0000",borderRadius:3,padding:"2px 8px",fontSize:10,fontWeight:900,color:"#fff",letterSpacing:1.5}}>● LIVE</div>
+          <div style={{fontSize:11,color:"rgba(255,255,255,0.6)"}}>{liveStreams.length} game{liveStreams.length>1?"s":""} live</div>
+        </div>
       </div>
       {/* Main player */}
       {active&&<div style={{position:"relative",width:"100%",paddingTop:"56.25%",background:"#000"}}>
