@@ -3298,7 +3298,7 @@ export default function App() {
     <div style={{minHeight:"100vh",background:"#f0f0f0",color:"#111",fontFamily:ff,overflowX:"hidden",maxWidth:"100%",boxSizing:"border-box"}}>
       {/* Top black bar */}
       <div style={{background:"#111",padding:"0 12px",height:44,display:"flex",alignItems:"center",gap:10,position:"sticky",top:0,zIndex:200}}>
-        <img src="/logo-transparent.png" alt="Jacked Up Dynasty League" style={{height:36,width:"auto",flexShrink:0,objectFit:"contain"}}/>
+        <img src="/jackedupdynastytr.png" alt="Jacked Up Dynasty League" style={{height:36,width:"auto",flexShrink:0,objectFit:"contain"}}/>
         <div style={{width:1,height:20,background:"#444",flexShrink:0}}/>
         <div style={{fontSize:isMobile?10:12,color:"#aaa",fontWeight:600,textTransform:"uppercase",letterSpacing:0.5,flex:1,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{leagueName}</div>
         {!isMobile&&<div style={{display:"flex",gap:14,alignItems:"center",flexShrink:0}}>
@@ -3356,7 +3356,7 @@ export default function App() {
           {/* Page header - compact on mobile */}
           {tab==="Home"?(
             <Card style={{padding:isMobile?"10px 12px":"16px 20px",borderLeft:`4px solid ${RED}`,display:"flex",alignItems:"center",gap:14}}>
-              <img src="/logo-transparent.png" alt="Jacked Up Dynasty League" style={{height:isMobile?52:68,width:"auto",objectFit:"contain",flexShrink:0}}/>
+              <img src="/jackedupdynastytr.png" alt="Jacked Up Dynasty League" style={{height:isMobile?52:68,width:"auto",objectFit:"contain",flexShrink:0}}/>
               <div>
                 <div style={{fontSize:isMobile?16:22,fontWeight:900,color:"#111",textTransform:"uppercase",letterSpacing:-0.5}}>{leagueName}</div>
                 <div style={{fontSize:10,color:"#888",marginTop:2}}>S{season} · {year} · {week>12?"Post":`Wk ${week}`}</div>
