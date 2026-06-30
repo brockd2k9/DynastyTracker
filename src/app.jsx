@@ -1256,8 +1256,18 @@ function ProfileTab({history,setupRows,currentEntries,season,year,permanentUsers
       </div>
       {profile&&user&&<Card style={{borderTop:`3px solid ${RED}`,overflow:"hidden"}}>
         <div style={{background:"#f7f7f7",padding:"14px 18px",display:"flex",justifyContent:"space-between",alignItems:"flex-start",flexWrap:"wrap",gap:10}}>
-          {(()=>{const curEntry=currentEntries.find(e=>user.userId?e.userId===user.userId:e.userName===user.userName);const displayName=curEntry?.userName||user.userName;const displayTeam=curEntry?.teamName||user.teamName;return(
-          <div><div style={{fontSize:22,fontWeight:900,color:"#111"}}>{displayName.toUpperCase()}</div><div style={{fontSize:12,color:"#888",marginTop:2}}>{displayTeam} · {profile.totalWins}W-{profile.totalLosses}L · {profile.winPct}%</div><div style={{display:"flex",gap:6,marginTop:8,flexWrap:"wrap"}}>{profile.championships>0&&<div style={{background:RED,borderRadius:2,padding:"2px 8px",fontSize:10,color:"#fff",fontWeight:700}}>🏆 DYNASTY CHAMP {profile.championships}×</div>}{profile.nattyWins>0&&<div style={{background:"#b8860b",borderRadius:2,padding:"2px 8px",fontSize:10,color:"#fff",fontWeight:700}}>🎖️ NATTY {profile.nattyWins}×</div>}{profile.confTitles>0&&<div style={{background:"#1a3a6b",borderRadius:2,padding:"2px 8px",fontSize:10,color:"#fff",fontWeight:700}}>🏅 CONF {profile.confTitles}×</div>}{profile.heismans>0&&<div style={{background:"#5a2d82",borderRadius:2,padding:"2px 8px",fontSize:10,color:"#fff",fontWeight:700}}>⭐ HEISMAN {profile.heismans}×</div>}{profile.curStreak>1&&<div style={{background:profile.curStreakType==="win"?"#e8f5e8":"#fff0f0",border:`1px solid ${profile.curStreakType==="win"?"#007a00":RED}`,borderRadius:2,padding:"2px 8px",fontSize:10,color:profile.curStreakType==="win"?"#007a00":RED,fontWeight:700}}>{profile.curStreakType==="win"?"🔥":"❄️"} {profile.curStreak} STREAK</div>}</div></div>
+          {(()=>{const curEntry=currentEntries.find(e=>user.userId?e.userId===user.userId:e.userName===user.userName);const displayName=curEntry?.userName||user.userName;const displayTeam=curEntry?.teamName||user.teamName;const imgs=getPlayerImages(setupRows,user.userId,user.userName);return(
+          <div style={{display:"flex",gap:14,alignItems:"flex-start",flex:1,minWidth:0}}>
+            {imgs.profilePic?<img src={imgs.profilePic} alt={displayName} style={{width:72,height:72,borderRadius:"50%",objectFit:"cover",border:"3px solid #fff",boxShadow:"0 1px 4px rgba(0,0,0,0.15)",flexShrink:0}} onError={e=>{e.target.style.display="none";}}/>:<div style={{width:72,height:72,borderRadius:"50%",background:"#ddd",display:"flex",alignItems:"center",justifyContent:"center",fontSize:26,fontWeight:900,color:"#aaa",flexShrink:0,border:"3px solid #fff",boxShadow:"0 1px 4px rgba(0,0,0,0.1)"}}>{displayName[0]?.toUpperCase()}</div>}
+            <div style={{flex:1,minWidth:0}}>
+              <div style={{display:"flex",alignItems:"center",gap:8,flexWrap:"wrap"}}>
+                <div style={{fontSize:22,fontWeight:900,color:"#111"}}>{displayName.toUpperCase()}</div>
+                {imgs.teamLogo&&<img src={imgs.teamLogo} alt={displayTeam} style={{height:28,width:"auto",objectFit:"contain",maxWidth:60}} onError={e=>{e.target.style.display="none";}}/>}
+              </div>
+              <div style={{fontSize:12,color:"#888",marginTop:2}}>{displayTeam} · {profile.totalWins}W-{profile.totalLosses}L · {profile.winPct}%</div>
+              <div style={{display:"flex",gap:6,marginTop:8,flexWrap:"wrap"}}>{profile.championships>0&&<div style={{background:RED,borderRadius:2,padding:"2px 8px",fontSize:10,color:"#fff",fontWeight:700}}>🏆 DYNASTY CHAMP {profile.championships}×</div>}{profile.nattyWins>0&&<div style={{background:"#b8860b",borderRadius:2,padding:"2px 8px",fontSize:10,color:"#fff",fontWeight:700}}>🎖️ NATTY {profile.nattyWins}×</div>}{profile.confTitles>0&&<div style={{background:"#1a3a6b",borderRadius:2,padding:"2px 8px",fontSize:10,color:"#fff",fontWeight:700}}>🏅 CONF {profile.confTitles}×</div>}{profile.heismans>0&&<div style={{background:"#5a2d82",borderRadius:2,padding:"2px 8px",fontSize:10,color:"#fff",fontWeight:700}}>⭐ HEISMAN {profile.heismans}×</div>}{profile.curStreak>1&&<div style={{background:profile.curStreakType==="win"?"#e8f5e8":"#fff0f0",border:`1px solid ${profile.curStreakType==="win"?"#007a00":RED}`,borderRadius:2,padding:"2px 8px",fontSize:10,color:profile.curStreakType==="win"?"#007a00":RED,fontWeight:700}}>{profile.curStreakType==="win"?"🔥":"❄️"} {profile.curStreak} STREAK</div>}</div>
+            </div>
+          </div>
           );})()}
         </div>
         <div style={{display:"flex",borderBottom:"1px solid #eee",background:"#fff",overflowX:"auto"}}>
@@ -1428,6 +1438,16 @@ function ProfileTab({history,setupRows,currentEntries,season,year,permanentUsers
       </Card>}
     </div>
   );
+}
+
+// ── Player image helpers ──────────────────────────────────────────────────
+function getPlayerImages(setupRows, userId, userName) {
+  const row = (setupRows||[]).find(r => (userId && r.userId===userId) || r.userName===userName);
+  return { profilePic: row?.profilePicUrl||null, teamLogo: row?.teamLogoUrl||null };
+}
+function TeamLogo({url, size=20, style={}}) {
+  if (!url) return null;
+  return <img src={url} alt="" style={{width:size,height:size,objectFit:"contain",borderRadius:2,flexShrink:0,...style}} onError={e=>{e.target.style.display="none";}}/>;
 }
 
 // ── Dynasty Redzone ───────────────────────────────────────────────────────
@@ -1841,6 +1861,41 @@ function SetupPanel({entries,setup,postSeasonInputs,setPSI,handleStart,setCommis
               </div>
             </div>
           )}
+        </div>
+      </Card>
+      <Card>
+        <CardHead bg="#1a3a6b">🖼️ Player Images</CardHead>
+        <div style={{padding:"14px 16px"}}>
+          <div style={{fontSize:12,color:"#666",marginBottom:4}}>Set a profile picture and team logo for each player. Paste a direct image URL (upload to Imgur, Discord, etc. and copy the image link).</div>
+          <div style={{fontSize:11,color:"#888",marginBottom:12}}>Profile picture shows on their profile page. Team logo appears next to their team name across the site.</div>
+          <div style={{display:"flex",flexDirection:"column",gap:8}}>
+            {(setup?.rows||[]).map(r=>{
+              const key=r.userId||r.userName;
+              function setImg(field,val){const updatedRows=(setup.rows||[]).map(row=>(row.userId||row.userName)===key?{...row,[field]:val}:row);const updated={...setup,rows:updatedRows};setSetup(updated);saveToDb({setup:updated});}
+              return(
+                <div key={key} style={{background:"#fafafa",border:"1px solid #e5e5e5",borderRadius:3,padding:"10px 12px"}}>
+                  <div style={{display:"flex",alignItems:"center",gap:10,marginBottom:10}}>
+                    {r.profilePicUrl?<img src={r.profilePicUrl} alt="" style={{width:36,height:36,borderRadius:"50%",objectFit:"cover",border:"2px solid #ddd"}} onError={e=>{e.target.style.display="none";}}/>:<div style={{width:36,height:36,borderRadius:"50%",background:"#ddd",display:"flex",alignItems:"center",justifyContent:"center",fontSize:13,fontWeight:800,color:"#888",flexShrink:0}}>{(r.userName||"?")[0].toUpperCase()}</div>}
+                    {r.teamLogoUrl?<img src={r.teamLogoUrl} alt="" style={{width:36,height:36,objectFit:"contain",border:"1px solid #ddd",borderRadius:2,background:"#fff"}} onError={e=>{e.target.style.display="none";}}/>:<div style={{width:36,height:36,border:"1px dashed #ccc",borderRadius:2,display:"flex",alignItems:"center",justifyContent:"center",fontSize:9,color:"#bbb",flexShrink:0,textAlign:"center",lineHeight:1.2}}>NO<br/>LOGO</div>}
+                    <div style={{flex:1,minWidth:0}}>
+                      <div style={{fontSize:13,fontWeight:800,color:"#111"}}>{r.userName}</div>
+                      <div style={{fontSize:11,color:"#888"}}>{r.teamName}</div>
+                    </div>
+                  </div>
+                  <div style={{display:"flex",flexDirection:"column",gap:6}}>
+                    <div style={{display:"flex",alignItems:"center",gap:8}}>
+                      <span style={{fontSize:10,fontWeight:800,color:"#555",textTransform:"uppercase",letterSpacing:0.5,width:80,flexShrink:0}}>Profile Pic</span>
+                      <input value={r.profilePicUrl||""} onChange={e=>setImg("profilePicUrl",e.target.value)} placeholder="Paste image URL…" style={{flex:1,border:"1px solid #ddd",borderRadius:2,padding:"6px 8px",fontSize:11,fontFamily:ff,color:"#111",background:"#fff"}}/>
+                    </div>
+                    <div style={{display:"flex",alignItems:"center",gap:8}}>
+                      <span style={{fontSize:10,fontWeight:800,color:"#555",textTransform:"uppercase",letterSpacing:0.5,width:80,flexShrink:0}}>Team Logo</span>
+                      <input value={r.teamLogoUrl||""} onChange={e=>setImg("teamLogoUrl",e.target.value)} placeholder="Paste image URL…" style={{flex:1,border:"1px solid #ddd",borderRadius:2,padding:"6px 8px",fontSize:11,fontFamily:ff,color:"#111",background:"#fff"}}/>
+                    </div>
+                  </div>
+                </div>
+              );
+            })}
+          </div>
         </div>
       </Card>
       <Card>
@@ -2907,7 +2962,7 @@ function ContentHub({sorted,entries,week,season,year,leagueName,history,leader,a
 
 // ── Main App ──────────────────────────────────────────────────────────────
 // Right Rail Component
-function RightRail({sorted,articles,entries,week,season,leader,setActiveArticle}) {
+function RightRail({sorted,articles,entries,week,season,leader,setActiveArticle,setupRows}) {
   const RED = "#cc0000";
   const ff  = "'Helvetica Neue',Arial,sans-serif";
   const calcT = (t) => (t.gamePts||0)+(t.rankedBonusPts||0)+(t.confStandPts||0)+(t.confChampPts||0)+(t.bowlPts||0)+(t.recruitingPts||0)+(t.prestigePts||0)+(t.heismanPts||0);
@@ -2933,7 +2988,7 @@ function RightRail({sorted,articles,entries,week,season,leader,setActiveArticle}
           </div></Card>
           <Card><CardHead bg={RED}>Full Standings</CardHead><div style={{padding:"4px 0"}}>
             {sorted.length===0&&<div style={{padding:"12px",fontSize:12,color:"#888",fontStyle:"italic"}}>No standings yet.</div>}
-            {sorted.map((t,i)=><div key={t.teamName} style={{display:"flex",alignItems:"center",gap:8,padding:"6px 12px",borderBottom:"1px solid #f5f5f5"}}><span style={{fontSize:12,fontWeight:800,color:i===0?RED:"#bbb",width:18,textAlign:"right"}}>{i+1}</span><div style={{flex:1,minWidth:0}}><Name userId={t.userId} userName={t.userName} style={{fontSize:12,fontWeight:700,color:"#111",whiteSpace:"nowrap",overflow:"hidden",textOverflow:"ellipsis",display:"block"}}>{t.teamName}</Name></div><span style={{fontSize:13,fontWeight:900,color:i===0?RED:"#333",flexShrink:0}}>{calcT(t)}</span></div>)}
+            {sorted.map((t,i)=>{const imgs=getPlayerImages(setupRows,t.userId,t.userName);return(<div key={t.teamName} style={{display:"flex",alignItems:"center",gap:8,padding:"6px 12px",borderBottom:"1px solid #f5f5f5"}}><span style={{fontSize:12,fontWeight:800,color:i===0?RED:"#bbb",width:18,textAlign:"right"}}>{i+1}</span>{imgs.teamLogo&&<img src={imgs.teamLogo} alt="" style={{width:20,height:20,objectFit:"contain",flexShrink:0}} onError={e=>{e.target.style.display="none";}}/>}<div style={{flex:1,minWidth:0}}><Name userId={t.userId} userName={t.userName} style={{fontSize:12,fontWeight:700,color:"#111",whiteSpace:"nowrap",overflow:"hidden",textOverflow:"ellipsis",display:"block"}}>{t.teamName}</Name></div><span style={{fontSize:13,fontWeight:900,color:i===0?RED:"#333",flexShrink:0}}>{calcT(t)}</span></div>);})}
           </div></Card>
     </div>
   );
@@ -3391,7 +3446,7 @@ export default function App() {
                   <tbody>{sorted.map((t,i)=>{const tot=calcTotal(t);const beh=leader-tot;return(
                     <tr key={t.teamName} style={{borderBottom:"1px solid #eee",background:i===0?"#fff8f8":i%2===0?"#fafafa":"#fff"}}>
                       <td style={{padding:"9px 8px",textAlign:"center",fontWeight:900,color:i===0?RED:"#bbb"}}>{i+1}</td>
-                      <td style={{padding:"9px 8px",fontWeight:i===0?800:600,color:"#111",whiteSpace:"nowrap"}}><Name userId={t.userId} userName={t.userName}>{t.teamName}</Name><div style={{fontSize:10,color:"#888"}}>{t.userName}</div></td>
+                      <td style={{padding:"9px 8px",fontWeight:i===0?800:600,color:"#111",whiteSpace:"nowrap"}}><div style={{display:"flex",alignItems:"center",gap:6}}>{(()=>{const imgs=getPlayerImages(setup?.rows,t.userId,t.userName);return imgs.teamLogo?<img src={imgs.teamLogo} alt="" style={{width:22,height:22,objectFit:"contain",flexShrink:0}} onError={e=>{e.target.style.display="none";}}/>:null;})()}<div><Name userId={t.userId} userName={t.userName}>{t.teamName}</Name><div style={{fontSize:10,color:"#888"}}>{t.userName}</div></div></div></td>
                       <td style={{padding:"9px 8px",textAlign:"center",fontWeight:900,color:i===0?RED:"#111",fontSize:15}}>{tot}</td>
                       <td style={{padding:"9px 8px",textAlign:"center",color:beh===0?"#007a00":RED,fontWeight:700}}>{beh===0?"-":`-${beh}`}</td>
                       <td style={{padding:"9px 8px",textAlign:"center",color:"#555",fontWeight:600,fontSize:12}}>{t.wins}-{t.losses}</td>
@@ -3450,7 +3505,7 @@ export default function App() {
                     <tbody>{sorted.map((t,i)=>{const tot=calcTotal(t);const beh=leader-tot;return(
                       <tr key={t.teamName} style={{borderBottom:"1px solid #eee",background:i===0?"#fff8f8":i%2===0?"#fafafa":"#fff"}}>
                         <td style={{padding:isMobile?"8px 6px":"10px 7px",textAlign:"center",fontWeight:900,fontSize:isMobile?13:14,color:i===0?RED:"#bbb",borderRight:"1px solid #eee"}}>{i+1}</td>
-                        <td style={{padding:isMobile?"8px 6px":"10px 7px",fontWeight:i===0?800:600,color:"#111",whiteSpace:"nowrap",borderRight:"1px solid #eee",maxWidth:isMobile?90:140,overflow:"hidden",textOverflow:"ellipsis"}}><Name userId={t.userId} userName={t.userName}>{t.teamName}</Name>{!isMobile&&<div style={{fontSize:10,color:"#888",fontWeight:400}}>{t.userName}</div>}</td>
+                        <td style={{padding:isMobile?"8px 6px":"10px 7px",fontWeight:i===0?800:600,color:"#111",whiteSpace:"nowrap",borderRight:"1px solid #eee",maxWidth:isMobile?90:140,overflow:"hidden",textOverflow:"ellipsis"}}><div style={{display:"flex",alignItems:"center",gap:6}}>{(()=>{const imgs=getPlayerImages(setup?.rows,t.userId,t.userName);return imgs.teamLogo?<img src={imgs.teamLogo} alt="" style={{width:22,height:22,objectFit:"contain",flexShrink:0}} onError={e=>{e.target.style.display="none";}}/>:null;})()}<div><Name userId={t.userId} userName={t.userName}>{t.teamName}</Name>{!isMobile&&<div style={{fontSize:10,color:"#888",fontWeight:400}}>{t.userName}</div>}</div></div></td>
                         <td style={{padding:isMobile?"8px 6px":"10px 7px",textAlign:"center",fontWeight:900,color:i===0?RED:"#111",fontSize:isMobile?14:16,background:i===0?"#fff0f0":"transparent",borderRight:"2px solid #ddd"}}>{tot}</td>
                         <td style={{padding:isMobile?"8px 6px":"10px 7px",textAlign:"center",color:beh===0?"#007a00":RED,fontWeight:700,fontSize:isMobile?11:12,borderRight:"2px solid #ddd",whiteSpace:"nowrap"}}>{beh===0?"-":`-${beh}`}</td>
                         <td style={{padding:isMobile?"8px 6px":"10px 7px",textAlign:"center",color:"#555",fontWeight:600,fontSize:isMobile?11:12,borderRight:"1px solid #eee",whiteSpace:"nowrap"}}>{t.wins}-{t.losses}</td>
@@ -3529,7 +3584,7 @@ export default function App() {
         </div>
 
         {/* Right rail - desktop only */}
-        {tab!=="Redzone"&&!isMobile&&<RightRail sorted={sorted} articles={articles} entries={activeEntries} week={week} season={season} leader={leader} setActiveArticle={setActiveArticle}/>}
+        {tab!=="Redzone"&&!isMobile&&<RightRail sorted={sorted} articles={articles} entries={activeEntries} week={week} season={season} leader={leader} setActiveArticle={setActiveArticle} setupRows={setup?.rows}/>}
       </div>
 
       {/* Hidden footer */}
