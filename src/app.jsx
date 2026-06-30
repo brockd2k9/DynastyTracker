@@ -1516,12 +1516,15 @@ function DynastyRedzone({setup,entries,setTab,autoLiveStatuses,autoEmbedUrls,sch
   if (liveStreams.length === 0) {
     const checking = Object.keys(autoLiveStatuses||{}).length === 0 && (setup?.rows||[]).some(r=>streamLinks[r.userId||r.userName]?.url);
     return (
-      <div style={{background:"#0a0a0a",borderRadius:4,overflow:"hidden",minHeight:400,display:"flex",flexDirection:"column",alignItems:"center",justifyContent:"center",padding:"32px 24px",gap:16}}>
-        <img src="/redzone-tv.png" alt="Dynasty RedZone TV" style={{width:"100%",maxWidth:420,objectFit:"contain"}}/>
-        <div style={{fontSize:isMobile?13:15,fontWeight:700,color:"rgba(255,255,255,0.55)",textAlign:"center",maxWidth:340,marginTop:4}}>
-          {checking?"Detecting live streams from configured channels…":"Dynasty RedZone goes live when league members are streaming. Check back when games are in progress."}
+      <div style={{background:"#0a0a0a",borderRadius:4,overflow:"hidden",display:"flex",flexDirection:"column"}}>
+        <div style={{display:"flex",flexDirection:"column",alignItems:"center",justifyContent:"center",padding:"32px 24px",gap:16}}>
+          <img src="/redzone-tv.png" alt="Dynasty RedZone TV" style={{width:"100%",maxWidth:420,objectFit:"contain"}}/>
+          <div style={{fontSize:isMobile?13:15,fontWeight:700,color:"rgba(255,255,255,0.55)",textAlign:"center",maxWidth:340,marginTop:4}}>
+            {checking?"Detecting live streams from configured channels…":"Dynasty RedZone goes live when league members are streaming. Check back when games are in progress."}
+          </div>
+          {checking&&<div style={{fontSize:12,color:"#cc0000",fontWeight:800,letterSpacing:1,textTransform:"uppercase",animation:"pulse 1.5s ease-in-out infinite"}}>● Checking Streams…</div>}
         </div>
-        {checking&&<div style={{fontSize:12,color:"#cc0000",fontWeight:800,letterSpacing:1,textTransform:"uppercase",animation:"pulse 1.5s ease-in-out infinite"}}>● Checking Streams…</div>}
+        <RedzoneChat setupRows={setup?.rows}/>
       </div>
     );
   }
@@ -1577,6 +1580,168 @@ function DynastyRedzone({setup,entries,setTab,autoLiveStatuses,autoEmbedUrls,sch
             ))}
           </div>
         </div>
+      )}
+      <RedzoneChat setupRows={setup?.rows}/>
+    </div>
+  );
+}
+
+// ── RedZone Chat ─────────────────────────────────────────────────────────
+const CHAT_URL = `${SUPA_URL}/rest/v1/chat_messages`;
+async function chatFetch() {
+  const r = await fetch(`${CHAT_URL}?league_id=eq.main&order=created_at.asc&limit=200`, {headers: SUPA_HEADERS});
+  if (!r.ok) return null;
+  return r.json();
+}
+async function chatPost(userName, message) {
+  return fetch(CHAT_URL, {
+    method: "POST",
+    headers: {...SUPA_HEADERS, "Prefer": "return=minimal"},
+    body: JSON.stringify({league_id: "main", user_name: userName, message}),
+  });
+}
+
+function RedzoneChat({setupRows}) {
+  const isMobile = useIsMobile();
+  const ff = "'Helvetica Neue',Arial,sans-serif";
+  const RED = "#cc0000";
+  const [messages, setMessages] = useState([]);
+  const [text, setText] = useState("");
+  const [chatName, setChatName] = useState(()=>localStorage.getItem("rz_chat_name")||"");
+  const [nameInput, setNameInput] = useState("");
+  const [sending, setSending] = useState(false);
+  const [error, setError] = useState(null);
+  const [ready, setReady] = useState(false);
+  const bottomRef = useRef(null);
+  const listRef = useRef(null);
+  const isAtBottomRef = useRef(true);
+
+  useEffect(()=>{
+    let cancelled = false;
+    async function load() {
+      const msgs = await chatFetch();
+      if (cancelled) return;
+      if (msgs === null) { setError("Chat unavailable — table not set up yet."); return; }
+      setMessages(msgs);
+      setReady(true);
+    }
+    load();
+    const iv = setInterval(async ()=>{
+      const msgs = await chatFetch();
+      if (cancelled || msgs === null) return;
+      setMessages(prev => {
+        if (msgs.length === prev.length) return prev;
+        // Only auto-scroll if user was already at bottom
+        setTimeout(()=>{ if (isAtBottomRef.current) bottomRef.current?.scrollIntoView({behavior:"smooth"}); }, 50);
+        return msgs;
+      });
+    }, 3000);
+    return ()=>{ cancelled=true; clearInterval(iv); };
+  }, []);
+
+  useEffect(()=>{
+    if (ready) bottomRef.current?.scrollIntoView({behavior:"instant"});
+  }, [ready]);
+
+  function handleScroll(e) {
+    const el = e.currentTarget;
+    isAtBottomRef.current = el.scrollHeight - el.scrollTop - el.clientHeight < 60;
+  }
+
+  function saveName() {
+    const n = nameInput.trim();
+    if (!n) return;
+    localStorage.setItem("rz_chat_name", n);
+    setChatName(n);
+    setNameInput("");
+  }
+
+  async function send() {
+    if (!text.trim() || !chatName || sending) return;
+    setSending(true);
+    const msg = text.trim();
+    setText("");
+    const r = await chatPost(chatName, msg);
+    if (!r.ok) { setText(msg); }
+    else {
+      const msgs = await chatFetch();
+      if (msgs) { setMessages(msgs); setTimeout(()=>bottomRef.current?.scrollIntoView({behavior:"smooth"}),50); }
+    }
+    setSending(false);
+  }
+
+  function handleKey(e) { if (e.key==="Enter"&&!e.shiftKey) { e.preventDefault(); send(); } }
+
+  const colors = ["#cc0000","#1a6bb5","#007a00","#8a2be2","#cc7700","#006666","#aa0066"];
+  function nameColor(name) { let h=0; for(let i=0;i<name.length;i++)h=(h*31+name.charCodeAt(i))>>>0; return colors[h%colors.length]; }
+
+  function formatTime(ts) {
+    const d = new Date(ts);
+    return d.toLocaleTimeString([],{hour:"2-digit",minute:"2-digit"});
+  }
+
+  return (
+    <div style={{background:"#0d0d0d",borderTop:"2px solid #1a1a1a",display:"flex",flexDirection:"column"}}>
+      {/* Chat header */}
+      <div style={{background:"#111",padding:"8px 14px",display:"flex",alignItems:"center",gap:10,borderBottom:"1px solid #222"}}>
+        <div style={{fontSize:11,fontWeight:900,color:"#fff",textTransform:"uppercase",letterSpacing:1.5}}>💬 League Chat</div>
+        {chatName&&<div style={{fontSize:10,color:"#555"}}>Chatting as <span style={{color:nameColor(chatName),fontWeight:700}}>{chatName}</span> · <span onClick={()=>{setChatName("");localStorage.removeItem("rz_chat_name");}} style={{color:"#555",cursor:"pointer",textDecoration:"underline"}}>change</span></div>}
+        <div style={{flex:1}}/>
+        {messages.length>0&&<div style={{fontSize:10,color:"#444"}}>{messages.length} messages</div>}
+      </div>
+
+      {error ? (
+        <div style={{padding:"20px",textAlign:"center",color:"#666",fontSize:12}}>{error}</div>
+      ) : !chatName ? (
+        /* Name picker */
+        <div style={{padding:"16px 14px",display:"flex",flexDirection:"column",gap:10,alignItems:"center"}}>
+          <div style={{fontSize:13,color:"#aaa",fontWeight:600}}>Enter your name to join the chat</div>
+          <div style={{display:"flex",gap:8,width:"100%",maxWidth:340}}>
+            <input
+              value={nameInput} onChange={e=>setNameInput(e.target.value)}
+              onKeyDown={e=>e.key==="Enter"&&saveName()}
+              placeholder="Your name…" autoFocus
+              style={{flex:1,background:"#1a1a1a",border:"1px solid #333",borderRadius:3,padding:"9px 12px",fontSize:13,fontFamily:ff,color:"#fff",outline:"none"}}
+            />
+            <button onClick={saveName} disabled={!nameInput.trim()} style={{background:nameInput.trim()?RED:"#333",color:"#fff",border:"none",borderRadius:3,padding:"9px 16px",cursor:nameInput.trim()?"pointer":"default",fontFamily:ff,fontSize:13,fontWeight:800}}>Join</button>
+          </div>
+          <div style={{fontSize:11,color:"#444"}}>You can use any name — pick something your league knows you by</div>
+        </div>
+      ) : (
+        <>
+          {/* Message list */}
+          <div ref={listRef} onScroll={handleScroll} style={{height:isMobile?220:280,overflowY:"auto",padding:"10px 14px",display:"flex",flexDirection:"column",gap:6,scrollbarWidth:"thin",scrollbarColor:"#333 transparent"}}>
+            {messages.length===0&&ready&&<div style={{textAlign:"center",color:"#444",fontSize:12,marginTop:40}}>No messages yet. Say something! 🏈</div>}
+            {messages.map((m,i)=>{
+              const isMine = m.user_name===chatName;
+              const showName = i===0||messages[i-1].user_name!==m.user_name;
+              return(
+                <div key={m.id} style={{display:"flex",flexDirection:"column",alignItems:isMine?"flex-end":"flex-start",gap:1}}>
+                  {showName&&<div style={{fontSize:10,fontWeight:700,color:nameColor(m.user_name),marginBottom:1,paddingLeft:isMine?0:4,paddingRight:isMine?4:0}}>{m.user_name}</div>}
+                  <div style={{display:"flex",alignItems:"flex-end",gap:5,flexDirection:isMine?"row-reverse":"row"}}>
+                    <div style={{background:isMine?"#7a0000":"#1e1e1e",borderRadius:isMine?"12px 12px 2px 12px":"12px 12px 12px 2px",padding:"7px 11px",maxWidth:"78%",wordBreak:"break-word"}}>
+                      <div style={{fontSize:13,color:isMine?"#fff":"#ddd",lineHeight:1.4}}>{m.message}</div>
+                    </div>
+                    <div style={{fontSize:9,color:"#444",flexShrink:0}}>{formatTime(m.created_at)}</div>
+                  </div>
+                </div>
+              );
+            })}
+            <div ref={bottomRef}/>
+          </div>
+
+          {/* Input */}
+          <div style={{padding:"8px 10px",borderTop:"1px solid #1a1a1a",display:"flex",gap:8,alignItems:"flex-end"}}>
+            <input
+              value={text} onChange={e=>setText(e.target.value)} onKeyDown={handleKey}
+              placeholder="Message…" maxLength={500}
+              style={{flex:1,background:"#1a1a1a",border:"1px solid #2a2a2a",borderRadius:20,padding:"9px 14px",fontSize:13,fontFamily:ff,color:"#fff",outline:"none",resize:"none"}}
+            />
+            <button onClick={send} disabled={!text.trim()||sending} style={{background:text.trim()&&!sending?RED:"#333",color:"#fff",border:"none",borderRadius:20,padding:"9px 16px",cursor:text.trim()&&!sending?"pointer":"default",fontFamily:ff,fontSize:13,fontWeight:800,flexShrink:0,whiteSpace:"nowrap"}}>
+              {sending?"…":"Send"}
+            </button>
+          </div>
+        </>
       )}
     </div>
   );
