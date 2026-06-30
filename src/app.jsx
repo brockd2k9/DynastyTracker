@@ -1506,13 +1506,12 @@ function DynastyRedzone({setup,entries,setTab,autoLiveStatuses,autoEmbedUrls,sch
     return { key, userName: r.userName, teamName: r.teamName, url: s.url, embedUrl, platform: getPlatform(s.url), matchup };
   });
   const [activeIdx, setActiveIdx] = useState(0);
-  const [switchCount, setSwitchCount] = useState(0);
-  const active = liveStreams[Math.min(activeIdx, liveStreams.length - 1)];
+  const safeIdx = Math.min(activeIdx, liveStreams.length - 1);
+  const active = liveStreams[safeIdx];
 
-  // Reset active index if streams change
-  useEffect(()=>{ setActiveIdx(0); setSwitchCount(c=>c+1); },[liveStreams.length]);
+  useEffect(()=>{ setActiveIdx(0); },[liveStreams.length]);
 
-  function switchTo(i) { setActiveIdx(i); setSwitchCount(c=>c+1); }
+  function switchTo(i) { setActiveIdx(i); }
 
   if (liveStreams.length === 0) {
     const checking = Object.keys(autoLiveStatuses||{}).length === 0 && (setup?.rows||[]).some(r=>streamLinks[r.userId||r.userName]?.url);
@@ -1538,25 +1537,31 @@ function DynastyRedzone({setup,entries,setTab,autoLiveStatuses,autoEmbedUrls,sch
           <div style={{fontSize:11,color:"rgba(255,255,255,0.6)"}}>{liveStreams.length} game{liveStreams.length>1?"s":""} live</div>
         </div>
       </div>
-      {/* Main player */}
-      {active&&<div style={{position:"relative",width:"100%",paddingTop:"56.25%",background:"#000"}}>
-        <iframe
-          key={`${active.key}-${switchCount}`}
-          src={active.embedUrl}
-          style={{position:"absolute",top:0,left:0,width:"100%",height:"100%",border:"none"}}
-          allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; fullscreen"
-          allowFullScreen
-        />
+      {/* Main player — all iframes stay mounted so cast sessions survive game switches */}
+      <div style={{position:"relative",width:"100%",paddingTop:"56.25%",background:"#000"}}>
+        {liveStreams.map((s,i)=>(
+          <div key={s.key} style={{position:"absolute",top:0,left:0,width:"100%",height:"100%",display:i===safeIdx?"block":"none"}}>
+            <iframe
+              src={s.embedUrl}
+              style={{width:"100%",height:"100%",border:"none"}}
+              allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share; fullscreen"
+              allowFullScreen
+            />
+          </div>
+        ))}
         {/* Overlay label */}
-        <div style={{position:"absolute",bottom:0,left:0,right:0,background:"linear-gradient(transparent,rgba(0,0,0,0.85))",padding:"24px 16px 12px",pointerEvents:"none"}}>
+        {active&&<div style={{position:"absolute",bottom:0,left:0,right:0,background:"linear-gradient(transparent,rgba(0,0,0,0.85))",padding:"24px 16px 12px",pointerEvents:"none"}}>
           <div style={{fontSize:11,color:"#ff6666",fontWeight:800,textTransform:"uppercase",letterSpacing:1,marginBottom:3}}>{active.platform==="twitch"?"🟣 Twitch":"🔴 YouTube"} · {active.userName}</div>
           <div style={{fontSize:isMobile?14:18,fontWeight:900,color:"#fff"}}>{active.matchup}</div>
-        </div>
-      </div>}
+        </div>}
+      </div>
       {/* Game switcher */}
       {liveStreams.length > 1 && (
         <div style={{background:"#111",padding:"10px 12px"}}>
-          <div style={{fontSize:10,fontWeight:800,color:"#888",textTransform:"uppercase",letterSpacing:1.5,marginBottom:8}}>Switch Game</div>
+          <div style={{display:"flex",alignItems:"center",gap:10,marginBottom:8}}>
+            <div style={{fontSize:10,fontWeight:800,color:"#888",textTransform:"uppercase",letterSpacing:1.5}}>Switch Game</div>
+            <div style={{fontSize:10,color:"#555",fontStyle:"italic"}}>📺 Cast via the player controls · switching won't interrupt your cast</div>
+          </div>
           <div style={{display:"flex",gap:8,overflowX:"auto",paddingBottom:4}}>
             {liveStreams.map((s, i) => (
               <button key={i} onClick={() => switchTo(i)} style={{background:activeIdx===i?"#cc0000":"#1e1e1e",border:activeIdx===i?"2px solid #ff4444":"2px solid #333",borderRadius:3,padding:"8px 14px",cursor:"pointer",fontFamily:ff,minWidth:160,textAlign:"left",flexShrink:0}}>
