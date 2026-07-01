@@ -3814,14 +3814,14 @@ export default function App() {
           {tab==="Rules"&&(()=>{
             const customCats=(pc.customCategories||[]);
             const ptsCards=[
-              {title:"🏈 Regular Season",rows:[["Win",pc.win],["Win vs Top 25",pc.top25Bonus],["Win vs Top 10",pc.top10Bonus]].filter(([,v])=>v>0).map(([l,v])=>[l,`${v} pts`])},
-              {title:"📊 Conference Standings",rows:(pc.confStand||CONF_STAND_PTS).map((v,i)=>v>0?[`${i+1}${i===0?"st":i===1?"nd":i===2?"rd":"th"} Place`,`${v} pts`]:null).filter(Boolean)},
-              {title:"🏆 Conference Championship",rows:[["Make the Game",pc.confChampApp],["Win the Game",pc.confChampWin]].filter(([,v])=>v>0).map(([l,v])=>[l,`${v} pts`])},
-              {title:"🥣 Bowl & Playoff",rows:[["Make a Bowl",pc.bowlApp],["Win a Bowl",pc.bowlWin],["Make CFP",pc.playoffApp],["Win Playoff Game",pc.playoffWin],["Win Semifinal",pc.playoffSemiWin],["Win National Championship",pc.nattyWin]].filter(([,v])=>v>0).map(([l,v])=>[l,`${v} pts`])},
-              {title:"🎓 Recruiting",rows:(pc.recruiting||RECRUITING_PTS).map((v,i)=>v>0?[`#${i+1} Recruiting`,`${v} pts`]:null).filter(Boolean)},
-              {title:"🏅 Dynasty Top 5",rows:(pc.dynastyTop5||[15,10,7,5,3]).map((v,i)=>v>0?[`#${i+1} in Dynasty`,`${v} pts`]:null).filter(Boolean)},
-              {title:"⭐ Prestige & Awards",rows:[["Gain a Prestige Star",pc.prestigeGain],["Reach Max Prestige",pc.prestigeMax],["Heisman Winner",pc.heisman]].filter(([,v])=>v>0).map(([l,v])=>[l,`${v} pts`])},
-              ...customCats.map(c=>({title:`📋 ${c.name}`,rows:(c.awards||[]).filter(a=>a.pts>0).map(a=>[a.label,`${a.pts} pts`])})),
+              {title:"Regular Season",rows:[["Win",pc.win],["Win vs Top 25",pc.top25Bonus],["Win vs Top 10",pc.top10Bonus]].filter(([,v])=>v>0).map(([l,v])=>[l,`${v} pts`])},
+              {title:"Conference Standings",rows:(pc.confStand||CONF_STAND_PTS).map((v,i)=>v>0?[`${i+1}${i===0?"st":i===1?"nd":i===2?"rd":"th"} Place`,`${v} pts`]:null).filter(Boolean)},
+              {title:"Conference Championship",rows:[["Make the Game",pc.confChampApp],["Win the Game",pc.confChampWin]].filter(([,v])=>v>0).map(([l,v])=>[l,`${v} pts`])},
+              {title:"Bowl & Playoff",rows:[["Make a Bowl",pc.bowlApp],["Win a Bowl",pc.bowlWin],["Make CFP",pc.playoffApp],["Win Playoff Game",pc.playoffWin],["Win Semifinal",pc.playoffSemiWin],["Win National Championship",pc.nattyWin]].filter(([,v])=>v>0).map(([l,v])=>[l,`${v} pts`])},
+              {title:"Recruiting",rows:(pc.recruiting||RECRUITING_PTS).map((v,i)=>v>0?[`#${i+1} Recruiting`,`${v} pts`]:null).filter(Boolean)},
+              {title:"Dynasty Top 5",rows:(pc.dynastyTop5||[15,10,7,5,3]).map((v,i)=>v>0?[`#${i+1} in Dynasty`,`${v} pts`]:null).filter(Boolean)},
+              {title:"Prestige & Awards",rows:[["Gain a Prestige Star",pc.prestigeGain],["Reach Max Prestige",pc.prestigeMax],["Heisman Winner",pc.heisman]].filter(([,v])=>v>0).map(([l,v])=>[l,`${v} pts`])},
+              ...customCats.map(c=>({title:c.name,rows:(c.awards||[]).filter(a=>a.pts>0).map(a=>[a.label,`${a.pts} pts`])})),
             ].filter(c=>c.rows.length>0);
             return(
               <div style={{display:"flex",flexDirection:"column",gap:10}}>
@@ -3830,7 +3830,7 @@ export default function App() {
                   <div style={{display:"grid",gridTemplateColumns:isMobile?"1fr":"repeat(auto-fill,minmax(300px,1fr))",gap:10,marginBottom:10}}>
                     {(setup.leagueRules).map((rule,i)=>(
                       <Card key={i} style={{overflow:"hidden"}}>
-                        <CardHead bg="#222">📋 {rule.title}</CardHead>
+                        <CardHead bg="#222">{rule.title}</CardHead>
                         <div style={{padding:"12px 16px",fontSize:13,color:"#333",lineHeight:1.6,whiteSpace:"pre-wrap"}}>{rule.body}</div>
                       </Card>
                     ))}
