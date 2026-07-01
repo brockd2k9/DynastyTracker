@@ -3601,7 +3601,7 @@ export default function App() {
 
   if (dbLoading) return (
     <div style={{minHeight:"100vh",background:"#111",display:"flex",flexDirection:"column",alignItems:"center",justifyContent:"center",fontFamily:ff}}>
-      <div style={{fontSize:32,fontWeight:900,color:"#fff",fontStyle:"italic",letterSpacing:-1,marginBottom:16}}>ESPN</div>
+      <img src="/jackedupdynastywhite.png" alt="Jacked Up Dynasty" style={{width:120,height:"auto",marginBottom:16}}/>
       <div style={{fontSize:13,color:"#888",letterSpacing:2,textTransform:"uppercase"}}>Loading Dynasty...</div>
       <div style={{marginTop:20,width:200,height:3,background:"#333",borderRadius:2,overflow:"hidden"}}>
         <div style={{width:"60%",height:"100%",background:RED,borderRadius:2,animation:"none"}}/>
@@ -3611,7 +3611,7 @@ export default function App() {
 
   if (dbError) return (
     <div style={{minHeight:"100vh",background:"#111",display:"flex",flexDirection:"column",alignItems:"center",justifyContent:"center",fontFamily:ff,padding:20}}>
-      <div style={{fontSize:32,fontWeight:900,color:"#fff",fontStyle:"italic",letterSpacing:-1,marginBottom:16}}>ESPN</div>
+      <img src="/jackedupdynastywhite.png" alt="Jacked Up Dynasty" style={{width:120,height:"auto",marginBottom:16}}/>
       <div style={{fontSize:14,color:RED,textAlign:"center",maxWidth:400}}>{dbError}</div>
       <button onClick={()=>window.location.reload()} style={{marginTop:20,background:RED,color:"#fff",border:"none",borderRadius:2,padding:"10px 24px",cursor:"pointer",fontFamily:ff,fontSize:13,fontWeight:800,textTransform:"uppercase"}}>Retry</button>
     </div>
