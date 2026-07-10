@@ -1469,7 +1469,7 @@ function getPlayerImages(setupRows, userId, userName) {
 // ── PlayerStatsTab ────────────────────────────────────────────────────────
 const EMPTY_STATS = () => ({
   passing:{att:0,comp:0,yds:0,tds:0,int:0},
-  rushing:{att:0,yds:0,tds:0},
+  rushing:{att:0,yds:0,tds:0,fum:0},
   receiving:{rec:0,yds:0,tds:0},
   defense:{int:0,fum:0,sacks:0,tds:0},
   specialTeams:{fgAtt:0,fgMade:0,punts:0,puntYds:0,puntsIn20:0},
@@ -1540,10 +1540,11 @@ function PlayerStatsTab({userId, userName, playerStats, yearList, ff, RED}) {
           <StatRow label="Yards Per Completion" val={ypassComp}/>
         </>}
         {cat==="offense"&&offSub==="rushing"&&<>
+          <StatRow label="Rushing Attempts" val={ru.att}/>
           <StatRow label="Rushing Yards" val={ru.yds.toLocaleString()}/>
-          <StatRow label="Rushing TDs" val={ru.tds}/>
-          <StatRow label="Attempts" val={ru.att}/>
-          <StatRow label="Yards Per Carry" val={ypc}/>
+          <StatRow label="Rushing Touchdowns" val={ru.tds}/>
+          <StatRow label="Rushing YPC" val={ypc}/>
+          <StatRow label="Fumbles" val={ru.fum||0}/>
         </>}
         {cat==="offense"&&offSub==="receiving"&&<>
           <StatRow label="Receiving Yards" val={re.yds.toLocaleString()}/>
@@ -1642,7 +1643,7 @@ Return only the JSON, no explanation. Map what you see: passing yards→passing.
       </Card>
       <Card><CardHead bg="#1a3a6b">Rushing</CardHead>
         <div style={{display:"grid",gridTemplateColumns:"repeat(auto-fill,minmax(130px,1fr))",gap:10,padding:"12px 14px"}}>
-          {inp("rushing","yds","Rush Yards")}{inp("rushing","tds","Rush TDs")}{inp("rushing","att","Attempts")}
+          {inp("rushing","att","Attempts")}{inp("rushing","yds","Rush Yards")}{inp("rushing","tds","Rush TDs")}{inp("rushing","fum","Fumbles")}
         </div>
       </Card>
       <Card><CardHead bg="#1a3a6b">Receiving</CardHead>
