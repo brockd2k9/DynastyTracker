@@ -1191,7 +1191,7 @@ function LeagueRecordBook({history,currentEntries,season,year,permanentUsers,set
   );
 }
 
-function ProfileTab({history,setupRows,currentEntries,season,year,permanentUsers,sel,setSel,pTab,setPTab,articles,setActiveArticle}) {
+function ProfileTab({history,setupRows,currentEntries,season,year,permanentUsers,sel,setSel,pTab,setPTab,articles,setActiveArticle,playerStats}) {
   const isMobile = useIsMobile();
   const [expandedSeasons,setExpandedSeasons] = useState({});
   // Use permanentUsers if available, otherwise fall back to setupRows
@@ -1274,7 +1274,7 @@ function ProfileTab({history,setupRows,currentEntries,season,year,permanentUsers
           );})()}
         </div>
         <div style={{display:"flex",borderBottom:"1px solid #eee",background:"#fff",overflowX:"auto"}}>
-          {["overview","seasons","h2h","streaks","points","news"].map(t=><button key={t} onClick={()=>setPTab(t)} style={{padding:isMobile?"10px 10px":"10px 14px",background:"transparent",border:"none",borderBottom:pTab===t?`3px solid ${RED}`:"3px solid transparent",color:pTab===t?"#111":"#888",cursor:"pointer",fontSize:isMobile?10:11,fontWeight:700,fontFamily:ff,textTransform:"uppercase",letterSpacing:0.5,whiteSpace:"nowrap"}}>{isMobile?(t==="overview"?"OVR":t==="seasons"?"SEASONS":t==="h2h"?"H2H":t==="streaks"?"STREAKS":t==="points"?"PTS":"NEWS"):(t==="h2h"?"H2H Records":t==="news"?"📰 News":t)}</button>)}
+          {["overview","seasons","h2h","streaks","points","stats","news"].map(t=><button key={t} onClick={()=>setPTab(t)} style={{padding:isMobile?"10px 8px":"10px 14px",background:"transparent",border:"none",borderBottom:pTab===t?`3px solid ${RED}`:"3px solid transparent",color:pTab===t?"#111":"#888",cursor:"pointer",fontSize:isMobile?10:11,fontWeight:700,fontFamily:ff,textTransform:"uppercase",letterSpacing:0.5,whiteSpace:"nowrap"}}>{isMobile?(t==="overview"?"OVR":t==="seasons"?"SEASONS":t==="h2h"?"H2H":t==="streaks"?"STREAKS":t==="points"?"PTS":t==="stats"?"STATS":"NEWS"):(t==="h2h"?"H2H Records":t==="news"?"📰 News":t==="stats"?"Game Stats":t)}</button>)}
         </div>
         <div style={{padding:isMobile?12:18}}>
           {pTab==="overview"&&<div style={{display:"flex",flexDirection:"column",gap:16}}>
@@ -1413,6 +1413,7 @@ function ProfileTab({history,setupRows,currentEntries,season,year,permanentUsers
           {pTab==="points"&&<div style={{display:"flex",flexDirection:"column",gap:14}}><SL>All-Time Points Breakdown</SL>{[["Game Wins",profile.ptBreakdown.game,"#007a00"],["Ranked Bonuses",profile.ptBreakdown.bonus,"#cc7700"],["Conf Standings",profile.ptBreakdown.conf,"#111"],["Conf Championship",profile.ptBreakdown.cc,"#111"],["Bowl & Playoff",profile.ptBreakdown.bowl,"#0066cc"],["Recruiting",profile.ptBreakdown.rec,"#111"],["Awards",profile.ptBreakdown.awards,"#cc7700"]].map(([label,val,color])=>{const pct=profile.totalPts>0?Math.round((val/profile.totalPts)*100):0;return(<div key={label} style={{padding:"8px 0",borderBottom:"1px solid #f0f0f0"}}><div style={{display:"flex",justifyContent:"space-between",marginBottom:4}}><span style={{fontSize:13,color:"#333"}}>{label}</span><span style={{fontSize:13,fontWeight:800,color}}>{val} <span style={{fontSize:11,color:"#aaa",fontWeight:400}}>({pct}%)</span></span></div><div style={{background:"#eee",borderRadius:2,height:6,overflow:"hidden"}}><div style={{width:`${pct}%`,height:"100%",background:color,borderRadius:2}}/></div></div>);})}
           <div style={{display:"flex",justifyContent:"space-between",padding:"10px 0"}}><span style={{fontSize:14,fontWeight:800}}>TOTAL</span><span style={{fontSize:16,fontWeight:900,color:RED}}>{profile.totalPts}</span></div></div>}
 
+          {pTab==="stats"&&<PlayerStatsTab userId={user.userId} userName={user.userName} playerStats={playerStats} yearList={[]} ff={ff} RED={RED}/>}
           {pTab==="news"&&(()=>{
             const curEntry=currentEntries.find(e=>user.userId?e.userId===user.userId:e.userName===user.userName);
             const names=[curEntry?.userName,curEntry?.teamName,user.userName].filter(Boolean);
@@ -1447,6 +1448,172 @@ function ProfileTab({history,setupRows,currentEntries,season,year,permanentUsers
 function getPlayerImages(setupRows, userId, userName) {
   const row = (setupRows||[]).find(r => (userId && r.userId===userId) || r.userName===userName);
   return { profilePic: row?.profilePicUrl||null, teamLogo: row?.teamLogoUrl||null };
+}
+
+// ── PlayerStatsTab ────────────────────────────────────────────────────────
+const EMPTY_STATS = () => ({
+  passing:{att:0,comp:0,yds:0,tds:0},
+  rushing:{att:0,yds:0,tds:0},
+  receiving:{rec:0,yds:0,tds:0},
+  defense:{int:0,fum:0,sacks:0,tds:0},
+  specialTeams:{fgAtt:0,fgMade:0,punts:0,puntYds:0,puntsIn20:0},
+});
+function sumStats(a, b) {
+  const s = (obj1, obj2) => Object.fromEntries(Object.keys(obj1).map(k=>[k,(obj1[k]||0)+(obj2?.[k]||0)]));
+  return {
+    passing: s(a.passing, b?.passing),
+    rushing: s(a.rushing, b?.rushing),
+    receiving: s(a.receiving, b?.receiving),
+    defense: s(a.defense, b?.defense),
+    specialTeams: s(a.specialTeams, b?.specialTeams),
+  };
+}
+function StatRow({label, val, sub}) {
+  const ff="'Helvetica Neue',Arial,sans-serif";
+  return (
+    <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",padding:"8px 0",borderBottom:"1px solid #f0f0f0"}}>
+      <div style={{fontSize:13,color:"#555",fontFamily:ff}}>{label}</div>
+      <div style={{textAlign:"right"}}>
+        <div style={{fontSize:15,fontWeight:800,color:"#111",fontFamily:ff}}>{val}</div>
+        {sub&&<div style={{fontSize:10,color:"#888",fontFamily:ff}}>{sub}</div>}
+      </div>
+    </div>
+  );
+}
+function PlayerStatsTab({userId, userName, playerStats, yearList, ff, RED}) {
+  const [view, setView] = React.useState("career");
+  const [cat, setCat] = React.useState("offense");
+  const [offSub, setOffSub] = React.useState("passing");
+  const userStats = playerStats?.[userId]||{};
+  const years = Object.keys(userStats).map(Number).sort((a,b)=>b-a);
+  const statsForView = view==="career"
+    ? years.reduce((acc,y)=>sumStats(acc,userStats[y]), EMPTY_STATS())
+    : (userStats[view]||EMPTY_STATS());
+  const p=statsForView.passing, ru=statsForView.rushing, re=statsForView.receiving;
+  const d=statsForView.defense, st=statsForView.specialTeams;
+  const compPct=p.att>0?((p.comp/p.att)*100).toFixed(1):"-";
+  const ypc=ru.att>0?(ru.yds/ru.att).toFixed(1):"-";
+  const ypr=re.rec>0?(re.yds/re.rec).toFixed(1):"-";
+  const fgPct=st.fgAtt>0?((st.fgMade/st.fgAtt)*100).toFixed(1):"-";
+  const puntAvg=st.punts>0?(st.puntYds/st.punts).toFixed(1):"-";
+  const btnStyle=(active)=>({padding:"6px 14px",border:"none",borderRadius:2,cursor:"pointer",fontFamily:ff,fontSize:11,fontWeight:800,textTransform:"uppercase",background:active?RED:"#eee",color:active?"#fff":"#555"});
+  if(!playerStats||years.length===0) return <div style={{color:"#888",fontSize:13,textAlign:"center",padding:"24px 0"}}>No stats entered yet. Commissioner can add stats in admin panel.</div>;
+  return (
+    <div style={{display:"flex",flexDirection:"column",gap:12}}>
+      {/* View selector */}
+      <div style={{display:"flex",gap:6,flexWrap:"wrap"}}>
+        <button style={btnStyle(view==="career")} onClick={()=>setView("career")}>Career</button>
+        {years.map(y=><button key={y} style={btnStyle(view===y)} onClick={()=>setView(y)}>{y}</button>)}
+      </div>
+      {/* Category selector */}
+      <div style={{display:"flex",gap:6}}>
+        {["offense","defense","specialTeams"].map(c=><button key={c} style={btnStyle(cat===c)} onClick={()=>setCat(c)}>{c==="specialTeams"?"Special Teams":c.charAt(0).toUpperCase()+c.slice(1)}</button>)}
+      </div>
+      {cat==="offense"&&<div style={{display:"flex",gap:6,marginTop:-4}}>
+        {["passing","rushing","receiving"].map(s=><button key={s} style={{...btnStyle(offSub===s),background:offSub===s?"#333":"#f5f5f5",color:offSub===s?"#fff":"#555"}} onClick={()=>setOffSub(s)}>{s.charAt(0).toUpperCase()+s.slice(1)}</button>)}
+      </div>}
+      {/* Stats */}
+      <div style={{background:"#fff",border:"1px solid #eee",borderRadius:2,padding:"4px 14px"}}>
+        {cat==="offense"&&offSub==="passing"&&<>
+          <StatRow label="Passing Yards" val={p.yds.toLocaleString()}/>
+          <StatRow label="Touchdowns" val={p.tds}/>
+          <StatRow label="Completions" val={p.comp}/>
+          <StatRow label="Incompletions" val={p.att-p.comp>=0?p.att-p.comp:0}/>
+          <StatRow label="Attempts" val={p.att}/>
+          <StatRow label="Completion %" val={compPct==="–"?compPct:compPct+"%"}/>
+        </>}
+        {cat==="offense"&&offSub==="rushing"&&<>
+          <StatRow label="Rushing Yards" val={ru.yds.toLocaleString()}/>
+          <StatRow label="Rushing TDs" val={ru.tds}/>
+          <StatRow label="Attempts" val={ru.att}/>
+          <StatRow label="Yards Per Carry" val={ypc}/>
+        </>}
+        {cat==="offense"&&offSub==="receiving"&&<>
+          <StatRow label="Receiving Yards" val={re.yds.toLocaleString()}/>
+          <StatRow label="Receiving TDs" val={re.tds}/>
+          <StatRow label="Receptions" val={re.rec}/>
+          <StatRow label="Yards Per Reception" val={ypr}/>
+        </>}
+        {cat==="defense"&&<>
+          <StatRow label="Interceptions" val={d.int}/>
+          <StatRow label="Fumble Recoveries" val={d.fum}/>
+          <StatRow label="Sacks" val={d.sacks}/>
+          <StatRow label="Defensive TDs" val={d.tds}/>
+        </>}
+        {cat==="specialTeams"&&<>
+          <StatRow label="Field Goals Made" val={`${st.fgMade}/${st.fgAtt}`}/>
+          <StatRow label="Field Goal %" val={fgPct==="-"?"-":fgPct+"%"}/>
+          <StatRow label="Punts" val={st.punts}/>
+          <StatRow label="Punting Yards" val={st.puntYds.toLocaleString()}/>
+          <StatRow label="Punt Average" val={puntAvg}/>
+          <StatRow label="Punts Inside 20" val={st.puntsIn20}/>
+        </>}
+      </div>
+    </div>
+  );
+}
+
+// ── PlayerStatsAdmin ──────────────────────────────────────────────────────
+function PlayerStatsAdmin({setup, setSetup, saveToDb, permanentUsers, year, ff, RED}) {
+  const [selUser, setSelUser] = React.useState(permanentUsers?.[0]?.id||"");
+  const [selYear, setSelYear] = React.useState(year||2026);
+  const [saved, setSaved] = React.useState(false);
+  const userStats = setup?.playerStats?.[selUser]?.[selYear]||EMPTY_STATS();
+  const [edits, setEdits] = React.useState({});
+  React.useEffect(()=>{setEdits({});},[selUser,selYear]);
+  function getVal(cat,field){return edits?.[cat]?.[field]??userStats[cat]?.[field]??0;}
+  function setVal(cat,field,val){setEdits(p=>({...p,[cat]:{...p[cat],[field]:val===""?"":Number(val)}}));}
+  function saveStats(){
+    const merged={...EMPTY_STATS(),...(setup?.playerStats?.[selUser]?.[selYear]||{})};
+    Object.entries(edits).forEach(([cat,fields])=>{merged[cat]={...merged[cat],...Object.fromEntries(Object.entries(fields).map(([k,v])=>([k,Number(v)||0])))};});
+    const updated={...setup,playerStats:{...(setup?.playerStats||{}),[selUser]:{...(setup?.playerStats?.[selUser]||{}),[selYear]:merged}}};
+    setSetup(updated);saveToDb({setup:updated});setSaved(true);setTimeout(()=>setSaved(false),2000);
+  }
+  const inp=(cat,field,label)=>(
+    <div style={{display:"flex",flexDirection:"column",gap:3}}>
+      <label style={{fontSize:10,color:"#888",fontWeight:700,textTransform:"uppercase",letterSpacing:0.5,fontFamily:ff}}>{label}</label>
+      <input type="number" min="0" value={getVal(cat,field)} onChange={e=>setVal(cat,field,e.target.value)} style={{padding:"7px 10px",border:"1px solid #ddd",borderRadius:2,fontFamily:ff,fontSize:13,color:"#111",width:"100%",boxSizing:"border-box"}}/>
+    </div>
+  );
+  const yearOpts=[];for(let y=2020;y<=2035;y++)yearOpts.push(y);
+  return (
+    <div style={{display:"flex",flexDirection:"column",gap:12}}>
+      <div style={{display:"flex",gap:10,flexWrap:"wrap"}}>
+        <select value={selUser} onChange={e=>{setSelUser(e.target.value);}} style={{padding:"7px 10px",border:"1px solid #ccc",borderRadius:2,fontFamily:ff,fontSize:13,flex:1}}>
+          {(permanentUsers||[]).map(u=><option key={u.id} value={u.id}>{u.defaultName}</option>)}
+        </select>
+        <select value={selYear} onChange={e=>setSelYear(Number(e.target.value))} style={{padding:"7px 10px",border:"1px solid #ccc",borderRadius:2,fontFamily:ff,fontSize:13,width:90}}>
+          {yearOpts.map(y=><option key={y} value={y}>{y}</option>)}
+        </select>
+      </div>
+      <Card><CardHead bg="#1a3a6b">Passing</CardHead>
+        <div style={{display:"grid",gridTemplateColumns:"repeat(auto-fill,minmax(130px,1fr))",gap:10,padding:"12px 14px"}}>
+          {inp("passing","yds","Pass Yards")}{inp("passing","tds","Pass TDs")}{inp("passing","comp","Completions")}{inp("passing","att","Attempts")}
+        </div>
+      </Card>
+      <Card><CardHead bg="#1a3a6b">Rushing</CardHead>
+        <div style={{display:"grid",gridTemplateColumns:"repeat(auto-fill,minmax(130px,1fr))",gap:10,padding:"12px 14px"}}>
+          {inp("rushing","yds","Rush Yards")}{inp("rushing","tds","Rush TDs")}{inp("rushing","att","Attempts")}
+        </div>
+      </Card>
+      <Card><CardHead bg="#1a3a6b">Receiving</CardHead>
+        <div style={{display:"grid",gridTemplateColumns:"repeat(auto-fill,minmax(130px,1fr))",gap:10,padding:"12px 14px"}}>
+          {inp("receiving","yds","Rec Yards")}{inp("receiving","tds","Rec TDs")}{inp("receiving","rec","Receptions")}
+        </div>
+      </Card>
+      <Card><CardHead bg="#333">Defense</CardHead>
+        <div style={{display:"grid",gridTemplateColumns:"repeat(auto-fill,minmax(130px,1fr))",gap:10,padding:"12px 14px"}}>
+          {inp("defense","int","Interceptions")}{inp("defense","fum","Fumble Rec")}{inp("defense","sacks","Sacks")}{inp("defense","tds","Def TDs")}
+        </div>
+      </Card>
+      <Card><CardHead bg="#333">Special Teams</CardHead>
+        <div style={{display:"grid",gridTemplateColumns:"repeat(auto-fill,minmax(130px,1fr))",gap:10,padding:"12px 14px"}}>
+          {inp("specialTeams","fgMade","FG Made")}{inp("specialTeams","fgAtt","FG Attempted")}{inp("specialTeams","punts","Punts")}{inp("specialTeams","puntYds","Punt Yards")}{inp("specialTeams","puntsIn20","Punts Inside 20")}
+        </div>
+      </Card>
+      <button onClick={saveStats} style={{background:saved?"#007a00":RED,color:"#fff",border:"none",borderRadius:2,padding:"10px 20px",cursor:"pointer",fontFamily:ff,fontSize:13,fontWeight:800,textTransform:"uppercase"}}>{saved?"✓ Saved":"Save Stats"}</button>
+    </div>
+  );
 }
 function TeamLogo({url, size=20, style={}}) {
   if (!url) return null;
@@ -3844,7 +4011,7 @@ export default function App() {
           </>)}
 
           {tab==="History"&&<HistoryTab history={history} setHistory={setHistory} saveToDb={saveToDb} commUnlocked={commUnlocked} yearRosters={setup?.yearRosters} permanentUsers={setup?.permanentUsers} currentEntries={entries} season={season} year={year} setupRows={setup?.rows||[]}/>}
-          {tab==="Profiles"&&<ProfileTab history={history} setupRows={(setup?.rows||[]).filter(r=>r.active!==false)} currentEntries={activeEntries} season={season} year={year} permanentUsers={setup?.permanentUsers?.filter(u=>(setup?.rows||[]).some(r=>r.userId===u.id&&r.active!==false))} sel={profileSel} setSel={setProfileSel} pTab={profilePTab} setPTab={setProfilePTab} articles={articles} setActiveArticle={setActiveArticle}/>}
+          {tab==="Profiles"&&<ProfileTab history={history} setupRows={(setup?.rows||[]).filter(r=>r.active!==false)} currentEntries={activeEntries} season={season} year={year} permanentUsers={setup?.permanentUsers?.filter(u=>(setup?.rows||[]).some(r=>r.userId===u.id&&r.active!==false))} sel={profileSel} setSel={setProfileSel} pTab={profilePTab} setPTab={setProfilePTab} articles={articles} setActiveArticle={setActiveArticle} playerStats={setup?.playerStats}/>}
           {tab==="Schedule"&&<ScheduleTab schedule={schedule} entries={activeEntries} week={week} season={season}/>}
           {tab==="Rules"&&(()=>{
             const customCats=(pc.customCategories||[]);
@@ -3943,13 +4110,14 @@ export default function App() {
           </div>
         </div>
         <div style={{background:"#1a1a1a",borderBottom:"1px solid #333",display:"flex",overflowX:"auto"}}>
-          {["Enter Results","Season History","Schedule","Content","League Setup"].map(t=><button key={t} onClick={()=>setCommTab(t)} style={{padding:"11px 18px",background:"transparent",border:"none",borderBottom:commTab===t?`3px solid ${RED}`:"3px solid transparent",color:commTab===t?"#fff":"#888",cursor:"pointer",fontSize:12,fontWeight:700,fontFamily:ff,textTransform:"uppercase",letterSpacing:0.5,whiteSpace:"nowrap"}}>{t}</button>)}
+          {["Enter Results","Season History","Schedule","Content","Player Stats","League Setup"].map(t=><button key={t} onClick={()=>setCommTab(t)} style={{padding:"11px 18px",background:"transparent",border:"none",borderBottom:commTab===t?`3px solid ${RED}`:"3px solid transparent",color:commTab===t?"#fff":"#888",cursor:"pointer",fontSize:12,fontWeight:700,fontFamily:ff,textTransform:"uppercase",letterSpacing:0.5,whiteSpace:"nowrap"}}>{t}</button>)}
         </div>
         <div style={{maxWidth:800,margin:"0 auto",padding:"20px 14px"}}>
           {commTab==="Season History"&&<HistoryTab history={history} setHistory={setHistory} saveToDb={saveToDb} commUnlocked={true} entries={entries} setEntries={setEntries} season={season} week={week} setWeek={setWeek} yearRosters={setup?.yearRosters} permanentUsers={setup?.permanentUsers} currentEntries={entries} year={year} setupRows={setup?.rows||[]}/>}
           {commTab==="Enter Results"&&<EnterResultsPanel entries={activeEntries} weekResults={weekResults} setWeekResults={setWeekResults} week={week} setWeek={setWeek} applyBulkResults={applyBulkResults} applyWeekResults={applyWeekResults} postSeasonInputs={postSeasonInputs} setPSI={setPSI} applyPostSeason={applyPostSeason} finalizeSeason={finalizeSeason} season={season} setSeason={setSeason} year={year} setYear={setYear} teamNames={teamNames} schedule={schedule} history={history} onImportHistory={importHistoricalSeason} setupRows={setup?.rows||[]} saveToDb={saveToDb}/>}
           {commTab==="Schedule"&&<SchedulePanel entries={activeEntries} schedule={schedule} setSchedule={setSchedule}/>}
           {commTab==="Content"&&<ContentHub sorted={sorted} entries={activeEntries} week={week} season={season} year={year} leagueName={leagueName} history={history} leader={leader} articles={articles} setArticles={setArticles} setActiveArticle={setActiveArticle} schedule={schedule} setup={setup} setSetup={setSetup} saveToDb={saveToDb}/>}
+          {commTab==="Player Stats"&&<PlayerStatsAdmin setup={setup} setSetup={setSetup} saveToDb={saveToDb} permanentUsers={setup?.permanentUsers||[]} year={year} ff={ff} RED={RED}/>}
           {commTab==="League Setup"&&<SetupPanel entries={entries} setup={setup} postSeasonInputs={postSeasonInputs} setPSI={setPSI} handleStart={handleStart} setCommissionerUnlocked={setCommUnlocked} season={season} year={year} setEntries={setEntries} setWeekResults={setWeekResults} setSetup={setSetup} saveToDb={saveToDb} history={history} setHistory={setHistory} autoLiveStatuses={autoLiveStatuses} autoEmbedUrls={autoEmbedUrls}/>}
         </div>
       </div>}
