@@ -1472,7 +1472,7 @@ const EMPTY_STATS = () => ({
   rushing:{att:0,yds:0,tds:0,fum:0},
   receiving:{rec:0,yds:0,tds:0},
   defense:{int:0,fum:0,sacks:0,tds:0},
-  specialTeams:{fgAtt:0,fgMade:0,punts:0,puntYds:0,netAvg:0,puntsIn20:0},
+  specialTeams:{fgAtt:0,fgMade:0,punts:0,puntYds:0,netAvg:0,puntsIn20:0,krTds:0,prTds:0,krTdsAllowed:0,prTdsAllowed:0},
   misc:{offPts:0,defPts:0,offYds:0,defYds:0,passYds:0,rushYds:0,passYdsAllowed:0,rushYdsAllowed:0,turnoverDiff:0,thirdDownPct:0,fourthDownPct:0,fourthDownAtt:0,def3rdDownPct:0,def4thDownPct:0,twoPointPct:0,twoPointAtt:0,defTwoPointPct:0,redzoneOff:0,redzoneDef:0},
 });
 function sumStats(a, b) {
@@ -1577,6 +1577,10 @@ function PlayerStatsTab({userId, userName, playerStats, yearList, ff, RED}) {
           <StatRow label="Punting Yards Average" val={puntAvg}/>
           <StatRow label="Net Average" val={st.netAvg||0}/>
           <StatRow label="Punts Inside 20" val={st.puntsIn20}/>
+          <StatRow label="Kickoff Return Touchdowns" val={st.krTds||0}/>
+          <StatRow label="Punt Return Touchdowns" val={st.prTds||0}/>
+          <StatRow label="Kickoff Return Touchdowns Allowed" val={st.krTdsAllowed||0}/>
+          <StatRow label="Punt Return Touchdowns Allowed" val={st.prTdsAllowed||0}/>
         </>}
         {cat==="misc"&&<>
           <StatRow label="Offensive Points Per Game" val={mi.offPts||0}/>
@@ -1691,7 +1695,7 @@ Return only the JSON, no explanation. Map what you see: passing yards→passing.
       </Card>
       <Card><CardHead bg="#333">Special Teams</CardHead>
         <div style={{display:"grid",gridTemplateColumns:"repeat(auto-fill,minmax(130px,1fr))",gap:10,padding:"12px 14px"}}>
-          {inp("specialTeams","fgAtt","FG Attempted")}{inp("specialTeams","fgMade","FG Made")}{inp("specialTeams","punts","Punts")}{inp("specialTeams","puntYds","Punt Yards")}{inp("specialTeams","netAvg","Net Average")}{inp("specialTeams","puntsIn20","Punts Inside 20")}
+          {inp("specialTeams","fgAtt","FG Attempted")}{inp("specialTeams","fgMade","FG Made")}{inp("specialTeams","punts","Punts")}{inp("specialTeams","puntYds","Punt Yards")}{inp("specialTeams","netAvg","Net Average")}{inp("specialTeams","puntsIn20","Punts Inside 20")}{inp("specialTeams","krTds","KR TDs")}{inp("specialTeams","prTds","PR TDs")}{inp("specialTeams","krTdsAllowed","KR TDs Allowed")}{inp("specialTeams","prTdsAllowed","PR TDs Allowed")}
         </div>
       </Card>
       <Card><CardHead bg="#555">MISC (Per-Game / Percentages)</CardHead>
