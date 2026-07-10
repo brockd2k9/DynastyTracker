@@ -1960,11 +1960,18 @@ function SetupPanel({entries,setup,postSeasonInputs,setPSI,handleStart,setCommis
       yearRosters:{...(setup?.yearRosters||{}), [rosterYear]:roster},
     };
     setSetup(updated);
-    if(rosterYear===year && entries.length>0){
-      const updatedEntries = entries.map(e=>{
+    if(rosterYear===year){
+      // Update team names for existing entries
+      let updatedEntries = entries.map(e=>{
         const override = roster.find(r=>r.userId===e.userId);
         if(!override)return e;
         return {...e, teamName:override.teamName||e.teamName};
+      });
+      // Create new entries for roster members not yet in live standings
+      roster.forEach(r=>{
+        if(!updatedEntries.find(e=>e.userId===r.userId||(e.userName===r.userName&&!r.userId))){
+          updatedEntries=[...updatedEntries, INITIAL_ENTRY(r.userName,r.teamName,r.userId||genId())];
+        }
       });
       setEntries(updatedEntries);
       saveToDb({setup:updated, entries:updatedEntries});
