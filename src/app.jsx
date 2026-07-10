@@ -1486,6 +1486,30 @@ function sumStats(a, b) {
     misc: s(a.misc||EMPTY_STATS().misc, b?.misc||EMPTY_STATS().misc),
   };
 }
+// Fields that should be averaged (rates/percentages) rather than summed
+const MISC_AVG_FIELDS = new Set(['offPts','defPts','offYds','defYds','passYds','rushYds','passYdsAllowed','rushYdsAllowed','thirdDownPct','fourthDownPct','def3rdDownPct','def4thDownPct','twoPointPct','defTwoPointPct','redzoneOff','redzoneDef']);
+const ST_AVG_FIELDS = new Set(['netAvg']);
+// Merge a list of season stats — counting stats sum, rate/pct stats average
+function mergeStatsList(list) {
+  if(!list.length) return EMPTY_STATS();
+  const summed = list.reduce((acc,s)=>sumStats(acc,s), EMPTY_STATS());
+  const n = list.length;
+  // Fix misc: average rate/pct fields
+  const miscKeys = Object.keys(EMPTY_STATS().misc);
+  summed.misc = Object.fromEntries(miscKeys.map(k=>[k,
+    MISC_AVG_FIELDS.has(k)
+      ? parseFloat((list.reduce((s,st)=>s+(st.misc?.[k]||0),0)/n).toFixed(2))
+      : summed.misc[k]
+  ]));
+  // Fix specialTeams: average netAvg
+  const stKeys = Object.keys(EMPTY_STATS().specialTeams);
+  summed.specialTeams = Object.fromEntries(stKeys.map(k=>[k,
+    ST_AVG_FIELDS.has(k)
+      ? parseFloat((list.reduce((s,st)=>s+(st.specialTeams?.[k]||0),0)/n).toFixed(2))
+      : summed.specialTeams[k]
+  ]));
+  return summed;
+}
 // Normalize playerStats[userId] to always be {year: {season: statsObj}}
 function normalizeUserStats(raw) {
   const out = {};
@@ -1497,13 +1521,6 @@ function normalizeUserStats(raw) {
     }
   }
   return out;
-}
-function avgMisc(statsList) {
-  // average misc fields across a list of stats objects
-  const keys = Object.keys(EMPTY_STATS().misc);
-  const vals = statsList.map(s=>s.misc||EMPTY_STATS().misc);
-  if(!vals.length) return EMPTY_STATS().misc;
-  return Object.fromEntries(keys.map(k=>[k, parseFloat((vals.reduce((s,v)=>s+(v[k]||0),0)/vals.length).toFixed(2))]));
 }
 function StatRow({label, val, sub}) {
   const ff="'Helvetica Neue',Arial,sans-serif";
@@ -1528,10 +1545,10 @@ function PlayerStatsTab({userId, userName, playerStats, yearList, ff, RED}) {
   const allStatsList = years.flatMap(yr=>Object.values(norm[yr]));
   // Determine which stats to show based on view level
   const statsForView = (()=>{
-    if(view==="career") return allStatsList.reduce((acc,s)=>sumStats(acc,s), EMPTY_STATS());
+    if(view==="career") return mergeStatsList(allStatsList);
     if(view.startsWith("year-")){
       const yr=view.slice(5);
-      return Object.values(norm[yr]||{}).reduce((acc,s)=>sumStats(acc,s), EMPTY_STATS());
+      return mergeStatsList(Object.values(norm[yr]||{}));
     }
     const [yr,s]=view.split("-");
     return norm[yr]?.[s]||EMPTY_STATS();
