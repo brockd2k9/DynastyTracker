@@ -1548,7 +1548,7 @@ function PlayerStatsTab({userId, userName, playerStats, season, year, ff, RED}) 
   // Merge dynasty years with any years that have saved data (in case data exists beyond current year)
   const allYearKeys = [...new Set([...dynastyYears, ...Object.keys(norm)])];
   const years = allYearKeys.sort((a,b)=>Number(b)-Number(a));
-  const allStatsList = years.flatMap(yr=>Object.values(norm[yr]));
+  const allStatsList = years.flatMap(yr=>Object.values(norm[yr]||{}));
   // Determine which stats to show based on view level
   const statsForView = (()=>{
     if(view==="career") return mergeStatsList(allStatsList);
