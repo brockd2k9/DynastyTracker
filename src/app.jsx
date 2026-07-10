@@ -1542,7 +1542,7 @@ function PlayerStatsTab({userId, userName, playerStats, season, year, ff, RED}) 
   const [offSub, setOffSub] = useState("passing");
   const norm = normalizeUserStats(playerStats?.[userId]);
   // Build year list from dynasty timeline (START_YEAR → current year), always show even with no data
-  const currentYear = year || (START_YEAR + (season||1) - 1);
+  const currentYear = Number(year) || (START_YEAR + (Number(season)||1) - 1);
   const dynastyYears = [];
   for(let y=START_YEAR; y<=currentYear; y++) dynastyYears.push(String(y));
   // Merge dynasty years with any years that have saved data (in case data exists beyond current year)
