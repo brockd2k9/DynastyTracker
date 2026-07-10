@@ -1970,8 +1970,11 @@ function SetupPanel({entries,setup,postSeasonInputs,setPSI,handleStart,setCommis
       });
       // Create new entries for roster members not yet in live standings
       roster.forEach(r=>{
-        if(!updatedEntries.find(e=>(r.userId&&e.userId===r.userId)||(!r.userId&&e.userName===r.userName))){
-          updatedEntries=[...updatedEntries, INITIAL_ENTRY(r.userName,r.teamName,r.userId||genId())];
+        if(!updatedEntries.find(e=>e.userId===r.userId||e.userName===r.userName)){
+          // Resolve userId from setup.rows by userId or userName to avoid mismatches
+          const setupRow=(setup?.rows||[]).find(sr=>sr.userId===r.userId||sr.userName===r.userName);
+          const uid=setupRow?.userId||r.userId||genId();
+          updatedEntries=[...updatedEntries, INITIAL_ENTRY(r.userName,r.teamName,uid)];
         }
       });
       setEntries(updatedEntries);
