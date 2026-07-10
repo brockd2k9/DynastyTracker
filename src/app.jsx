@@ -145,6 +145,22 @@ function articleHeadline(text) {
   return (text||"").split("\n").map(l=>l.trim()).find(l=>l.length>0) || text?.slice(0,80) || "";
 }
 
+async function callClaudeVision(imageBase64, mediaType, prompt) {
+  const apiKey = import.meta.env.VITE_ANTHROPIC_KEY;
+  if (!apiKey) throw new Error("API key not configured — add VITE_ANTHROPIC_KEY to GitHub repo secrets.");
+  const r = await fetch("https://api.anthropic.com/v1/messages", {
+    method:"POST",
+    headers:{"Content-Type":"application/json","x-api-key":apiKey,"anthropic-version":"2023-06-01","anthropic-dangerous-direct-browser-access":"true"},
+    body:JSON.stringify({model:"claude-sonnet-5",max_tokens:1024,messages:[{role:"user",content:[
+      {type:"image",source:{type:"base64",media_type:mediaType,data:imageBase64}},
+      {type:"text",text:prompt}
+    ]}]}),
+  });
+  if (!r.ok){const e=await r.json().catch(()=>({}));throw new Error(e?.error?.message||`API error ${r.status}`);}
+  const data = await r.json();
+  return data.content?.[0]?.text||"";
+}
+
 async function callClaude(prompt) {
   const apiKey = import.meta.env.VITE_ANTHROPIC_KEY;
   console.log("[callClaude] apiKey present:", !!apiKey);
@@ -1558,14 +1574,32 @@ function PlayerStatsAdmin({setup, setSetup, saveToDb, permanentUsers, year, ff, 
   const [selUser, setSelUser] = React.useState(permanentUsers?.[0]?.id||"");
   const [selYear, setSelYear] = React.useState(year||2026);
   const [saved, setSaved] = React.useState(false);
-  const userStats = setup?.playerStats?.[selUser]?.[selYear]||EMPTY_STATS();
+  const [parsing, setParsing] = React.useState(false);
+  const [parseErr, setParseErr] = React.useState("");
+  const [preview, setPreview] = React.useState(null);
   const [edits, setEdits] = React.useState({});
-  React.useEffect(()=>{setEdits({});},[selUser,selYear]);
+  const fileRef = React.useRef();
+  const userStats = setup?.playerStats?.[selUser]?.[selYear]||EMPTY_STATS();
+  React.useEffect(()=>{setEdits({});setPreview(null);setParseErr("");},[selUser,selYear]);
   function getVal(cat,field){return edits?.[cat]?.[field]??userStats[cat]?.[field]??0;}
-  function setVal(cat,field,val){setEdits(p=>({...p,[cat]:{...p[cat],[field]:val===""?"":Number(val)}}));}
+  function setVal(cat,field,val){setEdits(p=>({...p,[cat]:{...p[cat],[field]:val===""?"":isNaN(Number(val))?p[cat]?.[field]??0:Number(val)}}));}
+  async function handleImage(e){
+    const file=e.target.files?.[0];if(!file)return;
+    setParseErr("");setParsing(true);setPreview(URL.createObjectURL(file));
+    try{
+      const b64=await new Promise((res,rej)=>{const r=new FileReader();r.onload=()=>res(r.result.split(",")[1]);r.onerror=rej;r.readAsDataURL(file);});
+      const prompt=`This is a screenshot of college football video game season stats. Extract ALL visible stats and return ONLY a JSON object with this exact structure (use 0 for any stat not visible):
+{"passing":{"att":0,"comp":0,"yds":0,"tds":0},"rushing":{"att":0,"yds":0,"tds":0},"receiving":{"rec":0,"yds":0,"tds":0},"defense":{"int":0,"fum":0,"sacks":0,"tds":0},"specialTeams":{"fgAtt":0,"fgMade":0,"punts":0,"puntYds":0,"puntsIn20":0}}
+Return only the JSON, no explanation. Map what you see: passing yards→passing.yds, passing TDs→passing.tds, completions→passing.comp, attempts→passing.att, rushing yards→rushing.yds, rushing TDs→rushing.tds, rushing attempts→rushing.att, receptions→receiving.rec, receiving yards→receiving.yds, receiving TDs→receiving.tds, interceptions→defense.int, fumbles recovered→defense.fum, sacks→defense.sacks, defensive TDs→defense.tds, field goals made→specialTeams.fgMade, field goals attempted→specialTeams.fgAtt, punts→specialTeams.punts, punting yards→specialTeams.puntYds, punts inside 20→specialTeams.puntsIn20.`;
+      const text=await callClaudeVision(b64,file.type,prompt);
+      const json=JSON.parse(text.replace(/```json?|```/g,"").trim());
+      setEdits(json);
+    }catch(err){setParseErr("Could not parse stats: "+err.message);}
+    finally{setParsing(false);if(fileRef.current)fileRef.current.value="";}
+  }
   function saveStats(){
-    const merged={...EMPTY_STATS(),...(setup?.playerStats?.[selUser]?.[selYear]||{})};
-    Object.entries(edits).forEach(([cat,fields])=>{merged[cat]={...merged[cat],...Object.fromEntries(Object.entries(fields).map(([k,v])=>([k,Number(v)||0])))};});
+    const merged={...EMPTY_STATS()};
+    Object.entries({...userStats,...edits}).forEach(([cat,fields])=>{if(merged[cat])merged[cat]={...merged[cat],...Object.fromEntries(Object.entries(fields).map(([k,v])=>([k,Number(v)||0])))};});
     const updated={...setup,playerStats:{...(setup?.playerStats||{}),[selUser]:{...(setup?.playerStats?.[selUser]||{}),[selYear]:merged}}};
     setSetup(updated);saveToDb({setup:updated});setSaved(true);setTimeout(()=>setSaved(false),2000);
   }
@@ -1579,13 +1613,27 @@ function PlayerStatsAdmin({setup, setSetup, saveToDb, permanentUsers, year, ff, 
   return (
     <div style={{display:"flex",flexDirection:"column",gap:12}}>
       <div style={{display:"flex",gap:10,flexWrap:"wrap"}}>
-        <select value={selUser} onChange={e=>{setSelUser(e.target.value);}} style={{padding:"7px 10px",border:"1px solid #ccc",borderRadius:2,fontFamily:ff,fontSize:13,flex:1}}>
+        <select value={selUser} onChange={e=>setSelUser(e.target.value)} style={{padding:"7px 10px",border:"1px solid #ccc",borderRadius:2,fontFamily:ff,fontSize:13,flex:1}}>
           {(permanentUsers||[]).map(u=><option key={u.id} value={u.id}>{u.defaultName}</option>)}
         </select>
         <select value={selYear} onChange={e=>setSelYear(Number(e.target.value))} style={{padding:"7px 10px",border:"1px solid #ccc",borderRadius:2,fontFamily:ff,fontSize:13,width:90}}>
           {yearOpts.map(y=><option key={y} value={y}>{y}</option>)}
         </select>
       </div>
+      {/* Screenshot upload */}
+      <Card>
+        <CardHead bg="#1a3a6b">Import from Screenshot</CardHead>
+        <div style={{padding:"14px"}}>
+          <div style={{fontSize:12,color:"#666",marginBottom:10}}>Take a screenshot of the end-of-season stats screen in CFB 27 and upload it. AI will read and fill in the stats automatically.</div>
+          <input ref={fileRef} type="file" accept="image/*" onChange={handleImage} style={{display:"none"}} id="stats-img-upload"/>
+          <label htmlFor="stats-img-upload" style={{display:"inline-block",background:parsing?"#888":RED,color:"#fff",borderRadius:2,padding:"9px 18px",cursor:parsing?"not-allowed":"pointer",fontFamily:ff,fontSize:12,fontWeight:800,textTransform:"uppercase"}}>
+            {parsing?"Parsing Stats...":"Upload Screenshot"}
+          </label>
+          {parseErr&&<div style={{marginTop:8,fontSize:12,color:RED,fontWeight:600}}>{parseErr}</div>}
+          {preview&&<img src={preview} alt="uploaded" style={{marginTop:10,maxWidth:"100%",maxHeight:200,objectFit:"contain",borderRadius:2,border:"1px solid #eee"}}/>}
+          {Object.keys(edits).length>0&&!parsing&&<div style={{marginTop:8,fontSize:12,color:"#007a00",fontWeight:700}}>✓ Stats parsed — review below and save</div>}
+        </div>
+      </Card>
       <Card><CardHead bg="#1a3a6b">Passing</CardHead>
         <div style={{display:"grid",gridTemplateColumns:"repeat(auto-fill,minmax(130px,1fr))",gap:10,padding:"12px 14px"}}>
           {inp("passing","yds","Pass Yards")}{inp("passing","tds","Pass TDs")}{inp("passing","comp","Completions")}{inp("passing","att","Attempts")}
