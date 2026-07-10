@@ -1513,7 +1513,6 @@ function PlayerStatsTab({userId, userName, playerStats, yearList, ff, RED}) {
   const fgPct=st.fgAtt>0?((st.fgMade/st.fgAtt)*100).toFixed(1):"-";
   const puntAvg=st.punts>0?(st.puntYds/st.punts).toFixed(1):"-";
   const btnStyle=(active)=>({padding:"6px 14px",border:"none",borderRadius:2,cursor:"pointer",fontFamily:ff,fontSize:11,fontWeight:800,textTransform:"uppercase",background:active?RED:"#eee",color:active?"#fff":"#555"});
-  if(!playerStats||years.length===0) return <div style={{color:"#888",fontSize:13,textAlign:"center",padding:"24px 0"}}>No stats entered yet. Commissioner can add stats in admin panel.</div>;
   return (
     <div style={{display:"flex",flexDirection:"column",gap:12}}>
       {/* View selector */}
