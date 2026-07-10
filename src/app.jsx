@@ -1546,9 +1546,9 @@ function PlayerStatsTab({userId, userName, playerStats, yearList, ff, RED}) {
           <StatRow label="Rushing YPC" val={ypc}/>
         </>}
         {cat==="offense"&&offSub==="receiving"&&<>
-          <StatRow label="Receiving Yards" val={re.yds.toLocaleString()}/>
-          <StatRow label="Receiving TDs" val={re.tds}/>
           <StatRow label="Receptions" val={re.rec}/>
+          <StatRow label="Receiving Yards" val={re.yds.toLocaleString()}/>
+          <StatRow label="Receiving Touchdowns" val={re.tds}/>
           <StatRow label="Yards Per Reception" val={ypr}/>
         </>}
         {cat==="defense"&&<>
