@@ -1954,13 +1954,14 @@ function SetupPanel({entries,setup,postSeasonInputs,setPSI,handleStart,setCommis
   function saveSeasonRoster(){
     const roster = effectiveRosterRows.filter(r=>r.userName.trim()&&r.teamName.trim());
     const rosterYear = START_YEAR + rosterSeason - 1;
+    const curYear = year || (START_YEAR + season - 1);
     const updated = {
       ...setup,
       seasonRosters:{...(setup?.seasonRosters||{}), [rosterSeason]:roster},
       yearRosters:{...(setup?.yearRosters||{}), [rosterYear]:roster},
     };
     setSetup(updated);
-    if(rosterYear===year){
+    if(rosterYear===curYear){
       // Update team names for existing entries
       let updatedEntries = entries.map(e=>{
         const override = roster.find(r=>r.userId===e.userId);
@@ -1969,7 +1970,7 @@ function SetupPanel({entries,setup,postSeasonInputs,setPSI,handleStart,setCommis
       });
       // Create new entries for roster members not yet in live standings
       roster.forEach(r=>{
-        if(!updatedEntries.find(e=>e.userId===r.userId||(e.userName===r.userName&&!r.userId))){
+        if(!updatedEntries.find(e=>(r.userId&&e.userId===r.userId)||(!r.userId&&e.userName===r.userName))){
           updatedEntries=[...updatedEntries, INITIAL_ENTRY(r.userName,r.teamName,r.userId||genId())];
         }
       });
