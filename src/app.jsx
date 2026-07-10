@@ -1486,13 +1486,24 @@ function sumStats(a, b) {
     misc: s(a.misc||EMPTY_STATS().misc, b?.misc||EMPTY_STATS().misc),
   };
 }
-function avgMisc(yearStats) {
-  // misc fields are per-game averages/pcts — average across seasons rather than sum
+// Normalize playerStats[userId] to always be {year: {season: statsObj}}
+function normalizeUserStats(raw) {
+  const out = {};
+  for (const [yr, v] of Object.entries(raw||{})) {
+    if (v && typeof v === 'object' && 'passing' in v) {
+      out[yr] = {"1": v}; // old flat format → season 1
+    } else if (v && typeof v === 'object') {
+      out[yr] = v;
+    }
+  }
+  return out;
+}
+function avgMisc(statsList) {
+  // average misc fields across a list of stats objects
   const keys = Object.keys(EMPTY_STATS().misc);
-  const vals = Object.values(yearStats).map(y=>y.misc||EMPTY_STATS().misc);
+  const vals = statsList.map(s=>s.misc||EMPTY_STATS().misc);
   if(!vals.length) return EMPTY_STATS().misc;
-  const totals = keys.reduce((acc,k)=>({...acc,[k]:vals.reduce((s,v)=>s+(v[k]||0),0)}),{});
-  return Object.fromEntries(keys.map(k=>[k, parseFloat((totals[k]/vals.length).toFixed(2))]));
+  return Object.fromEntries(keys.map(k=>[k, parseFloat((vals.reduce((s,v)=>s+(v[k]||0),0)/vals.length).toFixed(2))]));
 }
 function StatRow({label, val, sub}) {
   const ff="'Helvetica Neue',Arial,sans-serif";
@@ -1507,15 +1518,19 @@ function StatRow({label, val, sub}) {
   );
 }
 function PlayerStatsTab({userId, userName, playerStats, yearList, ff, RED}) {
-  const [view, setView] = useState("career");
+  const [view, setView] = useState("career"); // "career" | "YYYY-S"
+  const [expandedYear, setExpandedYear] = useState(null);
   const [cat, setCat] = useState("offense");
   const [offSub, setOffSub] = useState("passing");
-  const userStats = playerStats?.[userId]||{};
-  const years = Object.keys(userStats).map(Number).sort((a,b)=>b-a);
+  const norm = normalizeUserStats(playerStats?.[userId]);
+  const years = Object.keys(norm).sort((a,b)=>Number(b)-Number(a));
+  const allStatsList = years.flatMap(yr=>Object.values(norm[yr]));
   const statsForView = view==="career"
-    ? years.reduce((acc,y)=>sumStats(acc,userStats[y]), EMPTY_STATS())
-    : (userStats[view]||EMPTY_STATS());
-  const miscForView = view==="career" ? avgMisc(userStats) : (userStats[view]?.misc||EMPTY_STATS().misc);
+    ? allStatsList.reduce((acc,s)=>sumStats(acc,s), EMPTY_STATS())
+    : (()=>{const [yr,s]=view.split("-");return norm[yr]?.[s]||EMPTY_STATS();})();
+  const miscForView = view==="career"
+    ? avgMisc(allStatsList)
+    : (()=>{const [yr,s]=view.split("-");return norm[yr]?.[s]?.misc||EMPTY_STATS().misc;})();
   const p=statsForView.passing, ru=statsForView.rushing, re=statsForView.receiving;
   const d=statsForView.defense, st=statsForView.specialTeams, mi=miscForView;
   const compPct=p.att>0?((p.comp/p.att)*100).toFixed(1):"-";
@@ -1526,13 +1541,34 @@ function PlayerStatsTab({userId, userName, playerStats, yearList, ff, RED}) {
   const puntAvg=st.punts>0?(st.puntYds/st.punts).toFixed(1):"-";
   const pct=(v)=>v>0?v+"%":"-";
   const btnStyle=(active)=>({padding:"6px 14px",border:"none",borderRadius:2,cursor:"pointer",fontFamily:ff,fontSize:11,fontWeight:800,textTransform:"uppercase",background:active?RED:"#eee",color:active?"#fff":"#555"});
+  const [viewYr, viewS] = view!=="career" ? view.split("-") : [];
   return (
     <div style={{display:"flex",flexDirection:"column",gap:12}}>
-      {/* View selector */}
+      {/* View selector — Career + year buttons */}
       <div style={{display:"flex",gap:6,flexWrap:"wrap"}}>
-        <button style={btnStyle(view==="career")} onClick={()=>setView("career")}>Career</button>
-        {years.map(y=><button key={y} style={btnStyle(view===y)} onClick={()=>setView(y)}>{y}</button>)}
+        <button style={btnStyle(view==="career")} onClick={()=>{setView("career");setExpandedYear(null);}}>Career</button>
+        {years.map(yr=>(
+          <button key={yr} style={{...btnStyle(viewYr===yr),position:"relative"}}
+            onClick={()=>{
+              const seasons=Object.keys(norm[yr]).sort((a,b)=>Number(a)-Number(b));
+              setExpandedYear(prev=>prev===yr?null:yr);
+              if(expandedYear!==yr) setView(`${yr}-${seasons[0]}`);
+            }}>
+            {yr} {expandedYear===yr?"▲":"▼"}
+          </button>
+        ))}
       </div>
+      {/* Season sub-buttons for expanded year */}
+      {expandedYear&&norm[expandedYear]&&(
+        <div style={{display:"flex",gap:6,flexWrap:"wrap",marginTop:-6,paddingLeft:8,borderLeft:`3px solid ${RED}`}}>
+          {Object.keys(norm[expandedYear]).sort((a,b)=>Number(a)-Number(b)).map(s=>(
+            <button key={s} style={{...btnStyle(view===`${expandedYear}-${s}`),background:view===`${expandedYear}-${s}`?"#333":"#f5f5f5",color:view===`${expandedYear}-${s}`?"#fff":"#555"}}
+              onClick={()=>setView(`${expandedYear}-${s}`)}>
+              Season {s}
+            </button>
+          ))}
+        </div>
+      )}
       {/* Category selector */}
       <div style={{display:"flex",gap:6,flexWrap:"wrap"}}>
         {["offense","defense","specialTeams","misc"].map(c=><button key={c} style={btnStyle(cat===c)} onClick={()=>setCat(c)}>{c==="specialTeams"?"Special Teams":c==="misc"?"MISC":c.charAt(0).toUpperCase()+c.slice(1)}</button>)}
@@ -1612,14 +1648,17 @@ function PlayerStatsTab({userId, userName, playerStats, yearList, ff, RED}) {
 function PlayerStatsAdmin({setup, setSetup, saveToDb, permanentUsers, year, ff, RED}) {
   const [selUser, setSelUser] = useState(permanentUsers?.[0]?.id||"");
   const [selYear, setSelYear] = useState(year||2026);
+  const [selSeason, setSelSeason] = useState("1");
   const [saved, setSaved] = useState(false);
   const [parsing, setParsing] = useState(false);
   const [parseErr, setParseErr] = useState("");
   const [preview, setPreview] = useState(null);
   const [edits, setEdits] = useState({});
   const fileRef = useRef();
-  const userStats = setup?.playerStats?.[selUser]?.[selYear]||EMPTY_STATS();
-  useEffect(()=>{setEdits({});setPreview(null);setParseErr("");},[selUser,selYear]);
+  const normUser = normalizeUserStats(setup?.playerStats?.[selUser]);
+  const seasonsForYear = Object.keys(normUser[String(selYear)]||{}).sort((a,b)=>Number(a)-Number(b));
+  const userStats = normUser[String(selYear)]?.[selSeason]||EMPTY_STATS();
+  useEffect(()=>{setEdits({});setPreview(null);setParseErr("");},[selUser,selYear,selSeason]);
   function getVal(cat,field){return edits?.[cat]?.[field]??userStats[cat]?.[field]??0;}
   function setVal(cat,field,val){setEdits(p=>({...p,[cat]:{...p[cat],[field]:val===""?"":isNaN(Number(val))?p[cat]?.[field]??0:Number(val)}}));}
   async function handleImage(e){
@@ -1639,7 +1678,9 @@ Return only the JSON, no explanation. Map what you see: passing yards→passing.
   function saveStats(){
     const merged={...EMPTY_STATS()};
     Object.entries({...userStats,...edits}).forEach(([cat,fields])=>{if(merged[cat])merged[cat]={...merged[cat],...Object.fromEntries(Object.entries(fields).map(([k,v])=>([k,Number(v)||0])))};});
-    const updated={...setup,playerStats:{...(setup?.playerStats||{}),[selUser]:{...(setup?.playerStats?.[selUser]||{}),[selYear]:merged}}};
+    // Always save in new nested format: playerStats[user][year][season]
+    const existingForYear = normUser[String(selYear)]||{};
+    const updated={...setup,playerStats:{...(setup?.playerStats||{}),[selUser]:{...(setup?.playerStats?.[selUser]||{}),[selYear]:{...existingForYear,[selSeason]:merged}}}};
     setSetup(updated);saveToDb({setup:updated});setSaved(true);setTimeout(()=>setSaved(false),2000);
   }
   const inp=(cat,field,label)=>(
@@ -1649,15 +1690,29 @@ Return only the JSON, no explanation. Map what you see: passing yards→passing.
     </div>
   );
   const yearOpts=[];for(let y=2020;y<=2035;y++)yearOpts.push(y);
+  const nextSeason = String((seasonsForYear.length>0?Math.max(...seasonsForYear.map(Number)):0)+1);
   return (
     <div style={{display:"flex",flexDirection:"column",gap:12}}>
+      {/* User + Year */}
       <div style={{display:"flex",gap:10,flexWrap:"wrap"}}>
-        <select value={selUser} onChange={e=>setSelUser(e.target.value)} style={{padding:"7px 10px",border:"1px solid #ccc",borderRadius:2,fontFamily:ff,fontSize:13,flex:1}}>
+        <select value={selUser} onChange={e=>{setSelUser(e.target.value);setSelSeason("1");}} style={{padding:"7px 10px",border:"1px solid #ccc",borderRadius:2,fontFamily:ff,fontSize:13,flex:1}}>
           {(permanentUsers||[]).map(u=><option key={u.id} value={u.id}>{u.defaultName}</option>)}
         </select>
-        <select value={selYear} onChange={e=>setSelYear(Number(e.target.value))} style={{padding:"7px 10px",border:"1px solid #ccc",borderRadius:2,fontFamily:ff,fontSize:13,width:90}}>
+        <select value={selYear} onChange={e=>{setSelYear(Number(e.target.value));setSelSeason("1");}} style={{padding:"7px 10px",border:"1px solid #ccc",borderRadius:2,fontFamily:ff,fontSize:13,width:90}}>
           {yearOpts.map(y=><option key={y} value={y}>{y}</option>)}
         </select>
+      </div>
+      {/* Season selector for this year */}
+      <div style={{display:"flex",gap:8,alignItems:"center",flexWrap:"wrap"}}>
+        <span style={{fontSize:11,fontWeight:800,textTransform:"uppercase",color:"#888",fontFamily:ff}}>Season:</span>
+        {seasonsForYear.map(s=>(
+          <button key={s} onClick={()=>setSelSeason(s)} style={{padding:"5px 12px",border:"none",borderRadius:2,cursor:"pointer",fontFamily:ff,fontSize:11,fontWeight:800,textTransform:"uppercase",background:selSeason===s?RED:"#eee",color:selSeason===s?"#fff":"#555"}}>
+            Season {s}
+          </button>
+        ))}
+        <button onClick={()=>setSelSeason(nextSeason)} style={{padding:"5px 12px",border:`1px dashed ${RED}`,borderRadius:2,cursor:"pointer",fontFamily:ff,fontSize:11,fontWeight:800,textTransform:"uppercase",background:selSeason===nextSeason?"#ffe8e8":"transparent",color:RED}}>
+          + Season {nextSeason}
+        </button>
       </div>
       {/* Screenshot upload */}
       <Card>
