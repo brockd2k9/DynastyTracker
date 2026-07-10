@@ -1497,9 +1497,9 @@ function StatRow({label, val, sub}) {
   );
 }
 function PlayerStatsTab({userId, userName, playerStats, yearList, ff, RED}) {
-  const [view, setView] = React.useState("career");
-  const [cat, setCat] = React.useState("offense");
-  const [offSub, setOffSub] = React.useState("passing");
+  const [view, setView] = useState("career");
+  const [cat, setCat] = useState("offense");
+  const [offSub, setOffSub] = useState("passing");
   const userStats = playerStats?.[userId]||{};
   const years = Object.keys(userStats).map(Number).sort((a,b)=>b-a);
   const statsForView = view==="career"
@@ -1571,16 +1571,16 @@ function PlayerStatsTab({userId, userName, playerStats, yearList, ff, RED}) {
 
 // ── PlayerStatsAdmin ──────────────────────────────────────────────────────
 function PlayerStatsAdmin({setup, setSetup, saveToDb, permanentUsers, year, ff, RED}) {
-  const [selUser, setSelUser] = React.useState(permanentUsers?.[0]?.id||"");
-  const [selYear, setSelYear] = React.useState(year||2026);
-  const [saved, setSaved] = React.useState(false);
-  const [parsing, setParsing] = React.useState(false);
-  const [parseErr, setParseErr] = React.useState("");
-  const [preview, setPreview] = React.useState(null);
-  const [edits, setEdits] = React.useState({});
-  const fileRef = React.useRef();
+  const [selUser, setSelUser] = useState(permanentUsers?.[0]?.id||"");
+  const [selYear, setSelYear] = useState(year||2026);
+  const [saved, setSaved] = useState(false);
+  const [parsing, setParsing] = useState(false);
+  const [parseErr, setParseErr] = useState("");
+  const [preview, setPreview] = useState(null);
+  const [edits, setEdits] = useState({});
+  const fileRef = useRef();
   const userStats = setup?.playerStats?.[selUser]?.[selYear]||EMPTY_STATS();
-  React.useEffect(()=>{setEdits({});setPreview(null);setParseErr("");},[selUser,selYear]);
+  useEffect(()=>{setEdits({});setPreview(null);setParseErr("");},[selUser,selYear]);
   function getVal(cat,field){return edits?.[cat]?.[field]??userStats[cat]?.[field]??0;}
   function setVal(cat,field,val){setEdits(p=>({...p,[cat]:{...p[cat],[field]:val===""?"":isNaN(Number(val))?p[cat]?.[field]??0:Number(val)}}));}
   async function handleImage(e){
