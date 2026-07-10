@@ -1472,7 +1472,7 @@ const EMPTY_STATS = () => ({
   rushing:{att:0,yds:0,tds:0,fum:0},
   receiving:{rec:0,yds:0,tds:0},
   defense:{int:0,fum:0,sacks:0,tds:0},
-  specialTeams:{fgAtt:0,fgMade:0,punts:0,puntYds:0,puntsIn20:0},
+  specialTeams:{fgAtt:0,fgMade:0,punts:0,puntYds:0,netAvg:0,puntsIn20:0},
 });
 function sumStats(a, b) {
   const s = (obj1, obj2) => Object.fromEntries(Object.keys(obj1).map(k=>[k,(obj1[k]||0)+(obj2?.[k]||0)]));
@@ -1558,11 +1558,12 @@ function PlayerStatsTab({userId, userName, playerStats, yearList, ff, RED}) {
           <StatRow label="Defensive TDs" val={d.tds}/>
         </>}
         {cat==="specialTeams"&&<>
-          <StatRow label="Field Goals Made" val={`${st.fgMade}/${st.fgAtt}`}/>
+          <StatRow label="Field Goals Attempted" val={st.fgAtt}/>
+          <StatRow label="Field Goals Made" val={st.fgMade}/>
           <StatRow label="Field Goal %" val={fgPct==="-"?"-":fgPct+"%"}/>
           <StatRow label="Punts" val={st.punts}/>
-          <StatRow label="Punting Yards" val={st.puntYds.toLocaleString()}/>
-          <StatRow label="Punt Average" val={puntAvg}/>
+          <StatRow label="Punting Yards Average" val={puntAvg}/>
+          <StatRow label="Net Average" val={st.netAvg||0}/>
           <StatRow label="Punts Inside 20" val={st.puntsIn20}/>
         </>}
       </div>
@@ -1657,7 +1658,7 @@ Return only the JSON, no explanation. Map what you see: passing yards→passing.
       </Card>
       <Card><CardHead bg="#333">Special Teams</CardHead>
         <div style={{display:"grid",gridTemplateColumns:"repeat(auto-fill,minmax(130px,1fr))",gap:10,padding:"12px 14px"}}>
-          {inp("specialTeams","fgMade","FG Made")}{inp("specialTeams","fgAtt","FG Attempted")}{inp("specialTeams","punts","Punts")}{inp("specialTeams","puntYds","Punt Yards")}{inp("specialTeams","puntsIn20","Punts Inside 20")}
+          {inp("specialTeams","fgAtt","FG Attempted")}{inp("specialTeams","fgMade","FG Made")}{inp("specialTeams","punts","Punts")}{inp("specialTeams","puntYds","Punt Yards")}{inp("specialTeams","netAvg","Net Average")}{inp("specialTeams","puntsIn20","Punts Inside 20")}
         </div>
       </Card>
       <button onClick={saveStats} style={{background:saved?"#007a00":RED,color:"#fff",border:"none",borderRadius:2,padding:"10px 20px",cursor:"pointer",fontFamily:ff,fontSize:13,fontWeight:800,textTransform:"uppercase"}}>{saved?"✓ Saved":"Save Stats"}</button>
