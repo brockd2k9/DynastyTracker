@@ -1468,7 +1468,7 @@ function getPlayerImages(setupRows, userId, userName) {
 
 // ── PlayerStatsTab ────────────────────────────────────────────────────────
 const EMPTY_STATS = () => ({
-  passing:{att:0,comp:0,yds:0,tds:0},
+  passing:{att:0,comp:0,yds:0,tds:0,int:0},
   rushing:{att:0,yds:0,tds:0},
   receiving:{rec:0,yds:0,tds:0},
   defense:{int:0,fum:0,sacks:0,tds:0},
@@ -1508,6 +1508,7 @@ function PlayerStatsTab({userId, userName, playerStats, yearList, ff, RED}) {
   const p=statsForView.passing, ru=statsForView.rushing, re=statsForView.receiving;
   const d=statsForView.defense, st=statsForView.specialTeams;
   const compPct=p.att>0?((p.comp/p.att)*100).toFixed(1):"-";
+  const ypassComp=p.comp>0?(p.yds/p.comp).toFixed(1):"-";
   const ypc=ru.att>0?(ru.yds/ru.att).toFixed(1):"-";
   const ypr=re.rec>0?(re.yds/re.rec).toFixed(1):"-";
   const fgPct=st.fgAtt>0?((st.fgMade/st.fgAtt)*100).toFixed(1):"-";
@@ -1531,11 +1532,12 @@ function PlayerStatsTab({userId, userName, playerStats, yearList, ff, RED}) {
       <div style={{background:"#fff",border:"1px solid #eee",borderRadius:2,padding:"4px 14px"}}>
         {cat==="offense"&&offSub==="passing"&&<>
           <StatRow label="Passing Yards" val={p.yds.toLocaleString()}/>
-          <StatRow label="Touchdowns" val={p.tds}/>
-          <StatRow label="Completions" val={p.comp}/>
-          <StatRow label="Incompletions" val={p.att-p.comp>=0?p.att-p.comp:0}/>
+          <StatRow label="Passing TDs" val={p.tds}/>
+          <StatRow label="Interceptions" val={p.int||0}/>
           <StatRow label="Attempts" val={p.att}/>
-          <StatRow label="Completion %" val={compPct==="–"?compPct:compPct+"%"}/>
+          <StatRow label="Completions" val={p.comp}/>
+          <StatRow label="Completion %" val={compPct==="-"?"-":compPct+"%"}/>
+          <StatRow label="Yards Per Completion" val={ypassComp}/>
         </>}
         {cat==="offense"&&offSub==="rushing"&&<>
           <StatRow label="Rushing Yards" val={ru.yds.toLocaleString()}/>
@@ -1635,7 +1637,7 @@ Return only the JSON, no explanation. Map what you see: passing yards→passing.
       </Card>
       <Card><CardHead bg="#1a3a6b">Passing</CardHead>
         <div style={{display:"grid",gridTemplateColumns:"repeat(auto-fill,minmax(130px,1fr))",gap:10,padding:"12px 14px"}}>
-          {inp("passing","yds","Pass Yards")}{inp("passing","tds","Pass TDs")}{inp("passing","comp","Completions")}{inp("passing","att","Attempts")}
+          {inp("passing","yds","Pass Yards")}{inp("passing","tds","Pass TDs")}{inp("passing","int","Interceptions")}{inp("passing","att","Attempts")}{inp("passing","comp","Completions")}
         </div>
       </Card>
       <Card><CardHead bg="#1a3a6b">Rushing</CardHead>
