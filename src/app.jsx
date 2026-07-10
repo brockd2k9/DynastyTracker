@@ -1429,7 +1429,7 @@ function ProfileTab({history,setupRows,currentEntries,season,year,permanentUsers
           {pTab==="points"&&<div style={{display:"flex",flexDirection:"column",gap:14}}><SL>All-Time Points Breakdown</SL>{[["Game Wins",profile.ptBreakdown.game,"#007a00"],["Ranked Bonuses",profile.ptBreakdown.bonus,"#cc7700"],["Conf Standings",profile.ptBreakdown.conf,"#111"],["Conf Championship",profile.ptBreakdown.cc,"#111"],["Bowl & Playoff",profile.ptBreakdown.bowl,"#0066cc"],["Recruiting",profile.ptBreakdown.rec,"#111"],["Awards",profile.ptBreakdown.awards,"#cc7700"]].map(([label,val,color])=>{const pct=profile.totalPts>0?Math.round((val/profile.totalPts)*100):0;return(<div key={label} style={{padding:"8px 0",borderBottom:"1px solid #f0f0f0"}}><div style={{display:"flex",justifyContent:"space-between",marginBottom:4}}><span style={{fontSize:13,color:"#333"}}>{label}</span><span style={{fontSize:13,fontWeight:800,color}}>{val} <span style={{fontSize:11,color:"#aaa",fontWeight:400}}>({pct}%)</span></span></div><div style={{background:"#eee",borderRadius:2,height:6,overflow:"hidden"}}><div style={{width:`${pct}%`,height:"100%",background:color,borderRadius:2}}/></div></div>);})}
           <div style={{display:"flex",justifyContent:"space-between",padding:"10px 0"}}><span style={{fontSize:14,fontWeight:800}}>TOTAL</span><span style={{fontSize:16,fontWeight:900,color:RED}}>{profile.totalPts}</span></div></div>}
 
-          {pTab==="stats"&&<PlayerStatsTab userId={user.userId} userName={user.userName} playerStats={playerStats} yearList={[]} ff={ff} RED={RED}/>}
+          {pTab==="stats"&&<PlayerStatsTab userId={user.userId} userName={user.userName} playerStats={playerStats} season={season} year={year} ff={ff} RED={RED}/>}
           {pTab==="news"&&(()=>{
             const curEntry=currentEntries.find(e=>user.userId?e.userId===user.userId:e.userName===user.userName);
             const names=[curEntry?.userName,curEntry?.teamName,user.userName].filter(Boolean);
@@ -1534,14 +1534,20 @@ function StatRow({label, val, sub}) {
     </div>
   );
 }
-function PlayerStatsTab({userId, userName, playerStats, yearList, ff, RED}) {
+function PlayerStatsTab({userId, userName, playerStats, season, year, ff, RED}) {
   // view: "career" | "year-YYYY" (year aggregate) | "YYYY-S" (individual season)
   const [view, setView] = useState("career");
   const [expandedYear, setExpandedYear] = useState(null);
   const [cat, setCat] = useState("offense");
   const [offSub, setOffSub] = useState("passing");
   const norm = normalizeUserStats(playerStats?.[userId]);
-  const years = Object.keys(norm).sort((a,b)=>Number(b)-Number(a));
+  // Build year list from dynasty timeline (START_YEAR → current year), always show even with no data
+  const currentYear = year || (START_YEAR + (season||1) - 1);
+  const dynastyYears = [];
+  for(let y=START_YEAR; y<=currentYear; y++) dynastyYears.push(String(y));
+  // Merge dynasty years with any years that have saved data (in case data exists beyond current year)
+  const allYearKeys = [...new Set([...dynastyYears, ...Object.keys(norm)])];
+  const years = allYearKeys.sort((a,b)=>Number(b)-Number(a));
   const allStatsList = years.flatMap(yr=>Object.values(norm[yr]));
   // Determine which stats to show based on view level
   const statsForView = (()=>{
@@ -1550,7 +1556,8 @@ function PlayerStatsTab({userId, userName, playerStats, yearList, ff, RED}) {
       const yr=view.slice(5);
       return mergeStatsList(Object.values(norm[yr]||{}));
     }
-    const [yr,s]=view.split("-");
+    const idx=view.indexOf("-");
+    const yr=view.slice(0,idx), s=view.slice(idx+1);
     return norm[yr]?.[s]||EMPTY_STATS();
   })();
   const p=statsForView.passing, ru=statsForView.rushing, re=statsForView.receiving;
@@ -1580,9 +1587,12 @@ function PlayerStatsTab({userId, userName, playerStats, yearList, ff, RED}) {
         ))}
       </div>
       {/* Level 2 — Season buttons under expanded year */}
-      {expandedYear&&norm[expandedYear]&&(
+      {expandedYear&&(
         <div style={{display:"flex",gap:6,flexWrap:"wrap",marginTop:-6,paddingLeft:10,borderLeft:`3px solid ${RED}`}}>
-          {Object.keys(norm[expandedYear]).sort((a,b)=>Number(a)-Number(b)).map(s=>(
+          {(Object.keys(norm[expandedYear]||{}).length>0
+            ? Object.keys(norm[expandedYear]).sort((a,b)=>Number(a)-Number(b))
+            : ["1"]
+          ).map(s=>(
             <button key={s} style={{...btnStyle(view===`${expandedYear}-${s}`),background:view===`${expandedYear}-${s}`?"#333":"#f0f0f0",color:view===`${expandedYear}-${s}`?"#fff":"#555"}}
               onClick={()=>setView(`${expandedYear}-${s}`)}>
               Season {s}
