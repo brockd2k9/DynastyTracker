@@ -3275,6 +3275,8 @@ function ContentHub({sorted,entries,week,season,year,leagueName,history,leader,a
   const [articleImage,setArticleImage] = useState(null);
   const [showOnHome,setShowOnHome] = useState(false);
   const articleImgRef = useRef();
+  const [selArticleId,setSelArticleId] = useState(null);
+  const manageImgRef = useRef();
   const [bibleProfiles,setBibleProfiles] = useState(()=>(setup?.leagueBible?.profiles||[]).length>0?setup.leagueBible.profiles:entries.map(e=>({name:e.userName||e.teamName,bio:""})));
   const [bibleStorylines,setBibleStorylines] = useState(setup?.leagueBible?.storylines||"");
   const [bibleSaved,setBibleSaved] = useState(false);
@@ -3435,8 +3437,52 @@ function ContentHub({sorted,entries,week,season,year,leagueName,history,leader,a
     }
   }
 
+  function saveArticleField(id, fields) {
+    const updated = articles.map(a=>a.id===id?{...a,...fields}:a);
+    setArticles(updated);
+    dbSave({articles:updated});
+  }
+
   return (
     <div style={{display:"flex",flexDirection:"column",gap:16}}>
+
+      {/* Article Images & Homepage Control */}
+      {articles.length>0&&<Card style={{overflow:"hidden"}}>
+        <CardHead bg="#1a3a6b">Article Images &amp; Homepage</CardHead>
+        <div style={{padding:14,display:"flex",flexDirection:"column",gap:0}}>
+          <div style={{fontSize:11,color:"#888",marginBottom:10}}>Upload featured images for articles and control which ones appear in the homepage carousel.</div>
+          <input ref={manageImgRef} type="file" accept="image/*" style={{display:"none"}} onChange={async e=>{
+            const f=e.target.files?.[0];if(!f||!selArticleId)return;
+            const compressed=await compressImage(f);
+            saveArticleField(selArticleId,{imageUrl:compressed});
+            if(manageImgRef.current)manageImgRef.current.value="";
+          }}/>
+          {articles.slice(0,15).map(a=>(
+            <div key={a.id} style={{display:"flex",gap:10,alignItems:"center",padding:"10px 0",borderBottom:"1px solid #f0f0f0",flexWrap:"wrap"}}>
+              {/* Thumbnail */}
+              <div style={{width:70,height:48,borderRadius:2,overflow:"hidden",background:"#f0f0f0",flexShrink:0,display:"flex",alignItems:"center",justifyContent:"center"}}>
+                {a.imageUrl
+                  ?<img src={a.imageUrl} alt="" style={{width:"100%",height:"100%",objectFit:"cover"}}/>
+                  :<span style={{fontSize:9,color:"#bbb",textAlign:"center",fontFamily:ff}}>No image</span>}
+              </div>
+              {/* Info */}
+              <div style={{flex:1,minWidth:120}}>
+                <div style={{fontSize:10,color:a.reporterColor||"#cc0000",fontWeight:700,textTransform:"uppercase",letterSpacing:0.4,fontFamily:ff}}>{a.label} · S{a.season} Wk{a.week}</div>
+                <div style={{fontSize:12,fontWeight:700,color:"#111",lineHeight:1.3,fontFamily:ff,marginTop:2}}>{articleHeadline(a.text)}</div>
+              </div>
+              {/* Controls */}
+              <div style={{display:"flex",gap:8,alignItems:"center",flexShrink:0,flexWrap:"wrap"}}>
+                <button onClick={()=>{setSelArticleId(a.id);manageImgRef.current?.click();}} style={{padding:"5px 11px",border:"1px solid #ccc",borderRadius:2,cursor:"pointer",fontFamily:ff,fontSize:10,fontWeight:700,background:"#fff",color:"#333",textTransform:"uppercase"}}>{a.imageUrl?"Replace":"Upload"}</button>
+                {a.imageUrl&&<button onClick={()=>saveArticleField(a.id,{imageUrl:undefined,showOnHome:false})} style={{padding:"5px 8px",border:"1px solid #eee",borderRadius:2,cursor:"pointer",fontFamily:ff,fontSize:10,background:"#fff",color:"#888"}}>Remove</button>}
+                {a.imageUrl&&<label style={{display:"flex",alignItems:"center",gap:5,cursor:"pointer",userSelect:"none",fontSize:11,fontWeight:600,color:"#333",fontFamily:ff}}>
+                  <input type="checkbox" checked={!!a.showOnHome} onChange={e=>saveArticleField(a.id,{showOnHome:e.target.checked})} style={{accentColor:"#cc0000"}}/>
+                  Homepage
+                </label>}
+              </div>
+            </div>
+          ))}
+        </div>
+      </Card>}
 
       {/* Reporter selector */}
       <Card style={{overflow:"hidden"}}>
