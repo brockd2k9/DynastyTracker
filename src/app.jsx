@@ -1962,16 +1962,32 @@ function SetupPanel({entries,setup,postSeasonInputs,setPSI,handleStart,setCommis
     };
     setSetup(updated);
     if(rosterYear===curYear){
-      // Rebuild entries exactly from the roster (preserving stats for existing members)
-      const updatedEntries = roster.map(r=>{
+      // Resolve userId for each roster member from setup.rows, falling back to genId
+      const resolvedRoster = roster.map(r=>{
         const setupRow=(setup?.rows||[]).find(sr=>sr.userId===r.userId||sr.userName===r.userName);
         const uid=setupRow?.userId||r.userId||genId();
-        const existing=entries.find(e=>e.userId===uid||(e.userName===r.userName&&!uid));
-        if(existing) return {...existing, userId:uid, userName:r.userName, teamName:r.teamName};
-        return INITIAL_ENTRY(r.userName, r.teamName, uid);
+        return {...r, userId:uid};
+      });
+      // Ensure all roster members are in setup.rows as active so activeEntries includes them
+      let updatedRows=[...(updated.rows||[])];
+      resolvedRoster.forEach(r=>{
+        const idx=updatedRows.findIndex(sr=>sr.userId===r.userId||sr.userName===r.userName);
+        if(idx===-1){
+          updatedRows.push({userId:r.userId,userName:r.userName,teamName:r.teamName,active:true});
+        } else {
+          updatedRows[idx]={...updatedRows[idx],userId:r.userId,active:true};
+        }
+      });
+      const updatedWithRows={...updated,rows:updatedRows};
+      setSetup(updatedWithRows);
+      // Rebuild entries exactly from the resolved roster (preserving stats for existing members)
+      const updatedEntries = resolvedRoster.map(r=>{
+        const existing=entries.find(e=>e.userId===r.userId||e.userName===r.userName);
+        if(existing) return {...existing, userId:r.userId, userName:r.userName, teamName:r.teamName};
+        return INITIAL_ENTRY(r.userName, r.teamName, r.userId);
       });
       setEntries(updatedEntries);
-      saveToDb({setup:updated, entries:updatedEntries});
+      saveToDb({setup:updatedWithRows, entries:updatedEntries});
     } else {
       saveToDb({setup:updated});
     }
