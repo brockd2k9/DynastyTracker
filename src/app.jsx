@@ -1531,23 +1531,13 @@ function PlayerStatsTab({userId, userName, playerStats, yearList, ff, RED}) {
     if(view==="career") return allStatsList.reduce((acc,s)=>sumStats(acc,s), EMPTY_STATS());
     if(view.startsWith("year-")){
       const yr=view.slice(5);
-      const yrList=Object.values(norm[yr]||{});
-      return yrList.reduce((acc,s)=>sumStats(acc,s), EMPTY_STATS());
+      return Object.values(norm[yr]||{}).reduce((acc,s)=>sumStats(acc,s), EMPTY_STATS());
     }
     const [yr,s]=view.split("-");
     return norm[yr]?.[s]||EMPTY_STATS();
   })();
-  const miscForView = (()=>{
-    if(view==="career") return avgMisc(allStatsList);
-    if(view.startsWith("year-")){
-      const yr=view.slice(5);
-      return avgMisc(Object.values(norm[yr]||{}));
-    }
-    const [yr,s]=view.split("-");
-    return norm[yr]?.[s]?.misc||EMPTY_STATS().misc;
-  })();
   const p=statsForView.passing, ru=statsForView.rushing, re=statsForView.receiving;
-  const d=statsForView.defense, st=statsForView.specialTeams, mi=miscForView;
+  const d=statsForView.defense, st=statsForView.specialTeams, mi=statsForView.misc||EMPTY_STATS().misc;
   const compPct=p.att>0?((p.comp/p.att)*100).toFixed(1):"-";
   const ypassComp=p.comp>0?(p.yds/p.comp).toFixed(1):"-";
   const ypc=ru.att>0?(ru.yds/ru.att).toFixed(1):"-";
