@@ -1962,20 +1962,13 @@ function SetupPanel({entries,setup,postSeasonInputs,setPSI,handleStart,setCommis
     };
     setSetup(updated);
     if(rosterYear===curYear){
-      // Update team names for existing entries
-      let updatedEntries = entries.map(e=>{
-        const override = roster.find(r=>r.userId===e.userId);
-        if(!override)return e;
-        return {...e, teamName:override.teamName||e.teamName};
-      });
-      // Create new entries for roster members not yet in live standings
-      roster.forEach(r=>{
-        if(!updatedEntries.find(e=>e.userId===r.userId||e.userName===r.userName)){
-          // Resolve userId from setup.rows by userId or userName to avoid mismatches
-          const setupRow=(setup?.rows||[]).find(sr=>sr.userId===r.userId||sr.userName===r.userName);
-          const uid=setupRow?.userId||r.userId||genId();
-          updatedEntries=[...updatedEntries, INITIAL_ENTRY(r.userName,r.teamName,uid)];
-        }
+      // Rebuild entries exactly from the roster (preserving stats for existing members)
+      const updatedEntries = roster.map(r=>{
+        const setupRow=(setup?.rows||[]).find(sr=>sr.userId===r.userId||sr.userName===r.userName);
+        const uid=setupRow?.userId||r.userId||genId();
+        const existing=entries.find(e=>e.userId===uid||(e.userName===r.userName&&!uid));
+        if(existing) return {...existing, userId:uid, userName:r.userName, teamName:r.teamName};
+        return INITIAL_ENTRY(r.userName, r.teamName, uid);
       });
       setEntries(updatedEntries);
       saveToDb({setup:updated, entries:updatedEntries});
