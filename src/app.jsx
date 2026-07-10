@@ -1843,6 +1843,9 @@ function SetupPanel({entries,setup,postSeasonInputs,setPSI,handleStart,setCommis
   const [rosterSeason,setRosterSeason] = useState(season+1);
   const [rosterEdits,setRosterEdits] = useState({});
   const [rosterSaved,setRosterSaved] = useState(false);
+  const [rosterRows,setRosterRows] = useState(null); // null = not yet initialized for current season
+  const [newRosterCoach,setNewRosterCoach] = useState("");
+  const [newRosterTeam,setNewRosterTeam] = useState("");
   const [ptsSaved,setPtsSaved] = useState(false);
   const [ptsEdit,setPtsEdit] = useState(null); // null = closed, object = editing
   function openPtsEditor(){const base={...DEFAULT_PTS_CONFIG,...(setup?.pointsConfig||{})};if(!base.customCategories)base.customCategories=[];setPtsEdit(base);setPtsSaved(false);}
@@ -1936,21 +1939,20 @@ function SetupPanel({entries,setup,postSeasonInputs,setPSI,handleStart,setCommis
 
   // Season roster management
   const permanentUsers = setup?.permanentUsers||[];
-  const existingRoster = setup?.seasonRosters?.[rosterSeason]||[];
-  function getRosterEntry(userId) {
-    const existing = existingRoster.find(r=>r.userId===userId);
-    if(rosterEdits[userId]!==undefined) return rosterEdits[userId];
-    if(existing) return existing;
-    const cur = (setup?.rows||[]).find(r=>r.userId===userId);
-    return {userId, userName:cur?.userName||"", teamName:cur?.teamName||""};
+  // Build the editable row list for the selected season, initialized from saved roster or permanentUsers defaults
+  function buildDefaultRosterRows(season){
+    const saved = setup?.seasonRosters?.[season]||[];
+    if(saved.length>0) return saved.map(r=>({...r}));
+    return permanentUsers.map(u=>{const cur=(setup?.rows||[]).find(r=>r.userId===u.id);return {userId:u.id,userName:u.defaultName,teamName:cur?.teamName||""};});
   }
-  function setRosterField(userId,field,val){
-    const cur = getRosterEntry(userId);
-    setRosterEdits(p=>({...p,[userId]:{...cur,[field]:val}}));
-    setRosterSaved(false);
-  }
+  // Initialize rosterRows when season changes
+  const effectiveRosterRows = rosterRows !== null ? rosterRows : buildDefaultRosterRows(rosterSeason);
+  function changeRosterSeason(s){setRosterSeason(s);setRosterRows(null);setRosterEdits({});setRosterSaved(false);setNewRosterCoach("");setNewRosterTeam("");}
+  function setRosterRowField(idx,field,val){setRosterRows(prev=>(prev||buildDefaultRosterRows(rosterSeason)).map((r,i)=>i===idx?{...r,[field]:val}:r));setRosterSaved(false);}
+  function deleteRosterRow(idx){setRosterRows(prev=>(prev||buildDefaultRosterRows(rosterSeason)).filter((_,i)=>i!==idx));setRosterSaved(false);}
+  function addRosterRow(){if(!newRosterCoach.trim()||!newRosterTeam.trim())return;const matchedUser=permanentUsers.find(u=>u.defaultName.toLowerCase()===newRosterCoach.trim().toLowerCase());const userId=matchedUser?.id||genId();setRosterRows(prev=>[...(prev||buildDefaultRosterRows(rosterSeason)),{userId,userName:newRosterCoach.trim(),teamName:newRosterTeam.trim()}]);setNewRosterCoach("");setNewRosterTeam("");setRosterSaved(false);}
   function saveSeasonRoster(){
-    const roster = permanentUsers.map(u=>({userId:u.id,userName:u.defaultName,teamName:getRosterEntry(u.id).teamName||""})).filter(r=>r.teamName);
+    const roster = effectiveRosterRows.filter(r=>r.userName.trim()&&r.teamName.trim());
     const rosterYear = START_YEAR + rosterSeason - 1;
     const updated = {
       ...setup,
@@ -1958,7 +1960,6 @@ function SetupPanel({entries,setup,postSeasonInputs,setPSI,handleStart,setCommis
       yearRosters:{...(setup?.yearRosters||{}), [rosterYear]:roster},
     };
     setSetup(updated);
-    // If saving for the current year, also update live entries with new team names (username stays permanent)
     if(rosterYear===year && entries.length>0){
       const updatedEntries = entries.map(e=>{
         const override = roster.find(r=>r.userId===e.userId);
@@ -1966,11 +1967,11 @@ function SetupPanel({entries,setup,postSeasonInputs,setPSI,handleStart,setCommis
         return {...e, teamName:override.teamName||e.teamName};
       });
       setEntries(updatedEntries);
-      setSetup(updated);
       saveToDb({setup:updated, entries:updatedEntries});
     } else {
       saveToDb({setup:updated});
     }
+    setRosterRows(roster);
     setRosterEdits({});
     setRosterSaved(true);
     setTimeout(()=>setRosterSaved(false),2000);
@@ -2009,17 +2010,28 @@ function SetupPanel({entries,setup,postSeasonInputs,setPSI,handleStart,setCommis
           <div style={{fontSize:11,color:"#888",marginBottom:10,lineHeight:1.5}}>Set each player's team for this season. Usernames stay permanent — only teams change year to year.</div>
           <div style={{display:"flex",alignItems:"center",gap:10,marginBottom:14}}>
             <span style={{fontSize:12,color:"#555",fontWeight:700}}>Year:</span>
-            <select value={rosterSeason} onChange={e=>{setRosterSeason(Number(e.target.value));setRosterEdits({});}} style={{padding:"6px 10px",border:"1px solid #ccc",borderRadius:2,fontFamily:ff,fontSize:13,color:"#111",background:"#fff"}}>
+            <select value={rosterSeason} onChange={e=>changeRosterSeason(Number(e.target.value))} style={{padding:"6px 10px",border:"1px solid #ccc",borderRadius:2,fontFamily:ff,fontSize:13,color:"#111",background:"#fff"}}>
               {(()=>{const FIRST_YEAR=2020;const startS=FIRST_YEAR-START_YEAR+1;const endS=season+5;const arr=[];for(let s=startS;s<=endS;s++)arr.push(s);return arr;})().map(s=>{const dispYear=START_YEAR+s-1;const curYear=year||START_YEAR+season-1;return(<option key={s} value={s}>{dispYear}{dispYear===curYear?" (current)":dispYear===curYear+1?" (next)":""}</option>);})}
             </select>
           </div>
-          <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:0,border:"1px solid #eee",borderRadius:2,overflow:"hidden"}}>
-            <div style={{padding:"6px 10px",background:"#f5f5f5",fontSize:10,color:"#888",fontWeight:700,textTransform:"uppercase",borderBottom:"1px solid #eee"}}>Player</div>
-            <div style={{padding:"6px 10px",background:"#f5f5f5",fontSize:10,color:"#888",fontWeight:700,textTransform:"uppercase",borderBottom:"1px solid #eee",borderLeft:"1px solid #eee"}}>Team</div>
-            {permanentUsers.map((u,i)=>{const entry=getRosterEntry(u.id);const isEdited=rosterEdits[u.id]!==undefined;return(<>
-              <div key={u.id+"n"} style={{padding:"8px 10px",borderBottom:i<permanentUsers.length-1?"1px solid #f0f0f0":"none",fontSize:12,color:"#555",fontWeight:600,display:"flex",alignItems:"center",background:isEdited?"#fffbf0":"#fff"}}>{u.defaultName}</div>
-              <input key={u.id+"tn"} value={entry.teamName||""} onChange={e=>setRosterField(u.id,"teamName",e.target.value)} placeholder="e.g. Troy" style={{padding:"8px 10px",border:"none",borderLeft:"1px solid #eee",borderBottom:i<permanentUsers.length-1?"1px solid #f0f0f0":"none",fontFamily:ff,fontSize:13,color:"#111",outline:"none",background:isEdited?"#fffbf0":"#fff"}}/>
-            </>);})}
+          <div style={{border:"1px solid #eee",borderRadius:2,overflow:"hidden"}}>
+            <div style={{display:"grid",gridTemplateColumns:"1fr 1fr 32px",background:"#f5f5f5",borderBottom:"1px solid #eee"}}>
+              <div style={{padding:"6px 10px",fontSize:10,color:"#888",fontWeight:700,textTransform:"uppercase"}}>Coach</div>
+              <div style={{padding:"6px 10px",fontSize:10,color:"#888",fontWeight:700,textTransform:"uppercase",borderLeft:"1px solid #eee"}}>Team</div>
+              <div/>
+            </div>
+            {effectiveRosterRows.map((row,i)=>(
+              <div key={i} style={{display:"grid",gridTemplateColumns:"1fr 1fr 32px",borderBottom:i<effectiveRosterRows.length-1?"1px solid #f0f0f0":"none",alignItems:"center"}}>
+                <input value={row.userName||""} onChange={e=>setRosterRowField(i,"userName",e.target.value)} placeholder="Coach name" style={{padding:"8px 10px",border:"none",fontFamily:ff,fontSize:13,color:"#111",outline:"none",background:"#fff",width:"100%",boxSizing:"border-box"}}/>
+                <input value={row.teamName||""} onChange={e=>setRosterRowField(i,"teamName",e.target.value)} placeholder="e.g. Troy" style={{padding:"8px 10px",border:"none",borderLeft:"1px solid #eee",fontFamily:ff,fontSize:13,color:"#111",outline:"none",background:"#fff",width:"100%",boxSizing:"border-box"}}/>
+                <button onClick={()=>deleteRosterRow(i)} style={{background:"transparent",border:"none",color:"#ccc",cursor:"pointer",fontSize:18,padding:"0 8px",lineHeight:1}}>×</button>
+              </div>
+            ))}
+            <div style={{display:"grid",gridTemplateColumns:"1fr 1fr 32px",borderTop:"1px dashed #e0e0e0",background:"#fafafa"}}>
+              <input value={newRosterCoach} onChange={e=>setNewRosterCoach(e.target.value)} placeholder="+ Coach name" style={{padding:"8px 10px",border:"none",background:"transparent",fontFamily:ff,fontSize:13,color:"#111",outline:"none"}}/>
+              <input value={newRosterTeam} onChange={e=>setNewRosterTeam(e.target.value)} onKeyDown={e=>e.key==="Enter"&&addRosterRow()} placeholder="Team name" style={{padding:"8px 10px",border:"none",borderLeft:"1px solid #eee",background:"transparent",fontFamily:ff,fontSize:13,color:"#111",outline:"none"}}/>
+              <button onClick={addRosterRow} style={{background:"transparent",border:"none",color:RED,cursor:"pointer",fontSize:20,padding:"0 8px",lineHeight:1,fontWeight:700}}>+</button>
+            </div>
           </div>
           <button onClick={saveSeasonRoster} style={{marginTop:10,background:rosterSaved?"#007a00":RED,color:"#fff",border:"none",borderRadius:2,padding:"9px 18px",cursor:"pointer",fontFamily:ff,fontSize:12,fontWeight:800,textTransform:"uppercase"}}>{rosterSaved?"✓ Saved":"Save Season Roster"}</button>
         </div>
