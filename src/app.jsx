@@ -1473,6 +1473,7 @@ const EMPTY_STATS = () => ({
   receiving:{rec:0,yds:0,tds:0},
   defense:{int:0,fum:0,sacks:0,tds:0},
   specialTeams:{fgAtt:0,fgMade:0,punts:0,puntYds:0,netAvg:0,puntsIn20:0},
+  misc:{offPts:0,defPts:0,offYds:0,defYds:0,passYds:0,rushYds:0,passYdsAllowed:0,rushYdsAllowed:0,turnoverDiff:0,thirdDownPct:0,fourthDownPct:0,redzoneOff:0,redzoneDef:0},
 });
 function sumStats(a, b) {
   const s = (obj1, obj2) => Object.fromEntries(Object.keys(obj1).map(k=>[k,(obj1[k]||0)+(obj2?.[k]||0)]));
@@ -1482,7 +1483,16 @@ function sumStats(a, b) {
     receiving: s(a.receiving, b?.receiving),
     defense: s(a.defense, b?.defense),
     specialTeams: s(a.specialTeams, b?.specialTeams),
+    misc: s(a.misc||EMPTY_STATS().misc, b?.misc||EMPTY_STATS().misc),
   };
+}
+function avgMisc(yearStats) {
+  // misc fields are per-game averages/pcts — average across seasons rather than sum
+  const keys = Object.keys(EMPTY_STATS().misc);
+  const vals = Object.values(yearStats).map(y=>y.misc||EMPTY_STATS().misc);
+  if(!vals.length) return EMPTY_STATS().misc;
+  const totals = keys.reduce((acc,k)=>({...acc,[k]:vals.reduce((s,v)=>s+(v[k]||0),0)}),{});
+  return Object.fromEntries(keys.map(k=>[k, parseFloat((totals[k]/vals.length).toFixed(2))]));
 }
 function StatRow({label, val, sub}) {
   const ff="'Helvetica Neue',Arial,sans-serif";
@@ -1505,14 +1515,16 @@ function PlayerStatsTab({userId, userName, playerStats, yearList, ff, RED}) {
   const statsForView = view==="career"
     ? years.reduce((acc,y)=>sumStats(acc,userStats[y]), EMPTY_STATS())
     : (userStats[view]||EMPTY_STATS());
+  const miscForView = view==="career" ? avgMisc(userStats) : (userStats[view]?.misc||EMPTY_STATS().misc);
   const p=statsForView.passing, ru=statsForView.rushing, re=statsForView.receiving;
-  const d=statsForView.defense, st=statsForView.specialTeams;
+  const d=statsForView.defense, st=statsForView.specialTeams, mi=miscForView;
   const compPct=p.att>0?((p.comp/p.att)*100).toFixed(1):"-";
   const ypassComp=p.comp>0?(p.yds/p.comp).toFixed(1):"-";
   const ypc=ru.att>0?(ru.yds/ru.att).toFixed(1):"-";
   const ypr=re.rec>0?(re.yds/re.rec).toFixed(1):"-";
   const fgPct=st.fgAtt>0?((st.fgMade/st.fgAtt)*100).toFixed(1):"-";
   const puntAvg=st.punts>0?(st.puntYds/st.punts).toFixed(1):"-";
+  const pct=(v)=>v>0?v+"%":"-";
   const btnStyle=(active)=>({padding:"6px 14px",border:"none",borderRadius:2,cursor:"pointer",fontFamily:ff,fontSize:11,fontWeight:800,textTransform:"uppercase",background:active?RED:"#eee",color:active?"#fff":"#555"});
   return (
     <div style={{display:"flex",flexDirection:"column",gap:12}}>
@@ -1522,8 +1534,8 @@ function PlayerStatsTab({userId, userName, playerStats, yearList, ff, RED}) {
         {years.map(y=><button key={y} style={btnStyle(view===y)} onClick={()=>setView(y)}>{y}</button>)}
       </div>
       {/* Category selector */}
-      <div style={{display:"flex",gap:6}}>
-        {["offense","defense","specialTeams"].map(c=><button key={c} style={btnStyle(cat===c)} onClick={()=>setCat(c)}>{c==="specialTeams"?"Special Teams":c.charAt(0).toUpperCase()+c.slice(1)}</button>)}
+      <div style={{display:"flex",gap:6,flexWrap:"wrap"}}>
+        {["offense","defense","specialTeams","misc"].map(c=><button key={c} style={btnStyle(cat===c)} onClick={()=>setCat(c)}>{c==="specialTeams"?"Special Teams":c==="misc"?"MISC":c.charAt(0).toUpperCase()+c.slice(1)}</button>)}
       </div>
       {cat==="offense"&&<div style={{display:"flex",gap:6,marginTop:-4}}>
         {["passing","rushing","receiving"].map(s=><button key={s} style={{...btnStyle(offSub===s),background:offSub===s?"#333":"#f5f5f5",color:offSub===s?"#fff":"#555"}} onClick={()=>setOffSub(s)}>{s.charAt(0).toUpperCase()+s.slice(1)}</button>)}
@@ -1566,6 +1578,21 @@ function PlayerStatsTab({userId, userName, playerStats, yearList, ff, RED}) {
           <StatRow label="Net Average" val={st.netAvg||0}/>
           <StatRow label="Punts Inside 20" val={st.puntsIn20}/>
         </>}
+        {cat==="misc"&&<>
+          <StatRow label="Offensive Points Per Game" val={mi.offPts||0}/>
+          <StatRow label="Defensive Points Per Game" val={mi.defPts||0}/>
+          <StatRow label="Offensive Yards Per Game" val={mi.offYds||0}/>
+          <StatRow label="Defensive Yards Per Game" val={mi.defYds||0}/>
+          <StatRow label="Passing Yards Per Game" val={mi.passYds||0}/>
+          <StatRow label="Rushing Yards Per Game" val={mi.rushYds||0}/>
+          <StatRow label="Passing Yards Allowed Per Game" val={mi.passYdsAllowed||0}/>
+          <StatRow label="Rushing Yards Allowed Per Game" val={mi.rushYdsAllowed||0}/>
+          <StatRow label="Turnover Differential" val={mi.turnoverDiff>0?"+"+mi.turnoverDiff:mi.turnoverDiff||0}/>
+          <StatRow label="3rd Down %" val={pct(mi.thirdDownPct)}/>
+          <StatRow label="4th Down %" val={pct(mi.fourthDownPct)}/>
+          <StatRow label="Red Zone Offense %" val={pct(mi.redzoneOff)}/>
+          <StatRow label="Red Zone Defense %" val={pct(mi.redzoneDef)}/>
+        </>}
       </div>
     </div>
   );
@@ -1591,8 +1618,8 @@ function PlayerStatsAdmin({setup, setSetup, saveToDb, permanentUsers, year, ff, 
     try{
       const b64=await new Promise((res,rej)=>{const r=new FileReader();r.onload=()=>res(r.result.split(",")[1]);r.onerror=rej;r.readAsDataURL(file);});
       const prompt=`This is a screenshot of college football video game season stats. Extract ALL visible stats and return ONLY a JSON object with this exact structure (use 0 for any stat not visible):
-{"passing":{"att":0,"comp":0,"yds":0,"tds":0},"rushing":{"att":0,"yds":0,"tds":0},"receiving":{"rec":0,"yds":0,"tds":0},"defense":{"int":0,"fum":0,"sacks":0,"tds":0},"specialTeams":{"fgAtt":0,"fgMade":0,"punts":0,"puntYds":0,"puntsIn20":0}}
-Return only the JSON, no explanation. Map what you see: passing yards→passing.yds, passing TDs→passing.tds, completions→passing.comp, attempts→passing.att, rushing yards→rushing.yds, rushing TDs→rushing.tds, rushing attempts→rushing.att, receptions→receiving.rec, receiving yards→receiving.yds, receiving TDs→receiving.tds, interceptions→defense.int, fumbles recovered→defense.fum, sacks→defense.sacks, defensive TDs→defense.tds, field goals made→specialTeams.fgMade, field goals attempted→specialTeams.fgAtt, punts→specialTeams.punts, punting yards→specialTeams.puntYds, punts inside 20→specialTeams.puntsIn20.`;
+{"passing":{"att":0,"comp":0,"yds":0,"tds":0,"int":0},"rushing":{"att":0,"yds":0,"tds":0},"receiving":{"rec":0,"yds":0,"tds":0},"defense":{"int":0,"fum":0,"sacks":0,"tds":0},"specialTeams":{"fgAtt":0,"fgMade":0,"punts":0,"puntYds":0,"netAvg":0,"puntsIn20":0},"misc":{"offPts":0,"defPts":0,"offYds":0,"defYds":0,"passYds":0,"rushYds":0,"passYdsAllowed":0,"rushYdsAllowed":0,"turnoverDiff":0,"thirdDownPct":0,"fourthDownPct":0,"redzoneOff":0,"redzoneDef":0}}
+Return only the JSON, no explanation. Map what you see: passing yards→passing.yds, passing TDs→passing.tds, completions→passing.comp, attempts→passing.att, interceptions thrown→passing.int, rushing yards→rushing.yds, rushing TDs→rushing.tds, rushing attempts→rushing.att, receptions→receiving.rec, receiving yards→receiving.yds, receiving TDs→receiving.tds, defensive interceptions→defense.int, fumbles recovered→defense.fum, sacks→defense.sacks, defensive TDs→defense.tds, field goals made→specialTeams.fgMade, field goals attempted→specialTeams.fgAtt, punts→specialTeams.punts, punting yards→specialTeams.puntYds, net average→specialTeams.netAvg, punts inside 20→specialTeams.puntsIn20, offensive points per game→misc.offPts, defensive points per game→misc.defPts, offensive yards per game→misc.offYds, defensive yards per game→misc.defYds, passing yards per game→misc.passYds, rushing yards per game→misc.rushYds, passing yards allowed per game→misc.passYdsAllowed, rushing yards allowed per game→misc.rushYdsAllowed, turnover differential→misc.turnoverDiff, 3rd down percentage→misc.thirdDownPct, 4th down percentage→misc.fourthDownPct, red zone offense percentage→misc.redzoneOff, red zone defense percentage→misc.redzoneDef.`;
       const text=await callClaudeVision(b64,file.type,prompt);
       const json=JSON.parse(text.replace(/```json?|```/g,"").trim());
       setEdits(json);
@@ -1659,6 +1686,16 @@ Return only the JSON, no explanation. Map what you see: passing yards→passing.
       <Card><CardHead bg="#333">Special Teams</CardHead>
         <div style={{display:"grid",gridTemplateColumns:"repeat(auto-fill,minmax(130px,1fr))",gap:10,padding:"12px 14px"}}>
           {inp("specialTeams","fgAtt","FG Attempted")}{inp("specialTeams","fgMade","FG Made")}{inp("specialTeams","punts","Punts")}{inp("specialTeams","puntYds","Punt Yards")}{inp("specialTeams","netAvg","Net Average")}{inp("specialTeams","puntsIn20","Punts Inside 20")}
+        </div>
+      </Card>
+      <Card><CardHead bg="#555">MISC (Per-Game / Percentages)</CardHead>
+        <div style={{display:"grid",gridTemplateColumns:"repeat(auto-fill,minmax(140px,1fr))",gap:10,padding:"12px 14px"}}>
+          {inp("misc","offPts","Off Pts/Game")}{inp("misc","defPts","Def Pts/Game")}
+          {inp("misc","offYds","Off Yds/Game")}{inp("misc","defYds","Def Yds/Game")}
+          {inp("misc","passYds","Pass Yds/Game")}{inp("misc","rushYds","Rush Yds/Game")}
+          {inp("misc","passYdsAllowed","Pass Yds Allowed/G")}{inp("misc","rushYdsAllowed","Rush Yds Allowed/G")}
+          {inp("misc","turnoverDiff","Turnover Diff")}{inp("misc","thirdDownPct","3rd Down %")}{inp("misc","fourthDownPct","4th Down %")}
+          {inp("misc","redzoneOff","Redzone Off %")}{inp("misc","redzoneDef","Redzone Def %")}
         </div>
       </Card>
       <button onClick={saveStats} style={{background:saved?"#007a00":RED,color:"#fff",border:"none",borderRadius:2,padding:"10px 20px",cursor:"pointer",fontFamily:ff,fontSize:13,fontWeight:800,textTransform:"uppercase"}}>{saved?"✓ Saved":"Save Stats"}</button>
