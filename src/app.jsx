@@ -74,7 +74,45 @@ const MODEL = "claude-sonnet-4-6";
 const ANTHROPIC_URL = "https://api.anthropic.com/v1/messages";
 const ANTHROPIC_HEADERS = (key) => ({"Content-Type":"application/json","x-api-key":key,"anthropic-version":"2023-06-01","anthropic-dangerous-direct-browser-access":"true"});
 
+// sonnet-4-6 pricing: $3/MTok input, $15/MTok output
+const COST_PER_INPUT_TOKEN = 3 / 1_000_000;
+const COST_PER_OUTPUT_TOKEN = 15 / 1_000_000;
+const MAX_SESSION_CALLS = 20;
+const TOKEN_LIMIT = 8000;
+const CALL_COOLDOWN_MS = 3000;
+
 let _claudeInFlight = false;
+let _sessionCallCount = 0;
+let _lastCallFinishedAt = 0;
+
+function _estimateTokens(text) {
+  return Math.ceil(text.length / 4);
+}
+
+function _logCost(label, inputTokens, outputTokens) {
+  const inputCents = inputTokens * COST_PER_INPUT_TOKEN * 100;
+  const outputCents = outputTokens * COST_PER_OUTPUT_TOKEN * 100;
+  console.log(
+    `[Claude API] ${label} | model: ${MODEL} | input: ~${inputTokens} tokens ($${inputCents.toFixed(4)}¢) | output: ~${outputTokens} tokens ($${outputCents.toFixed(4)}¢) | total: ~$${(inputCents+outputCents).toFixed(4)}¢ | session calls: ${_sessionCallCount}/${MAX_SESSION_CALLS}`
+  );
+}
+
+function _checkSafeguards(promptText) {
+  if (_sessionCallCount >= MAX_SESSION_CALLS) {
+    throw new Error("API call limit reached for this session — refresh to continue");
+  }
+  const now = Date.now();
+  const elapsed = now - _lastCallFinishedAt;
+  if (_lastCallFinishedAt > 0 && elapsed < CALL_COOLDOWN_MS) {
+    throw new Error(`Please wait ${Math.ceil((CALL_COOLDOWN_MS - elapsed) / 1000)}s before making another request`);
+  }
+  const estimated = _estimateTokens(promptText);
+  if (estimated > TOKEN_LIMIT) {
+    console.warn(`[Claude API] Prompt estimated at ${estimated} tokens — truncating to ${TOKEN_LIMIT}`);
+    return promptText.slice(0, TOKEN_LIMIT * 4) + "\n\n[Context truncated for token limit]";
+  }
+  return promptText;
+}
 
 function genId() {
   return Math.random().toString(36).slice(2,9) + Date.now().toString(36).slice(-4);
@@ -151,8 +189,9 @@ async function callClaudeVision(imageBase64, mediaType, prompt) {
   if (_claudeInFlight) { console.warn("[callClaudeVision] Call already in flight — skipped"); return ""; }
   const apiKey = import.meta.env.VITE_ANTHROPIC_KEY;
   if (!apiKey) throw new Error("API key not configured — add VITE_ANTHROPIC_KEY to GitHub repo secrets.");
-  const safePrompt = prompt.length > 20000 ? prompt.slice(0, 20000) + "\n\n[Context truncated]" : prompt;
+  const safePrompt = _checkSafeguards(prompt);
   _claudeInFlight = true;
+  _sessionCallCount++;
   try {
     const r = await fetch(ANTHROPIC_URL, {
       method:"POST",
@@ -164,9 +203,12 @@ async function callClaudeVision(imageBase64, mediaType, prompt) {
     });
     if (!r.ok){const e=await r.json().catch(()=>({}));throw new Error(e?.error?.message||`API error ${r.status}`);}
     const data = await r.json();
-    return data.content?.[0]?.text||"";
+    const outputText = data.content?.[0]?.text||"";
+    _logCost("Vision/scorecard scan", _estimateTokens(safePrompt) + 300, _estimateTokens(outputText));
+    return outputText;
   } finally {
     _claudeInFlight = false;
+    _lastCallFinishedAt = Date.now();
   }
 }
 
@@ -174,8 +216,9 @@ async function callClaude(prompt) {
   if (_claudeInFlight) { console.warn("[callClaude] Call already in flight — skipped"); return ""; }
   const apiKey = import.meta.env.VITE_ANTHROPIC_KEY;
   if (!apiKey) throw new Error("API key not configured — add VITE_ANTHROPIC_KEY to GitHub repo secrets.");
-  const safePrompt = prompt.length > 20000 ? prompt.slice(0, 20000) + "\n\n[Context truncated for length]" : prompt;
+  const safePrompt = _checkSafeguards(prompt);
   _claudeInFlight = true;
+  _sessionCallCount++;
   try {
     const timeoutId = { ref: null };
     const timeout = new Promise((_,reject)=>{ timeoutId.ref = setTimeout(()=>reject(new Error("Request timed out after 45s")),45000); });
@@ -191,9 +234,12 @@ async function callClaude(prompt) {
       throw new Error(err?.error?.message || `API error ${r.status}`);
     }
     const d = await r.json();
-    return d.content?.[0]?.text || "No content returned.";
+    const outputText = d.content?.[0]?.text || "No content returned.";
+    _logCost("Article/text generation", _estimateTokens(safePrompt), _estimateTokens(outputText));
+    return outputText;
   } finally {
     _claudeInFlight = false;
+    _lastCallFinishedAt = Date.now();
   }
 }
 
@@ -241,6 +287,7 @@ function WeekMatchupsCard({schedule,week,sorted,leagueName,season,setActiveArtic
 
   const generateGOTWPreview = async () => {
     if(!gameOfWeek) return;
+    if(!window.confirm(`Generate Game of the Week preview?\n${gameOfWeek.team1} vs ${gameOfWeek.team2}\n\nThis will use the Claude API.`)) return;
     setGenerating(true);
     const t1 = sorted.find(t=>t.teamName===gameOfWeek.team1);
     const t2 = sorted.find(t=>t.teamName===gameOfWeek.team2);
@@ -1596,6 +1643,7 @@ function PlayerStatsAdmin({setup, setSetup, saveToDb, permanentUsers, year, ff, 
   function setVal(cat,field,val){setEdits(p=>({...p,[cat]:{...p[cat],[field]:val===""?"":isNaN(Number(val))?p[cat]?.[field]??0:Number(val)}}));}
   async function handleImage(e){
     const file=e.target.files?.[0];if(!file)return;
+    if(!window.confirm("Scan this image for stats?\n\nThis will use the Claude Vision API.")) { if(fileRef.current)fileRef.current.value=""; return; }
     setParseErr("");setParsing(true);setPreview(URL.createObjectURL(file));
     try{
       const b64=await new Promise((res,rej)=>{const r=new FileReader();r.onload=()=>res(r.result.split(",")[1]);r.onerror=rej;r.readAsDataURL(file);});
@@ -3153,6 +3201,7 @@ function ContentHub({sorted,entries,week,season,year,leagueName,history,leader,a
   useEffect(()=>{if(setup?.leagueBible?.profiles?.length)setBibleProfiles(setup.leagueBible.profiles);if(setup?.leagueBible?.storylines!==undefined)setBibleStorylines(setup.leagueBible.storylines);},[setup?.leagueBible]);
 
   async function publishArticle(finalArticle) {
+    if(!window.confirm("Publish this article?\n\nThis will also run a brief Claude API call to extract storyline highlights for the League Bible.")) return;
     const newArticles=[finalArticle,...articles].slice(0,30);
     setArticles(newArticles);
     dbSave({articles:newArticles});
@@ -3178,6 +3227,7 @@ function ContentHub({sorted,entries,week,season,year,leagueName,history,leader,a
 
   async function requestRevision() {
     if(!revisionNote.trim())return;
+    if(!window.confirm("Send revision request to Claude API?\n\nThis will use the Claude API.")) return;
     setRevising(true);
     const r = reporter;
     try {
@@ -3262,6 +3312,8 @@ function ContentHub({sorted,entries,week,season,year,leagueName,history,leader,a
   async function generate(type) {
     if(type==="breaking"&&!breakingSubject){setGenError("Select a coach for the breaking news.");return;}
     if(type==="breaking"&&!breakingGuidance.trim()){setGenError("Add some guidance — what's the breaking news about?");return;}
+    const typeLabels = {powerrankings:"Power Rankings",preview:"Week Preview",recap:"Weekly Recap",seasonpreview:"Season Preview",hotakes:"Hot Takes",breaking:"Breaking News"};
+    if(!window.confirm(`Generate ${typeLabels[type]||"article"}?\n\nThis will use the Claude API.`)) return;
     setGenerating(type);
     setGenError(null);
     const r = reporter;
