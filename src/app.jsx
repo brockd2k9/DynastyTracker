@@ -3256,36 +3256,107 @@ team1.defense = yards the OPPONENT gained (what team1 allowed). Return only JSON
           </div>
         </Card>}
 
-        {/* CPU + BYE teams */}
-        {(cpuTeams.length>0||byeTeams.length>0||unscheduled.length>0)&&<Card style={{overflow:"hidden"}}>
-          <CardHead>CPU Games &amp; Byes</CardHead>
-          <div style={{padding:14,display:"flex",flexDirection:"column",gap:6}}>
+        {/* CPU games — rendered as matchup cards */}
+        {[...cpuTeams,...unscheduled].length>0&&<Card style={{overflow:"hidden"}}>
+          <CardHead bg="#444">Week {entryWeek} — CPU Games</CardHead>
+          <div style={{display:"flex",flexDirection:"column"}}>
             {[...cpuTeams,...unscheduled].map(teamName=>{
+              const key=`cpu-${teamName}`;
               const wr=getWR(teamName);
+              const isScanning=scanning===key;
               const entry=entries.find(e=>e.teamName===teamName);
+              const archivedGame=(setup?.gameArchive||[]).find(g=>g.year===Number(year)&&g.week===Number(entryWeek)&&(g.team1.name===teamName||g.team2.name===teamName));
+              const myTeamData=archivedGame?(archivedGame.team1.name===teamName?archivedGame.team1:archivedGame.team2):null;
+              const cpuTeamData=archivedGame?(archivedGame.team1.name===teamName?archivedGame.team2:archivedGame.team1):null;
+              const winner=wr.result==="win"?teamName:wr.result==="loss"?"CPU":null;
               return(
-                <div key={teamName} style={{display:"flex",alignItems:"center",gap:10,padding:"8px 0",borderBottom:"1px solid #f5f5f5",flexWrap:"wrap"}}>
-                  <div style={{minWidth:120}}><div style={{fontSize:13,fontWeight:700,color:"#111"}}>{entry?.userName||teamName}</div><div style={{fontSize:10,color:"#888",textTransform:"uppercase"}}>{teamName}{cpuTeams.includes(teamName)?" · CPU":""}</div></div>
-                  <div style={{display:"flex",gap:6}}>
-                    {["win","loss","none"].map(opt=><button key={opt} onClick={()=>setWR(teamName,"result",opt)} style={{...btnStyle(wr.result===opt,opt==="win"?"#007a00":opt==="loss"?RED:"#cc7700")}}>{opt==="none"?"BYE":opt}</button>)}
+                <div key={teamName} style={{borderBottom:"1px solid #eee"}}>
+                  <div style={{padding:"12px 16px",display:"flex",alignItems:"center",gap:12,flexWrap:"wrap",background:winner?"#f0f8f0":"#fff"}}>
+                    {/* Player team */}
+                    <div style={{flex:1,minWidth:100}}>
+                      <div style={{fontSize:13,fontWeight:900,color:wr.result==="win"?"#007a00":wr.result==="loss"?"#aaa":"#111"}}>{entry?.userName||teamName}</div>
+                      <div style={{fontSize:10,color:"#888",textTransform:"uppercase"}}>{teamName}</div>
+                      {myTeamData&&<div style={{fontSize:20,fontWeight:900,color:wr.result==="win"?"#007a00":"#555",marginTop:2}}>{myTeamData.score}</div>}
+                    </div>
+                    <div style={{fontSize:11,fontWeight:800,color:"#bbb",flexShrink:0}}>VS</div>
+                    {/* CPU side */}
+                    <div style={{flex:1,minWidth:100,textAlign:"right"}}>
+                      <div style={{fontSize:13,fontWeight:900,color:wr.result==="loss"?"#c00":wr.result==="win"?"#aaa":"#888"}}>CPU</div>
+                      <div style={{fontSize:10,color:"#ccc",textTransform:"uppercase"}}>Computer</div>
+                      {cpuTeamData&&<div style={{fontSize:20,fontWeight:900,color:wr.result==="loss"?"#c00":"#555",marginTop:2}}>{cpuTeamData.score}</div>}
+                    </div>
+                    {/* Upload button */}
+                    <label style={{background:archivedGame?"#1a3a6b":RED,color:"#fff",fontSize:11,fontWeight:700,padding:"7px 12px",borderRadius:2,cursor:isScanning?"wait":"pointer",opacity:isScanning?0.6:1,fontFamily:ff,textTransform:"uppercase",letterSpacing:0.5,flexShrink:0,whiteSpace:"nowrap"}}>
+                      {isScanning?"Scanning...":(archivedGame?"Replace":"📷 Box Score")}
+                      <input type="file" accept="image/*" style={{display:"none"}} ref={el=>fileRefs.current[key]=el} onChange={ev=>{
+                        const file=ev.target.files?.[0]; if(!file) return;
+                        if(!window.confirm(`Scan box score for ${teamName} vs CPU?\nThis will use the Claude Vision API.`)){if(fileRefs.current[key])fileRefs.current[key].value="";return;}
+                        setScanning(key); setScanErrors(p=>({...p,[key]:null}));
+                        (async()=>{
+                          try{
+                            const b64=await new Promise((res,rej)=>{const r=new FileReader();r.onload=()=>res(r.result.split(",")[1]);r.onerror=rej;r.readAsDataURL(file);});
+                            const prompt=`This is a college football video game box score. Extract stats for BOTH teams and return ONLY this JSON (use 0 for missing stats):\n{"team1":{"name":"","score":0,"passing":{"comp":0,"att":0,"pct":0.0,"yds":0,"tds":0,"int":0},"rushing":{"att":0,"yds":0,"ypc":0.0,"tds":0},"defense":{"totalYdsAllowed":0,"passYdsAllowed":0,"rushYdsAllowed":0},"specialTeams":{"fgMade":0,"fgAtt":0,"krTds":0,"prTds":0}},"team2":{"name":"","score":0,"passing":{"comp":0,"att":0,"pct":0.0,"yds":0,"tds":0,"int":0},"rushing":{"att":0,"yds":0,"ypc":0.0,"tds":0},"defense":{"totalYdsAllowed":0,"passYdsAllowed":0,"rushYdsAllowed":0},"specialTeams":{"fgMade":0,"fgAtt":0,"krTds":0,"prTds":0}}}\nteam1.defense = yards the OPPONENT gained. Return only JSON.`;
+                            const text=await callClaudeVision(b64,file.type,prompt);
+                            const json=JSON.parse(text.replace(/```json?|```/g,"").trim());
+                            const e1=entries.find(e=>e.teamName===teamName);
+                            // Identify which JSON team is the player
+                            const playerIsTeam1=json.team1.score!==(wr.result==="loss"?Math.max(json.team1.score,json.team2.score):Math.min(json.team1.score,json.team2.score))||true;
+                            json.team1.name=teamName; json.team1.userId=e1?.userId||"";
+                            json.team2.name="CPU"; json.team2.userId="";
+                            const t1wins=json.team1.score>json.team2.score;
+                            setWeekResults(prev=>prev.map(r=>r.teamName===teamName?{...r,result:t1wins?"win":"loss"}:r));
+                            if(setup&&setSetup){
+                              const newGame={id:genId(),year:Number(year),week:Number(entryWeek),season:Number(season),team1:json.team1,team2:json.team2};
+                              const archive=setup?.gameArchive||[];
+                              const filtered=archive.filter(g=>!(g.year===Number(year)&&g.week===Number(entryWeek)&&(g.team1.name===teamName||g.team2.name===teamName)));
+                              const newArchive=[...filtered,newGame];
+                              const newPlayerStats=recomputePlayerStatsFromArchive(newArchive,setup?.playerStats||{},year);
+                              const updatedSetup={...setup,gameArchive:newArchive,playerStats:newPlayerStats};
+                              setSetup(updatedSetup); saveToDb({setup:updatedSetup});
+                            }
+                          }catch(err){setScanErrors(p=>({...p,[key]:"Scan failed: "+err.message}));}
+                          finally{setScanning(null);if(fileRefs.current[key])fileRefs.current[key].value="";}
+                        })();
+                      }} disabled={!!scanning}/>
+                    </label>
                   </div>
-                  {wr.result==="win"&&<div style={{display:"flex",gap:10}}>
-                    <label style={{display:"flex",alignItems:"center",gap:4,fontSize:11,color:"#888",cursor:"pointer"}}><input type="checkbox" checked={wr.ranked25||false} onChange={e=>setWR(teamName,"ranked25",e.target.checked)}/> vs Top 25</label>
-                    <label style={{display:"flex",alignItems:"center",gap:4,fontSize:11,color:RED,cursor:"pointer",fontWeight:700}}><input type="checkbox" checked={wr.ranked10||false} onChange={e=>setWR(teamName,"ranked10",e.target.checked)}/> vs Top 10</label>
+                  {scanErrors[key]&&<div style={{padding:"6px 16px",fontSize:11,color:RED,background:"#fff0f0"}}>{scanErrors[key]}</div>}
+                  <div style={{padding:"8px 16px 12px",background:"#fafafa",display:"flex",flexWrap:"wrap",gap:10,alignItems:"center"}}>
+                    <span style={{fontSize:10,color:"#888",fontWeight:700,textTransform:"uppercase"}}>Override:</span>
+                    {[{label:`${teamName} W`,res:"win"},{label:"CPU W",res:"loss"}].map(opt=>(
+                      <button key={opt.res} onClick={()=>setWR(teamName,"result",opt.res)} style={btnStyle(wr.result===opt.res,opt.res==="win"?"#007a00":RED)}>{opt.label}</button>
+                    ))}
+                    <button onClick={()=>setWR(teamName,"result","none")} style={btnStyle(wr.result==="none","#888")}>Clear</button>
+                    {wr.result==="win"&&<div style={{display:"flex",gap:10,marginLeft:"auto"}}>
+                      <label style={{display:"flex",alignItems:"center",gap:4,fontSize:11,color:"#888",cursor:"pointer"}}><input type="checkbox" checked={wr.ranked25||false} onChange={e=>setWR(teamName,"ranked25",e.target.checked)}/> vs Top 25</label>
+                      <label style={{display:"flex",alignItems:"center",gap:4,fontSize:11,color:RED,cursor:"pointer",fontWeight:700}}><input type="checkbox" checked={wr.ranked10||false} onChange={e=>setWR(teamName,"ranked10",e.target.checked)}/> vs Top 10</label>
+                    </div>}
+                  </div>
+                  {archivedGame&&myTeamData&&<div style={{padding:"4px 16px 10px",background:"#f0f8f0",fontSize:10,color:"#555",display:"grid",gridTemplateColumns:"1fr 1fr",gap:4}}>
+                    <div><strong>{teamName}:</strong> {myTeamData.passing.comp}/{myTeamData.passing.att} {myTeamData.passing.yds}py {myTeamData.passing.tds}TD | {myTeamData.rushing.yds}ry {myTeamData.rushing.tds}TD | Def {myTeamData.defense.totalYdsAllowed}yds</div>
+                    <div><strong>CPU:</strong> {cpuTeamData.passing.comp}/{cpuTeamData.passing.att} {cpuTeamData.passing.yds}py {cpuTeamData.passing.tds}TD | {cpuTeamData.rushing.yds}ry {cpuTeamData.rushing.tds}TD</div>
                   </div>}
                 </div>
               );
             })}
+          </div>
+        </Card>}
+
+        {/* BYE teams */}
+        {byeTeams.length>0&&<Card style={{overflow:"hidden"}}>
+          <CardHead bg="#888">Week {entryWeek} — Bye Teams</CardHead>
+          <div style={{padding:14,display:"flex",flexDirection:"column",gap:4}}>
             {byeTeams.map(teamName=>{
               const entry=entries.find(e=>e.teamName===teamName);
               return(<div key={teamName} style={{display:"flex",alignItems:"center",gap:10,padding:"8px 0",borderBottom:"1px solid #f5f5f5"}}>
-                <div style={{minWidth:120}}><div style={{fontSize:13,fontWeight:700,color:"#aaa"}}>{entry?.userName||teamName}</div><div style={{fontSize:10,color:"#ccc",textTransform:"uppercase"}}>{teamName} · BYE</div></div>
-                <div style={{fontSize:11,color:"#ccc",fontWeight:700}}>BYE WEEK</div>
+                <div style={{minWidth:120}}><div style={{fontSize:13,fontWeight:700,color:"#aaa"}}>{entry?.userName||teamName}</div><div style={{fontSize:10,color:"#ccc",textTransform:"uppercase"}}>{teamName}</div></div>
+                <div style={{fontSize:11,color:"#ccc",fontWeight:700,background:"#f5f5f5",padding:"4px 10px",borderRadius:2}}>BYE WEEK</div>
               </div>);
             })}
-            {confPairs.length===0&&cpuTeams.length===0&&byeTeams.length===0&&unscheduled.length===0&&<div style={{color:"#bbb",fontSize:12,textAlign:"center",padding:"12px 0"}}>Set the schedule first to see matchups here.</div>}
           </div>
         </Card>}
+
+        {confPairs.length===0&&cpuTeams.length===0&&byeTeams.length===0&&unscheduled.length===0&&<Card><div style={{color:"#bbb",fontSize:12,textAlign:"center",padding:"20px 0"}}>Set the schedule first to see matchups here.</div></Card>}
 
         {/* Submit */}
         <div style={{display:"flex",gap:10,flexWrap:"wrap"}}>
