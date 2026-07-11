@@ -3397,154 +3397,6 @@ const REPORTERS = [
 ];
 
 // ── Content Hub Tab ───────────────────────────────────────────────────────
-function BoxScoreUpload({entries,schedule,week,year,season,setup,setSetup,saveToDb,articles,setArticles,setActiveArticle,leagueName,history,sorted,RED,ff}) {
-  const [uploadingGame,setUploadingGame] = useState(null);
-  const [scanErrors,setScanErrors] = useState({});
-  const [generating,setGenerating] = useState(false);
-  const [genError,setGenError] = useState(null);
-  const [selReporter,setSelReporter] = useState(0);
-  const fileRefs = useRef({});
-
-  const archive = setup?.gameArchive||[];
-  const weekSchedule = schedule?.[week]||{};
-  const pairs = [];
-  const seen = new Set();
-  for (const [team,opp] of Object.entries(weekSchedule)) {
-    if (opp==="BYE"||opp==="CPU"||!opp) continue;
-    const key=[team,opp].sort().join("|");
-    if (!seen.has(key)) { seen.add(key); pairs.push([team,opp]); }
-  }
-
-  function getGame(t1,t2) {
-    return archive.find(g=>g.year===Number(year)&&g.week===Number(week)&&
-      ((g.team1.name===t1&&g.team2.name===t2)||(g.team1.name===t2&&g.team2.name===t1)));
-  }
-
-  async function handleBoxScore(t1Name,t2Name,e) {
-    const file=e.target.files?.[0]; if(!file) return;
-    const key=[t1Name,t2Name].sort().join("|");
-    if(!window.confirm(`Scan box score for ${t1Name} vs ${t2Name}?\nThis will use the Claude Vision API.`)) {
-      if(fileRefs.current[key])fileRefs.current[key].value=""; return;
-    }
-    setUploadingGame(key); setScanErrors(p=>({...p,[key]:null}));
-    try {
-      const b64=await new Promise((res,rej)=>{const r=new FileReader();r.onload=()=>res(r.result.split(",")[1]);r.onerror=rej;r.readAsDataURL(file);});
-      const prompt=`This is a college football video game box score. Extract stats for BOTH teams and return ONLY this JSON (use 0 for missing stats):
-{"team1":{"name":"","score":0,"passing":{"comp":0,"att":0,"pct":0.0,"yds":0,"tds":0,"int":0},"rushing":{"att":0,"yds":0,"ypc":0.0,"tds":0},"defense":{"totalYdsAllowed":0,"passYdsAllowed":0,"rushYdsAllowed":0},"specialTeams":{"fgMade":0,"fgAtt":0,"krTds":0,"prTds":0}},"team2":{"name":"","score":0,"passing":{"comp":0,"att":0,"pct":0.0,"yds":0,"tds":0,"int":0},"rushing":{"att":0,"yds":0,"ypc":0.0,"tds":0},"defense":{"totalYdsAllowed":0,"passYdsAllowed":0,"rushYdsAllowed":0},"specialTeams":{"fgMade":0,"fgAtt":0,"krTds":0,"prTds":0}}}
-team1.defense = yards the OPPONENT gained (what team1 allowed). Return only JSON.`;
-      const text=await callClaudeVision(b64,file.type,prompt);
-      const json=JSON.parse(text.replace(/```json?|```/g,"").trim());
-      const e1=entries.find(e=>e.teamName===t1Name); const e2=entries.find(e=>e.teamName===t2Name);
-      json.team1.name=t1Name; json.team1.userId=e1?.userId||"";
-      json.team2.name=t2Name; json.team2.userId=e2?.userId||"";
-      const newGame={id:genId(),year:Number(year),week:Number(week),season:Number(season),team1:json.team1,team2:json.team2};
-      const filtered=archive.filter(g=>!(g.year===Number(year)&&g.week===Number(week)&&
-        ((g.team1.name===t1Name&&g.team2.name===t2Name)||(g.team1.name===t2Name&&g.team2.name===t1Name))));
-      const newArchive=[...filtered,newGame];
-      const newPlayerStats=recomputePlayerStatsFromArchive(newArchive,setup?.playerStats||{},year);
-      const updatedSetup={...setup,gameArchive:newArchive,playerStats:newPlayerStats};
-      setSetup(updatedSetup); saveToDb({setup:updatedSetup});
-    } catch(err) { setScanErrors(p=>({...p,[key]:"Scan failed: "+err.message})); }
-    finally { setUploadingGame(null); if(fileRefs.current[key])fileRefs.current[key].value=""; }
-  }
-
-  async function generateRecap() {
-    const weekGames=archive.filter(g=>g.year===Number(year)&&g.week===Number(week));
-    if(!weekGames.length){setGenError("Upload at least one box score first.");return;}
-    const reporter=REPORTERS[selReporter];
-    if(!window.confirm(`Generate Week ${week} Recap using ${weekGames.length} box score(s)?\nThis will use the Claude API.`)) return;
-    setGenerating(true); setGenError(null);
-    try {
-      const awards=pickWeeklyAwards(weekGames);
-      const prompt=buildRecapPrompt(weekGames,awards,leagueName,week,season,year,reporter);
-      const text=cleanArticle(await callClaude(prompt));
-      const article={id:Date.now(),type:"recap",label:"📰 Weekly Recap",week:Number(week),season:Number(season),text,reporter:reporter.name,reporterColor:reporter.color,reporterAvatar:reporter.avatar,fromBoxScores:true};
-      const newArticles=[article,...articles].slice(0,30);
-      setArticles(newArticles); saveToDb({articles:newArticles}); setActiveArticle(article);
-    } catch(e){setGenError(e.message);}
-    finally{setGenerating(false);}
-  }
-
-  const weekGames=archive.filter(g=>g.year===Number(year)&&g.week===Number(week));
-  const awards=weekGames.length>0?pickWeeklyAwards(weekGames):{};
-
-  return (
-    <div style={{display:"flex",flexDirection:"column",gap:16}}>
-      <Card style={{overflow:"hidden"}}>
-        <CardHead bg="#1a3a6b">Week {week} Box Scores — Season {season} · {year}</CardHead>
-        <div style={{padding:14,display:"flex",flexDirection:"column",gap:10}}>
-          {pairs.length===0&&<div style={{color:"#888",fontSize:12,textAlign:"center",padding:"20px 0"}}>No matchups scheduled for Week {week}. Set the schedule in the Schedule tab first.</div>}
-          {pairs.map(([t1,t2])=>{
-            const key=[t1,t2].sort().join("|");
-            const game=getGame(t1,t2);
-            const uploading=uploadingGame===key;
-            const winner=game?(game.team1.score>game.team2.score?game.team1:game.team2):null;
-            const loser=game?(game.team1.score>game.team2.score?game.team2:game.team1):null;
-            return (
-              <div key={key} style={{border:"1px solid #ddd",borderRadius:2,overflow:"hidden"}}>
-                <div style={{background:game?"#e8f5e9":"#f7f7f7",padding:"10px 14px",display:"flex",justifyContent:"space-between",alignItems:"center",flexWrap:"wrap",gap:8}}>
-                  <div style={{fontWeight:700,fontSize:13,color:"#111"}}>
-                    {game?<><span style={{color:"#1a7a1a",fontWeight:900}}>{winner.name} {winner.score}</span>, {loser.name} {loser.score}</>:<>{t1} vs {t2}</>}
-                  </div>
-                  <div style={{display:"flex",gap:8,alignItems:"center"}}>
-                    {game&&<span style={{fontSize:10,color:"#1a7a1a",fontWeight:700}}>✓ Uploaded</span>}
-                    <label style={{background:game?"#1a3a6b":RED,color:"#fff",fontSize:11,fontWeight:700,padding:"5px 10px",borderRadius:2,cursor:uploading?"wait":"pointer",opacity:uploading?0.6:1,fontFamily:ff,textTransform:"uppercase",letterSpacing:0.5}}>
-                      {uploading?"Scanning...":(game?"Replace":"Upload Box Score")}
-                      <input type="file" accept="image/*" style={{display:"none"}} ref={el=>fileRefs.current[key]=el} onChange={e=>handleBoxScore(t1,t2,e)} disabled={uploading}/>
-                    </label>
-                  </div>
-                </div>
-                {game&&(
-                  <div style={{padding:"10px 14px",fontSize:11,color:"#555",display:"grid",gridTemplateColumns:"1fr 1fr",gap:8}}>
-                    {[game.team1,game.team2].map(t=>(
-                      <div key={t.name}>
-                        <div style={{fontWeight:800,color:"#111",marginBottom:3,fontSize:12}}>{t.name}</div>
-                        <div>Pass: {t.passing.comp}/{t.passing.att} {t.passing.yds}yds {t.passing.tds}TD {t.passing.int}INT</div>
-                        <div>Rush: {t.rushing.att} att {t.rushing.yds}yds ({t.rushing.ypc} YPC) {t.rushing.tds}TD</div>
-                        <div>Def: {t.defense.totalYdsAllowed} yds allowed</div>
-                        <div>FG: {t.specialTeams.fgMade}/{t.specialTeams.fgAtt}{t.specialTeams.krTds>0?` · KR TD: ${t.specialTeams.krTds}`:""}{t.specialTeams.prTds>0?` · PR TD: ${t.specialTeams.prTds}`:""}</div>
-                      </div>
-                    ))}
-                  </div>
-                )}
-                {scanErrors[key]&&<div style={{padding:"6px 14px",fontSize:11,color:RED,background:"#fff0f0"}}>{scanErrors[key]}</div>}
-              </div>
-            );
-          })}
-        </div>
-      </Card>
-
-      {weekGames.length>0&&(
-        <Card style={{overflow:"hidden"}}>
-          <CardHead bg="#111">Week {week} Auto Awards</CardHead>
-          <div style={{padding:14,display:"grid",gridTemplateColumns:"1fr 1fr",gap:10}}>
-            {[
-              ["🏆 Game of the Week",awards.gotw?`${awards.gotw.game.team1.score>awards.gotw.game.team2.score?awards.gotw.game.team1.name:awards.gotw.game.team2.name} def. ${awards.gotw.game.team1.score>awards.gotw.game.team2.score?awards.gotw.game.team2.name:awards.gotw.game.team1.name} (${awards.gotw.margin} pts)`:"-"],
-              ["💥 Blowout of the Week",awards.blowout?`${awards.blowout.game.team1.score>awards.blowout.game.team2.score?awards.blowout.game.team1.name:awards.blowout.game.team2.name} by ${awards.blowout.margin}`:"-"],
-              ["🔥 Top Offense",awards.offMvp?`${awards.offMvp.team.name} — ${awards.offMvp.yds} total yds`:"-"],
-              ["🛡️ Top Defense",awards.defMvp?`${awards.defMvp.team.name} — ${awards.defMvp.ydsAllowed} yds allowed`:"-"],
-            ].map(([label,val])=>(
-              <div key={label} style={{background:"#f7f7f7",borderRadius:2,padding:"10px 12px"}}>
-                <div style={{fontSize:10,fontWeight:800,color:"#888",textTransform:"uppercase",letterSpacing:1,marginBottom:4}}>{label}</div>
-                <div style={{fontSize:12,fontWeight:700,color:"#111"}}>{val}</div>
-              </div>
-            ))}
-          </div>
-          <div style={{padding:"0 14px 14px",display:"flex",flexDirection:"column",gap:10}}>
-            <div style={{fontSize:11,color:"#888",fontWeight:700,textTransform:"uppercase",letterSpacing:1}}>Generate Recap As</div>
-            <div style={{display:"flex",flexWrap:"wrap",gap:8}}>
-              {REPORTERS.map((r,i)=><button key={r.name} onClick={()=>setSelReporter(i)} style={{padding:"6px 12px",border:`2px solid ${selReporter===i?r.color:"#ddd"}`,borderRadius:2,background:selReporter===i?`${r.color}12`:"#fff",cursor:"pointer",fontSize:11,fontWeight:700,fontFamily:ff,color:selReporter===i?r.color:"#555"}}>{r.name.split(" ")[0]}</button>)}
-            </div>
-            {genError&&<div style={{background:"#fff0f0",border:"1px solid #ffcccc",borderRadius:2,padding:"8px 12px",fontSize:12,color:RED}}>{genError}</div>}
-            <button onClick={generateRecap} disabled={generating} style={{background:generating?"#ccc":RED,color:"#fff",border:"none",borderRadius:2,padding:"11px",cursor:generating?"not-allowed":"pointer",fontFamily:ff,fontSize:13,fontWeight:800,textTransform:"uppercase"}}>
-              {generating?"Generating Recap...":"📰 Generate Week "+week+" Recap"}
-            </button>
-          </div>
-        </Card>
-      )}
-    </div>
-  );
-}
 
 function GameArchiveTab({setup,entries,RED,ff,isMobile}) {
   const archive=setup?.gameArchive||[];
@@ -3787,8 +3639,60 @@ function ContentHub({sorted,entries,week,season,year,leagueName,history,leader,a
     }
   }
 
+  // Weekly recap from box scores
+  const [recapGenerating,setRecapGenerating] = useState(false);
+  const [recapError,setRecapError] = useState(null);
+  async function generateBoxScoreRecap() {
+    const weekGames=(setup?.gameArchive||[]).filter(g=>g.year===Number(year)&&g.week===Number(week));
+    if(!weekGames.length){setRecapError("No box scores uploaded for this week yet. Upload them in Enter Results first.");return;}
+    const reporter=REPORTERS[selectedReporter];
+    if(!window.confirm(`Generate Week ${week} Recap from ${weekGames.length} box score(s)?\nThis will use the Claude API.`)) return;
+    setRecapGenerating(true); setRecapError(null);
+    try {
+      const awards=pickWeeklyAwards(weekGames);
+      const prompt=buildRecapPrompt(weekGames,awards,leagueName,week,season,year,reporter);
+      const text=cleanArticle(await callClaude(prompt));
+      const article={id:Date.now(),type:"recap",label:"📰 Weekly Recap",week:Number(week),season:Number(season),text,reporter:reporter.name,reporterColor:reporter.color,reporterAvatar:reporter.avatar};
+      const newArticles=[article,...articles].slice(0,30);
+      setArticles(newArticles); saveToDb({articles:newArticles}); setActiveArticle(article);
+    } catch(e){setRecapError(e.message);}
+    finally{setRecapGenerating(false);}
+  }
+  const weekGamesForRecap=(setup?.gameArchive||[]).filter(g=>g.year===Number(year)&&g.week===Number(week));
+
   return (
     <div style={{display:"flex",flexDirection:"column",gap:16}}>
+
+      {/* Box score recap shortcut */}
+      {weekGamesForRecap.length>0&&(()=>{
+        const awards=pickWeeklyAwards(weekGamesForRecap);
+        const w=g=>g.team1.score>g.team2.score?g.team1:g.team2;
+        const l=g=>g.team1.score>g.team2.score?g.team2:g.team1;
+        return(
+          <Card style={{overflow:"hidden",borderLeft:`4px solid #1a3a6b`}}>
+            <CardHead bg="#1a3a6b">Week {week} Box Scores Ready — {weekGamesForRecap.length} game{weekGamesForRecap.length!==1?"s":""}</CardHead>
+            <div style={{padding:12,display:"grid",gridTemplateColumns:"1fr 1fr",gap:8,marginBottom:4}}>
+              {[
+                ["🏆 GOTW",awards.gotw?`${w(awards.gotw.game).name} def. ${l(awards.gotw.game).name} (${awards.gotw.margin})`:"-"],
+                ["💥 Blowout",awards.blowout?`${w(awards.blowout.game).name} +${awards.blowout.margin}`:"-"],
+                ["🔥 Top Off.",awards.offMvp?`${awards.offMvp.team.name} ${awards.offMvp.yds}yds`:"-"],
+                ["🛡️ Top Def.",awards.defMvp?`${awards.defMvp.team.name} ${awards.defMvp.ydsAllowed}yds`:"-"],
+              ].map(([label,val])=>(
+                <div key={label} style={{background:"#f0f4ff",borderRadius:2,padding:"8px 10px"}}>
+                  <div style={{fontSize:9,fontWeight:800,color:"#666",textTransform:"uppercase",letterSpacing:1,marginBottom:2}}>{label}</div>
+                  <div style={{fontSize:11,fontWeight:700,color:"#111"}}>{val}</div>
+                </div>
+              ))}
+            </div>
+            {recapError&&<div style={{margin:"0 12px 8px",background:"#fff0f0",border:"1px solid #ffcccc",borderRadius:2,padding:"8px 12px",fontSize:12,color:RED}}>{recapError}</div>}
+            <div style={{padding:"0 12px 12px"}}>
+              <button onClick={generateBoxScoreRecap} disabled={recapGenerating} style={{width:"100%",background:recapGenerating?"#ccc":"#1a3a6b",color:"#fff",border:"none",borderRadius:2,padding:"10px",cursor:recapGenerating?"not-allowed":"pointer",fontFamily:ff,fontSize:13,fontWeight:800,textTransform:"uppercase"}}>
+                {recapGenerating?"Generating...":"📰 Generate Week "+week+" Recap from Box Scores"}
+              </button>
+            </div>
+          </Card>
+        );
+      })()}
 
       {/* Reporter selector */}
       <Card style={{overflow:"hidden"}}>
@@ -4651,14 +4555,13 @@ export default function App() {
           </div>
         </div>
         <div style={{background:"#1a1a1a",borderBottom:"1px solid #333",display:"flex",overflowX:"auto"}}>
-          {["Enter Results","Season History","Schedule","Box Scores","Content","Player Stats","League Setup"].map(t=><button key={t} onClick={()=>setCommTab(t)} style={{padding:"11px 18px",background:"transparent",border:"none",borderBottom:commTab===t?`3px solid ${RED}`:"3px solid transparent",color:commTab===t?"#fff":"#888",cursor:"pointer",fontSize:12,fontWeight:700,fontFamily:ff,textTransform:"uppercase",letterSpacing:0.5,whiteSpace:"nowrap"}}>{t}</button>)}
+          {["Enter Results","Season History","Schedule","Content","Player Stats","League Setup"].map(t=><button key={t} onClick={()=>setCommTab(t)} style={{padding:"11px 18px",background:"transparent",border:"none",borderBottom:commTab===t?`3px solid ${RED}`:"3px solid transparent",color:commTab===t?"#fff":"#888",cursor:"pointer",fontSize:12,fontWeight:700,fontFamily:ff,textTransform:"uppercase",letterSpacing:0.5,whiteSpace:"nowrap"}}>{t}</button>)}
         </div>
         <div style={{maxWidth:800,margin:"0 auto",padding:"20px 14px"}}>
           {commTab==="Season History"&&<HistoryTab history={history} setHistory={setHistory} saveToDb={saveToDb} commUnlocked={true} entries={entries} setEntries={setEntries} season={season} week={week} setWeek={setWeek} yearRosters={setup?.yearRosters} permanentUsers={setup?.permanentUsers} currentEntries={entries} year={year} setupRows={setup?.rows||[]}/>}
           {commTab==="Enter Results"&&<EnterResultsPanel entries={activeEntries} weekResults={weekResults} setWeekResults={setWeekResults} week={week} setWeek={setWeek} applyBulkResults={applyBulkResults} applyWeekResults={applyWeekResults} postSeasonInputs={postSeasonInputs} setPSI={setPSI} applyPostSeason={applyPostSeason} finalizeSeason={finalizeSeason} season={season} setSeason={setSeason} year={year} setYear={setYear} teamNames={teamNames} schedule={schedule} history={history} onImportHistory={importHistoricalSeason} setupRows={setup?.rows||[]} saveToDb={saveToDb} setup={setup} setSetup={setSetup}/>}
           {commTab==="Schedule"&&<SchedulePanel entries={activeEntries} schedule={schedule} setSchedule={setSchedule}/>}
-          {commTab==="Box Scores"&&<BoxScoreUpload entries={activeEntries} schedule={schedule} week={week} year={year} season={season} setup={setup} setSetup={setSetup} saveToDb={saveToDb} articles={articles} setArticles={setArticles} setActiveArticle={setActiveArticle} leagueName={leagueName} history={history} sorted={sorted} RED={RED} ff={ff}/>}
-          {commTab==="Content"&&<ContentHub sorted={sorted} entries={activeEntries} week={week} season={season} year={year} leagueName={leagueName} history={history} leader={leader} articles={articles} setArticles={setArticles} setActiveArticle={setActiveArticle} schedule={schedule} setup={setup} setSetup={setSetup} saveToDb={saveToDb}/>}
+{commTab==="Content"&&<ContentHub sorted={sorted} entries={activeEntries} week={week} season={season} year={year} leagueName={leagueName} history={history} leader={leader} articles={articles} setArticles={setArticles} setActiveArticle={setActiveArticle} schedule={schedule} setup={setup} setSetup={setSetup} saveToDb={saveToDb}/>}
           {commTab==="Player Stats"&&<PlayerStatsAdmin setup={setup} setSetup={setSetup} saveToDb={saveToDb} permanentUsers={setup?.permanentUsers||[]} year={year} ff={ff} RED={RED}/>}
           {commTab==="League Setup"&&<SetupPanel entries={entries} setup={setup} postSeasonInputs={postSeasonInputs} setPSI={setPSI} handleStart={handleStart} setCommissionerUnlocked={setCommUnlocked} season={season} year={year} setEntries={setEntries} setWeekResults={setWeekResults} setSetup={setSetup} saveToDb={saveToDb} history={history} setHistory={setHistory} autoLiveStatuses={autoLiveStatuses} autoEmbedUrls={autoEmbedUrls}/>}
         </div>
