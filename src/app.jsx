@@ -3082,11 +3082,70 @@ function HistoricalImportPanel({setupRows, history, onImport}) {
 }
 
 // ── EnterResultsPanel ─────────────────────────────────────────────────────
-function EnterResultsPanel({entries,weekResults,setWeekResults,week,setWeek,applyBulkResults,applyWeekResults,postSeasonInputs,setPSI,applyPostSeason,finalizeSeason,season,setSeason,year,setYear,teamNames,schedule,history,onImportHistory,setupRows,saveToDb}) {
+function EnterResultsPanel({entries,weekResults,setWeekResults,week,setWeek,applyBulkResults,applyWeekResults,postSeasonInputs,setPSI,applyPostSeason,finalizeSeason,season,setSeason,year,setYear,teamNames,schedule,history,onImportHistory,setupRows,saveToDb,setup,setSetup}) {
   const [entryWeek,setEntryWeek] = useState(week);
   const [resultsTab,setResultsTab] = useState("weekly");
-  const setWR=(i,f,v)=>setWeekResults(prev=>prev.map((r,idx)=>idx===i?{...r,[f]:v}:r));
+  const [scanning,setScanning] = useState(null);
+  const [scanErrors,setScanErrors] = useState({});
+  const fileRefs = useRef({});
+
+  const setWR=(teamName,field,val)=>setWeekResults(prev=>prev.map(r=>r.teamName===teamName?{...r,[field]:val}:r));
+  const getWR=(teamName)=>weekResults.find(r=>r.teamName===teamName)||{result:"none",ranked25:false,ranked10:false};
   const thisWeekSchedule = schedule?.[entryWeek]||{};
+
+  // Build matchup pairs from schedule
+  const confPairs=[], cpuTeams=[], byeTeams=[];
+  const seen=new Set();
+  for(const [team,opp] of Object.entries(thisWeekSchedule)){
+    if(opp==="BYE"){byeTeams.push(team);continue;}
+    if(opp==="CPU"){cpuTeams.push(team);continue;}
+    if(!opp)continue;
+    const key=[team,opp].sort().join("|");
+    if(!seen.has(key)){seen.add(key);confPairs.push([team,opp]);}
+  }
+  // Teams with no schedule entry (if schedule not fully set)
+  const unscheduled=entries.filter(e=>!thisWeekSchedule.hasOwnProperty(e.teamName)).map(e=>e.teamName);
+
+  async function handleBoxScoreUpload(t1Name,t2Name,e){
+    const file=e.target.files?.[0]; if(!file) return;
+    const key=[t1Name,t2Name].sort().join("|");
+    if(!window.confirm(`Scan box score for ${t1Name} vs ${t2Name}?\nThis will use the Claude Vision API.`)){
+      if(fileRefs.current[key])fileRefs.current[key].value=""; return;
+    }
+    setScanning(key); setScanErrors(p=>({...p,[key]:null}));
+    try {
+      const b64=await new Promise((res,rej)=>{const r=new FileReader();r.onload=()=>res(r.result.split(",")[1]);r.onerror=rej;r.readAsDataURL(file);});
+      const prompt=`This is a college football video game box score. Extract stats for BOTH teams and return ONLY this JSON (use 0 for missing stats):
+{"team1":{"name":"","score":0,"passing":{"comp":0,"att":0,"pct":0.0,"yds":0,"tds":0,"int":0},"rushing":{"att":0,"yds":0,"ypc":0.0,"tds":0},"defense":{"totalYdsAllowed":0,"passYdsAllowed":0,"rushYdsAllowed":0},"specialTeams":{"fgMade":0,"fgAtt":0,"krTds":0,"prTds":0}},"team2":{"name":"","score":0,"passing":{"comp":0,"att":0,"pct":0.0,"yds":0,"tds":0,"int":0},"rushing":{"att":0,"yds":0,"ypc":0.0,"tds":0},"defense":{"totalYdsAllowed":0,"passYdsAllowed":0,"rushYdsAllowed":0},"specialTeams":{"fgMade":0,"fgAtt":0,"krTds":0,"prTds":0}}}
+team1.defense = yards the OPPONENT gained (what team1 allowed). Return only JSON.`;
+      const text=await callClaudeVision(b64,file.type,prompt);
+      const json=JSON.parse(text.replace(/```json?|```/g,"").trim());
+      const e1=entries.find(e=>e.teamName===t1Name); const e2=entries.find(e=>e.teamName===t2Name);
+      json.team1.name=t1Name; json.team1.userId=e1?.userId||"";
+      json.team2.name=t2Name; json.team2.userId=e2?.userId||"";
+      // Set week results from score
+      const t1wins=json.team1.score>json.team2.score;
+      setWeekResults(prev=>prev.map(r=>{
+        if(r.teamName===t1Name) return{...r,result:t1wins?"win":"loss"};
+        if(r.teamName===t2Name) return{...r,result:t1wins?"loss":"win"};
+        return r;
+      }));
+      // Save to game archive
+      if(setup&&setSetup){
+        const newGame={id:genId(),year:Number(year),week:Number(entryWeek),season:Number(season),team1:json.team1,team2:json.team2};
+        const archive=setup?.gameArchive||[];
+        const filtered=archive.filter(g=>!(g.year===Number(year)&&g.week===Number(entryWeek)&&
+          ((g.team1.name===t1Name&&g.team2.name===t2Name)||(g.team1.name===t2Name&&g.team2.name===t1Name))));
+        const newArchive=[...filtered,newGame];
+        const newPlayerStats=recomputePlayerStatsFromArchive(newArchive,setup?.playerStats||{},year);
+        const updatedSetup={...setup,gameArchive:newArchive,playerStats:newPlayerStats};
+        setSetup(updatedSetup); saveToDb({setup:updatedSetup});
+      }
+    } catch(err){setScanErrors(p=>({...p,[key]:"Scan failed: "+err.message}));}
+    finally{setScanning(null); if(fileRefs.current[key])fileRefs.current[key].value="";}
+  }
+
+  const btnStyle=(active,color="#007a00")=>({padding:"5px 12px",borderRadius:2,border:"1px solid",borderColor:active?color:"#ddd",background:active?`${color}18`:"#fff",color:active?color:"#888",cursor:"pointer",fontSize:11,fontFamily:ff,fontWeight:800,textTransform:"uppercase"});
 
   return (
     <div style={{display:"flex",flexDirection:"column",gap:16}}>
@@ -3102,48 +3161,140 @@ function EnterResultsPanel({entries,weekResults,setWeekResults,week,setWeek,appl
       {resultsTab==="historical"&&<HistoricalImportPanel setupRows={setupRows} history={history||[]} onImport={onImportHistory}/>}
       {resultsTab==="weekly"&&<>
 
-      {/* Week / Season / Year selector */}
+      {/* Week navigation */}
       <Card>
-        <CardHead>Entry Context</CardHead>
-        <div style={{padding:"14px 16px",display:"flex",flexWrap:"wrap",gap:20,alignItems:"flex-end"}}>
-          <div>
-            <div style={{fontSize:10,fontWeight:700,color:"#888",textTransform:"uppercase",letterSpacing:1,marginBottom:6}}>Season</div>
-            <select value={season} onChange={e=>{const s=Number(e.target.value);setSeason(s);setEntryWeek(week);if(saveToDb)saveToDb({season:s});}} style={{fontSize:16,fontWeight:700,color:"#111",padding:"8px 12px",background:"#fff",border:`2px solid #cc0000`,borderRadius:2,cursor:"pointer",fontFamily:"'Helvetica Neue',Arial,sans-serif",minWidth:60}}>
-              {Array.from({length:20},(_,i)=>i+1).map(s=><option key={s} value={s}>S{s}</option>)}
-            </select>
-          </div>
-          <div>
-            <div style={{fontSize:10,fontWeight:700,color:"#888",textTransform:"uppercase",letterSpacing:1,marginBottom:6}}>Year</div>
-            <select value={year} onChange={e=>{const y=Number(e.target.value);setYear(y);if(saveToDb)saveToDb({year:y});}} style={{fontSize:16,fontWeight:700,color:"#111",padding:"8px 12px",background:"#fff",border:`2px solid #cc0000`,borderRadius:2,cursor:"pointer",fontFamily:"'Helvetica Neue',Arial,sans-serif",minWidth:80}}>
-              {Array.from({length:20},(_,i)=>2020+i).map(y=><option key={y} value={y}>{y}</option>)}
-            </select>
-          </div>
-          <div>
-            <div style={{fontSize:10,fontWeight:700,color:"#888",textTransform:"uppercase",letterSpacing:1,marginBottom:6}}>Week</div>
-            <div style={{display:"flex",alignItems:"center",gap:6}}>
-              <select value={entryWeek} onChange={e=>{const w=Number(e.target.value);setEntryWeek(w);}} style={{fontSize:16,fontWeight:700,color:"#111",padding:"8px 12px",background:"#fff",border:`2px solid #cc0000`,borderRadius:2,cursor:"pointer",fontFamily:"'Helvetica Neue',Arial,sans-serif",minWidth:80}}>
-                {Array.from({length:16},(_,i)=>i+1).map(w=><option key={w} value={w}>Week {w}{w===week?" (current)":""}</option>)}
+        <div style={{padding:"12px 16px",display:"flex",flexWrap:"wrap",gap:12,alignItems:"center",justifyContent:"space-between"}}>
+          <div style={{display:"flex",gap:10,alignItems:"center",flexWrap:"wrap"}}>
+            <div>
+              <div style={{fontSize:9,fontWeight:700,color:"#888",textTransform:"uppercase",letterSpacing:1,marginBottom:4}}>Season</div>
+              <select value={season} onChange={e=>{const s=Number(e.target.value);setSeason(s);if(saveToDb)saveToDb({season:s});}} style={{fontSize:14,fontWeight:700,color:"#111",padding:"6px 10px",background:"#fff",border:`2px solid ${RED}`,borderRadius:2,cursor:"pointer",fontFamily:ff,minWidth:55}}>
+                {Array.from({length:20},(_,i)=>i+1).map(s=><option key={s} value={s}>S{s}</option>)}
               </select>
-              {entryWeek!==week&&<button onClick={()=>{setWeek(entryWeek);saveToDb({week:entryWeek});}} style={{padding:"8px 10px",background:"#1a3a6b",color:"#fff",border:"none",borderRadius:2,cursor:"pointer",fontSize:11,fontWeight:800,fontFamily:ff,whiteSpace:"nowrap"}}>Set Current</button>}
+            </div>
+            <div>
+              <div style={{fontSize:9,fontWeight:700,color:"#888",textTransform:"uppercase",letterSpacing:1,marginBottom:4}}>Year</div>
+              <select value={year} onChange={e=>{const y=Number(e.target.value);setYear(y);if(saveToDb)saveToDb({year:y});}} style={{fontSize:14,fontWeight:700,color:"#111",padding:"6px 10px",background:"#fff",border:`2px solid ${RED}`,borderRadius:2,cursor:"pointer",fontFamily:ff,minWidth:70}}>
+                {Array.from({length:20},(_,i)=>2020+i).map(y=><option key={y} value={y}>{y}</option>)}
+              </select>
             </div>
           </div>
-          {entryWeek!==week&&<div style={{padding:"6px 12px",background:"#fffbf0",border:"1px solid #f0c040",borderRadius:2,fontSize:12,color:"#886600",fontWeight:600}}>⚠ Entering results for a past week — global week will not advance</div>}
+          <div style={{display:"flex",alignItems:"center",gap:8}}>
+            <button onClick={()=>setEntryWeek(w=>Math.max(1,w-1))} disabled={entryWeek<=1} style={{padding:"8px 14px",background:"#f0f0f0",border:"1px solid #ddd",borderRadius:2,cursor:entryWeek<=1?"not-allowed":"pointer",fontSize:13,fontWeight:700,color:entryWeek<=1?"#ccc":"#333",fontFamily:ff}}>← Prev</button>
+            <div style={{textAlign:"center",minWidth:80}}>
+              <div style={{fontSize:18,fontWeight:900,color:"#111"}}>Week {entryWeek}</div>
+              {entryWeek===week&&<div style={{fontSize:9,color:"#007a00",fontWeight:700,textTransform:"uppercase",letterSpacing:1}}>Current</div>}
+              {entryWeek!==week&&<button onClick={()=>{setWeek(entryWeek);saveToDb({week:entryWeek});}} style={{fontSize:9,color:"#1a3a6b",fontWeight:700,textTransform:"uppercase",background:"none",border:"none",cursor:"pointer",fontFamily:ff,letterSpacing:1}}>Set Current</button>}
+            </div>
+            <button onClick={()=>setEntryWeek(w=>Math.min(16,w+1))} disabled={entryWeek>=16} style={{padding:"8px 14px",background:"#f0f0f0",border:"1px solid #ddd",borderRadius:2,cursor:entryWeek>=16?"not-allowed":"pointer",fontSize:13,fontWeight:700,color:entryWeek>=16?"#ccc":"#333",fontFamily:ff}}>Next →</button>
+          </div>
         </div>
       </Card>
 
-      <BulkResultsUploader entries={entries} week={entryWeek} teamNames={teamNames} onConfirm={(results)=>applyBulkResults(results,entryWeek)}/>
-      {entryWeek<=12&&<Card><div style={{padding:16}}>
-        <SL>Manual Entry — Week {entryWeek}{entryWeek!==week?` (S${season} · ${year})`:""}</SL>
-        {Object.keys(thisWeekSchedule).length>0&&<div style={{background:"#f0f8f0",border:"1px solid #cce5cc",borderRadius:2,padding:"8px 12px",fontSize:12,color:"#555",marginBottom:12}}>✓ Schedule loaded — entering one team's result automatically updates their opponent's record.</div>}
-        {weekResults.map((wr,i)=>(
-          <div key={wr.teamName} style={{display:"flex",alignItems:"center",gap:8,flexWrap:"wrap",padding:"9px 0",borderBottom:"1px solid #f0f0f0"}}>
-            <div style={{width:130}}><div style={{fontSize:13,color:"#111",fontWeight:700}}>{wr.userName}</div><div style={{fontSize:10,color:"#888",textTransform:"uppercase",letterSpacing:0.5}}>{wr.teamName}</div></div>
-            <div style={{display:"flex",gap:6}}>{["win","loss","none"].map(opt=><button key={opt} onClick={()=>setWR(i,"result",opt)} style={{padding:"5px 10px",borderRadius:2,border:"1px solid",borderColor:wr.result===opt?(opt==="win"?"#007a00":opt==="loss"?RED:"#cc7700"):"#ddd",background:wr.result===opt?(opt==="win"?"#f0f8f0":opt==="loss"?"#fff8f8":"#fffbf0"):"#fff",color:wr.result===opt?(opt==="win"?"#007a00":opt==="loss"?RED:"#cc7700"):"#888",cursor:"pointer",fontSize:11,fontFamily:ff,fontWeight:800,textTransform:"uppercase"}}>{opt==="none"?"BYE":opt}</button>)}</div>
-            {wr.result==="win"&&<div style={{display:"flex",gap:10}}><label style={{display:"flex",alignItems:"center",gap:4,fontSize:11,color:"#888",cursor:"pointer"}}><input type="checkbox" checked={wr.ranked25} onChange={e=>setWR(i,"ranked25",e.target.checked)}/> vs Top 25</label><label style={{display:"flex",alignItems:"center",gap:4,fontSize:11,color:RED,cursor:"pointer",fontWeight:700}}><input type="checkbox" checked={wr.ranked10} onChange={e=>setWR(i,"ranked10",e.target.checked)}/> vs Top 10</label></div>}
+      {entryWeek<=12&&<>
+        {/* Conference matchups */}
+        {confPairs.length>0&&<Card style={{overflow:"hidden"}}>
+          <CardHead bg="#1a3a6b">Week {entryWeek} — Conference Matchups</CardHead>
+          <div style={{display:"flex",flexDirection:"column"}}>
+            {confPairs.map(([t1,t2])=>{
+              const key=[t1,t2].sort().join("|");
+              const wr1=getWR(t1), wr2=getWR(t2);
+              const isScanning=scanning===key;
+              const archivedGame=(setup?.gameArchive||[]).find(g=>g.year===Number(year)&&g.week===Number(entryWeek)&&((g.team1.name===t1&&g.team2.name===t2)||(g.team1.name===t2&&g.team2.name===t1)));
+              const winner=wr1.result==="win"?t1:wr2.result==="win"?t2:null;
+              const e1=entries.find(e=>e.teamName===t1), e2=entries.find(e=>e.teamName===t2);
+              return(
+                <div key={key} style={{borderBottom:"1px solid #eee"}}>
+                  {/* Matchup header */}
+                  <div style={{padding:"12px 16px",display:"flex",alignItems:"center",gap:12,flexWrap:"wrap",background:winner?"#f0f8f0":"#fff"}}>
+                    {/* Team 1 */}
+                    <div style={{flex:1,minWidth:100}}>
+                      <div style={{fontSize:13,fontWeight:900,color:wr1.result==="win"?"#007a00":wr1.result==="loss"?"#aaa":"#111"}}>{t1}</div>
+                      {e1?.userName&&<div style={{fontSize:10,color:"#888"}}>{e1.userName}</div>}
+                      {archivedGame&&<div style={{fontSize:20,fontWeight:900,color:wr1.result==="win"?"#007a00":"#555",marginTop:2}}>{(archivedGame.team1.name===t1?archivedGame.team1:archivedGame.team2).score}</div>}
+                    </div>
+                    <div style={{fontSize:11,fontWeight:800,color:"#bbb",flexShrink:0}}>VS</div>
+                    {/* Team 2 */}
+                    <div style={{flex:1,minWidth:100,textAlign:"right"}}>
+                      <div style={{fontSize:13,fontWeight:900,color:wr2.result==="win"?"#007a00":wr2.result==="loss"?"#aaa":"#111"}}>{t2}</div>
+                      {e2?.userName&&<div style={{fontSize:10,color:"#888"}}>{e2.userName}</div>}
+                      {archivedGame&&<div style={{fontSize:20,fontWeight:900,color:wr2.result==="win"?"#007a00":"#555",marginTop:2}}>{(archivedGame.team1.name===t2?archivedGame.team1:archivedGame.team2).score}</div>}
+                    </div>
+                    {/* Upload button */}
+                    <label style={{background:archivedGame?"#1a3a6b":RED,color:"#fff",fontSize:11,fontWeight:700,padding:"7px 12px",borderRadius:2,cursor:isScanning?"wait":"pointer",opacity:isScanning?0.6:1,fontFamily:ff,textTransform:"uppercase",letterSpacing:0.5,flexShrink:0,whiteSpace:"nowrap"}}>
+                      {isScanning?"Scanning...":(archivedGame?"Replace":"📷 Box Score")}
+                      <input type="file" accept="image/*" style={{display:"none"}} ref={el=>fileRefs.current[key]=el} onChange={e=>handleBoxScoreUpload(t1,t2,e)} disabled={!!scanning}/>
+                    </label>
+                  </div>
+                  {scanErrors[key]&&<div style={{padding:"6px 16px",fontSize:11,color:RED,background:"#fff0f0"}}>{scanErrors[key]}</div>}
+                  {/* Manual override + ranked checkboxes */}
+                  <div style={{padding:"8px 16px 12px",background:"#fafafa",display:"flex",flexWrap:"wrap",gap:10,alignItems:"center"}}>
+                    <div style={{display:"flex",gap:6,alignItems:"center"}}>
+                      <span style={{fontSize:10,color:"#888",fontWeight:700,textTransform:"uppercase"}}>Override:</span>
+                      {[{label:t1,win:t1,loss:t2},{label:t2,win:t2,loss:t1}].map(opt=>(
+                        <button key={opt.label} onClick={()=>{setWR(opt.win,"result","win");setWR(opt.loss,"result","loss");}} style={btnStyle(winner===opt.win)}>{opt.label} W</button>
+                      ))}
+                      <button onClick={()=>{setWR(t1,"result","none");setWR(t2,"result","none");}} style={btnStyle(!winner,"#888")}>Clear</button>
+                    </div>
+                    {winner&&<div style={{display:"flex",gap:10,marginLeft:"auto"}}>
+                      <label style={{display:"flex",alignItems:"center",gap:4,fontSize:11,color:"#888",cursor:"pointer"}}>
+                        <input type="checkbox" checked={getWR(winner).ranked25||false} onChange={e=>setWR(winner,"ranked25",e.target.checked)}/> vs Top 25
+                      </label>
+                      <label style={{display:"flex",alignItems:"center",gap:4,fontSize:11,color:RED,cursor:"pointer",fontWeight:700}}>
+                        <input type="checkbox" checked={getWR(winner).ranked10||false} onChange={e=>setWR(winner,"ranked10",e.target.checked)}/> vs Top 10
+                      </label>
+                    </div>}
+                  </div>
+                  {/* Archived stats preview */}
+                  {archivedGame&&<div style={{padding:"4px 16px 10px",background:"#f0f8f0",fontSize:10,color:"#555",display:"grid",gridTemplateColumns:"1fr 1fr",gap:4}}>
+                    {[archivedGame.team1,archivedGame.team2].map(t=>(
+                      <div key={t.name}><strong>{t.name}:</strong> {t.passing.comp}/{t.passing.att} {t.passing.yds}py {t.passing.tds}TD | {t.rushing.yds}ry {t.rushing.tds}TD | Def {t.defense.totalYdsAllowed}yds</div>
+                    ))}
+                  </div>}
+                </div>
+              );
+            })}
           </div>
-        ))}
-        <button onClick={()=>applyWeekResults(entryWeek)} style={{marginTop:14,background:RED,color:"#fff",border:"none",borderRadius:2,padding:"11px 22px",cursor:"pointer",fontFamily:ff,fontSize:14,fontWeight:800,textTransform:"uppercase"}}>Submit Week {entryWeek} →</button>
-      </div></Card>}
+        </Card>}
+
+        {/* CPU + BYE teams */}
+        {(cpuTeams.length>0||byeTeams.length>0||unscheduled.length>0)&&<Card style={{overflow:"hidden"}}>
+          <CardHead>CPU Games &amp; Byes</CardHead>
+          <div style={{padding:14,display:"flex",flexDirection:"column",gap:6}}>
+            {[...cpuTeams,...unscheduled].map(teamName=>{
+              const wr=getWR(teamName);
+              const entry=entries.find(e=>e.teamName===teamName);
+              return(
+                <div key={teamName} style={{display:"flex",alignItems:"center",gap:10,padding:"8px 0",borderBottom:"1px solid #f5f5f5",flexWrap:"wrap"}}>
+                  <div style={{minWidth:120}}><div style={{fontSize:13,fontWeight:700,color:"#111"}}>{entry?.userName||teamName}</div><div style={{fontSize:10,color:"#888",textTransform:"uppercase"}}>{teamName}{cpuTeams.includes(teamName)?" · CPU":""}</div></div>
+                  <div style={{display:"flex",gap:6}}>
+                    {["win","loss","none"].map(opt=><button key={opt} onClick={()=>setWR(teamName,"result",opt)} style={{...btnStyle(wr.result===opt,opt==="win"?"#007a00":opt==="loss"?RED:"#cc7700")}}>{opt==="none"?"BYE":opt}</button>)}
+                  </div>
+                  {wr.result==="win"&&<div style={{display:"flex",gap:10}}>
+                    <label style={{display:"flex",alignItems:"center",gap:4,fontSize:11,color:"#888",cursor:"pointer"}}><input type="checkbox" checked={wr.ranked25||false} onChange={e=>setWR(teamName,"ranked25",e.target.checked)}/> vs Top 25</label>
+                    <label style={{display:"flex",alignItems:"center",gap:4,fontSize:11,color:RED,cursor:"pointer",fontWeight:700}}><input type="checkbox" checked={wr.ranked10||false} onChange={e=>setWR(teamName,"ranked10",e.target.checked)}/> vs Top 10</label>
+                  </div>}
+                </div>
+              );
+            })}
+            {byeTeams.map(teamName=>{
+              const entry=entries.find(e=>e.teamName===teamName);
+              return(<div key={teamName} style={{display:"flex",alignItems:"center",gap:10,padding:"8px 0",borderBottom:"1px solid #f5f5f5"}}>
+                <div style={{minWidth:120}}><div style={{fontSize:13,fontWeight:700,color:"#aaa"}}>{entry?.userName||teamName}</div><div style={{fontSize:10,color:"#ccc",textTransform:"uppercase"}}>{teamName} · BYE</div></div>
+                <div style={{fontSize:11,color:"#ccc",fontWeight:700}}>BYE WEEK</div>
+              </div>);
+            })}
+            {confPairs.length===0&&cpuTeams.length===0&&byeTeams.length===0&&unscheduled.length===0&&<div style={{color:"#bbb",fontSize:12,textAlign:"center",padding:"12px 0"}}>Set the schedule first to see matchups here.</div>}
+          </div>
+        </Card>}
+
+        {/* Submit */}
+        <div style={{display:"flex",gap:10,flexWrap:"wrap"}}>
+          {entryWeek>1&&<button onClick={()=>{applyWeekResults(entryWeek);setEntryWeek(w=>Math.max(1,w-1));}} style={{padding:"12px 20px",background:"#f0f0f0",border:"1px solid #ddd",borderRadius:2,cursor:"pointer",fontFamily:ff,fontSize:13,fontWeight:800,color:"#555",textTransform:"uppercase"}}>← Submit &amp; Go Back</button>}
+          <button onClick={()=>applyWeekResults(entryWeek)} style={{flex:1,background:RED,color:"#fff",border:"none",borderRadius:2,padding:"13px 22px",cursor:"pointer",fontFamily:ff,fontSize:14,fontWeight:800,textTransform:"uppercase"}}>
+            {entryWeek>=week?`Submit Week ${entryWeek} & Advance to Week ${entryWeek+1} →`:`Submit Week ${entryWeek} →`}
+          </button>
+        </div>
+      </>}
       {week>12&&postSeasonInputs&&(()=>{
         const psi=postSeasonInputs;
         const ff2="'Helvetica Neue',Arial,sans-serif";
@@ -4504,7 +4655,7 @@ export default function App() {
         </div>
         <div style={{maxWidth:800,margin:"0 auto",padding:"20px 14px"}}>
           {commTab==="Season History"&&<HistoryTab history={history} setHistory={setHistory} saveToDb={saveToDb} commUnlocked={true} entries={entries} setEntries={setEntries} season={season} week={week} setWeek={setWeek} yearRosters={setup?.yearRosters} permanentUsers={setup?.permanentUsers} currentEntries={entries} year={year} setupRows={setup?.rows||[]}/>}
-          {commTab==="Enter Results"&&<EnterResultsPanel entries={activeEntries} weekResults={weekResults} setWeekResults={setWeekResults} week={week} setWeek={setWeek} applyBulkResults={applyBulkResults} applyWeekResults={applyWeekResults} postSeasonInputs={postSeasonInputs} setPSI={setPSI} applyPostSeason={applyPostSeason} finalizeSeason={finalizeSeason} season={season} setSeason={setSeason} year={year} setYear={setYear} teamNames={teamNames} schedule={schedule} history={history} onImportHistory={importHistoricalSeason} setupRows={setup?.rows||[]} saveToDb={saveToDb}/>}
+          {commTab==="Enter Results"&&<EnterResultsPanel entries={activeEntries} weekResults={weekResults} setWeekResults={setWeekResults} week={week} setWeek={setWeek} applyBulkResults={applyBulkResults} applyWeekResults={applyWeekResults} postSeasonInputs={postSeasonInputs} setPSI={setPSI} applyPostSeason={applyPostSeason} finalizeSeason={finalizeSeason} season={season} setSeason={setSeason} year={year} setYear={setYear} teamNames={teamNames} schedule={schedule} history={history} onImportHistory={importHistoricalSeason} setupRows={setup?.rows||[]} saveToDb={saveToDb} setup={setup} setSetup={setSetup}/>}
           {commTab==="Schedule"&&<SchedulePanel entries={activeEntries} schedule={schedule} setSchedule={setSchedule}/>}
           {commTab==="Box Scores"&&<BoxScoreUpload entries={activeEntries} schedule={schedule} week={week} year={year} season={season} setup={setup} setSetup={setSetup} saveToDb={saveToDb} articles={articles} setArticles={setArticles} setActiveArticle={setActiveArticle} leagueName={leagueName} history={history} sorted={sorted} RED={RED} ff={ff}/>}
           {commTab==="Content"&&<ContentHub sorted={sorted} entries={activeEntries} week={week} season={season} year={year} leagueName={leagueName} history={history} leader={leader} articles={articles} setArticles={setArticles} setActiveArticle={setActiveArticle} schedule={schedule} setup={setup} setSetup={setSetup} saveToDb={saveToDb}/>}
