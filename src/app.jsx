@@ -525,7 +525,7 @@ function SchedulePanel({entries,schedule,setSchedule}) {
   function setMatchup(wk,team,opp) {
     setSchedule(prev=>{
       const ns={...prev,[wk]:{...(prev[wk]||{}),[team]:opp}};
-      if(opp!=="BYE"&&opp!=="CPU"&&teamNames.includes(opp))ns[wk][opp]=team;
+      if(opp!=="BYE"&&!isCPUopp(opp)&&teamNames.includes(opp))ns[wk][opp]=team;
       return ns;
     });
     setSaved(false);
@@ -570,10 +570,12 @@ function SchedulePanel({entries,schedule,setSchedule}) {
     });
   }
 
+  const isCPUopp=(v)=>v==="CPU"||v?.startsWith("CPU:");
+  const getCPUTeam=(v)=>v?.startsWith("CPU:")?v.slice(4):"";
   const getOpp=(wk,team)=>schedule[wk]?.[team]||"";
   const countGames=team=>WEEKS.filter(w=>schedule[w]?.[team]&&schedule[w][team]!=="").length;
-  const confCount=team=>WEEKS.filter(w=>schedule[w]?.[team]&&schedule[w][team]!=="BYE"&&schedule[w][team]!=="CPU").length;
-  const cpuCount=team=>WEEKS.filter(w=>schedule[w]?.[team]&&schedule[w][team]==="CPU").length;
+  const confCount=team=>WEEKS.filter(w=>schedule[w]?.[team]&&!isCPUopp(schedule[w][team])&&schedule[w][team]!=="BYE").length;
+  const cpuCount=team=>WEEKS.filter(w=>isCPUopp(schedule[w]?.[team])).length;
 
   if(!teamNames.length) return (
     <Card style={{padding:20}}><div style={{color:"#888",fontSize:14,textAlign:"center"}}>No teams found. Set up your league first in League Setup.</div></Card>
@@ -617,15 +619,31 @@ function SchedulePanel({entries,schedule,setSchedule}) {
           <div style={{display:"flex",flexDirection:"column",gap:6}}>
             {teamNames.map(team=>{
               const opp=getOpp(editWeek,team);
-              const autoSet=opp&&opp!=="BYE"&&opp!=="CPU"&&teamNames.includes(opp)&&getOpp(editWeek,opp)===team;
+              const isCPU=isCPUopp(opp);
+              const cpuTeamName=getCPUTeam(opp);
+              const selectVal=isCPU?"CPU":opp;
+              const autoSet=opp&&opp!=="BYE"&&!isCPU&&teamNames.includes(opp)&&getOpp(editWeek,opp)===team;
               return(
-                <div key={team} style={{display:"flex",alignItems:"center",gap:10,padding:"8px 12px",background:"#fff",border:"1px solid #eee",borderRadius:2}}>
+                <div key={team} style={{display:"flex",alignItems:"center",gap:8,padding:"8px 12px",background:"#fff",border:"1px solid #eee",borderRadius:2,flexWrap:"wrap"}}>
                   <div style={{width:130,fontSize:13,fontWeight:600,color:"#111",flexShrink:0}}>{team}</div>
                   <div style={{fontSize:11,color:"#aaa",flexShrink:0}}>vs</div>
-                  <select value={opp} onChange={e=>setMatchup(editWeek,team,e.target.value)} disabled={autoSet&&opp!=="BYE"&&opp!=="CPU"} style={{flex:1,background:autoSet?"#f0f8f0":"#fff",border:"1px solid #ddd",borderRadius:2,padding:"5px 8px",fontFamily:ff,fontSize:12,color:opp?"#111":"#aaa"}}>
+                  <select value={selectVal} onChange={e=>{
+                    const v=e.target.value;
+                    setMatchup(editWeek,team,v==="CPU"?"CPU":v);
+                  }} disabled={autoSet} style={{flex:1,minWidth:120,background:autoSet?"#f0f8f0":"#fff",border:"1px solid #ddd",borderRadius:2,padding:"5px 8px",fontFamily:ff,fontSize:12,color:selectVal?"#111":"#aaa"}}>
                     <option value="">-- Not set --</option>
                     {OPPONENTS.filter(o=>o!==team).map(o=><option key={o} value={o}>{o==="BYE"?"🏖️ BYE WEEK":o==="CPU"?"💻 CPU (non-conf)":o}</option>)}
                   </select>
+                  {isCPU&&<input
+                    type="text"
+                    placeholder="CPU team name (e.g. Florida State)"
+                    value={cpuTeamName}
+                    onChange={e=>{
+                      const name=e.target.value;
+                      setMatchup(editWeek,team,name?"CPU:"+name:"CPU");
+                    }}
+                    style={{flex:2,minWidth:160,border:"1px solid #ddd",borderRadius:2,padding:"5px 8px",fontFamily:ff,fontSize:12,color:"#111"}}
+                  />}
                   {autoSet&&<span style={{fontSize:10,color:"#007a00",flexShrink:0,fontWeight:600}}>✓ Auto</span>}
                 </div>
               );
@@ -681,7 +699,7 @@ function SchedulePanel({entries,schedule,setSchedule}) {
                     {WEEKS.map(w=>{
                       const o=schedule[w]?.[team]||"";
                       return(<td key={w} style={{padding:"7px 8px",textAlign:"center",whiteSpace:"nowrap"}}>
-                        {o==="BYE"?<span style={{fontSize:10,color:"#aaa"}}>BYE</span>:o==="CPU"?<span style={{fontSize:10,color:"#888",fontWeight:600}}>CPU</span>:o?<span style={{fontSize:10,color:"#111",fontWeight:500}}>{o.split(" ")[0]}</span>:<span style={{color:"#ddd"}}>—</span>}
+                        {o==="BYE"?<span style={{fontSize:10,color:"#aaa"}}>BYE</span>:isCPUopp(o)?<span style={{fontSize:10,color:"#888",fontWeight:600}} title={getCPUTeam(o)||"CPU"}>{getCPUTeam(o)||"CPU"}</span>:o?<span style={{fontSize:10,color:"#111",fontWeight:500}}>{o.split(" ")[0]}</span>:<span style={{color:"#ddd"}}>—</span>}
                       </td>);
                     })}
                   </tr>
@@ -3094,17 +3112,20 @@ function EnterResultsPanel({entries,weekResults,setWeekResults,week,setWeek,appl
   const thisWeekSchedule = schedule?.[entryWeek]||{};
 
   // Build matchup pairs from schedule
+  const isCPUval=(v)=>v==="CPU"||v?.startsWith("CPU:");
+  const getCPUName=(v)=>v?.startsWith("CPU:")?v.slice(4):"CPU";
   const confPairs=[], cpuTeams=[], byeTeams=[];
   const seen=new Set();
   for(const [team,opp] of Object.entries(thisWeekSchedule)){
     if(opp==="BYE"){byeTeams.push(team);continue;}
-    if(opp==="CPU"){cpuTeams.push(team);continue;}
+    if(isCPUval(opp)){cpuTeams.push({teamName:team,cpuName:getCPUName(opp)});continue;}
     if(!opp)continue;
     const key=[team,opp].sort().join("|");
     if(!seen.has(key)){seen.add(key);confPairs.push([team,opp]);}
   }
   // Teams with no schedule entry (if schedule not fully set)
-  const unscheduled=entries.filter(e=>!thisWeekSchedule.hasOwnProperty(e.teamName)).map(e=>e.teamName);
+  const scheduledNames=new Set([...Object.keys(thisWeekSchedule),...byeTeams,...cpuTeams.map(c=>c.teamName),...confPairs.flat()]);
+  const unscheduled=entries.filter(e=>!scheduledNames.has(e.teamName)).map(e=>({teamName:e.teamName,cpuName:"CPU"}));
 
   async function handleBoxScoreUpload(t1Name,t2Name,e){
     const file=e.target.files?.[0]; if(!file) return;
@@ -3260,7 +3281,7 @@ team1.defense = yards the OPPONENT gained (what team1 allowed). Return only JSON
         {[...cpuTeams,...unscheduled].length>0&&<Card style={{overflow:"hidden"}}>
           <CardHead bg="#444">Week {entryWeek} — CPU Games</CardHead>
           <div style={{display:"flex",flexDirection:"column"}}>
-            {[...cpuTeams,...unscheduled].map(teamName=>{
+            {[...cpuTeams,...unscheduled].map(({teamName,cpuName})=>{
               const key=`cpu-${teamName}`;
               const wr=getWR(teamName);
               const isScanning=scanning===key;
@@ -3268,7 +3289,8 @@ team1.defense = yards the OPPONENT gained (what team1 allowed). Return only JSON
               const archivedGame=(setup?.gameArchive||[]).find(g=>g.year===Number(year)&&g.week===Number(entryWeek)&&(g.team1.name===teamName||g.team2.name===teamName));
               const myTeamData=archivedGame?(archivedGame.team1.name===teamName?archivedGame.team1:archivedGame.team2):null;
               const cpuTeamData=archivedGame?(archivedGame.team1.name===teamName?archivedGame.team2:archivedGame.team1):null;
-              const winner=wr.result==="win"?teamName:wr.result==="loss"?"CPU":null;
+              const winner=wr.result==="win"?teamName:wr.result==="loss"?cpuName:null;
+              const displayCPU=cpuName&&cpuName!=="CPU"?cpuName:"CPU";
               return(
                 <div key={teamName} style={{borderBottom:"1px solid #eee"}}>
                   <div style={{padding:"12px 16px",display:"flex",alignItems:"center",gap:12,flexWrap:"wrap",background:winner?"#f0f8f0":"#fff"}}>
@@ -3281,8 +3303,8 @@ team1.defense = yards the OPPONENT gained (what team1 allowed). Return only JSON
                     <div style={{fontSize:11,fontWeight:800,color:"#bbb",flexShrink:0}}>VS</div>
                     {/* CPU side */}
                     <div style={{flex:1,minWidth:100,textAlign:"right"}}>
-                      <div style={{fontSize:13,fontWeight:900,color:wr.result==="loss"?"#c00":wr.result==="win"?"#aaa":"#888"}}>CPU</div>
-                      <div style={{fontSize:10,color:"#ccc",textTransform:"uppercase"}}>Computer</div>
+                      <div style={{fontSize:13,fontWeight:900,color:wr.result==="loss"?"#c00":wr.result==="win"?"#aaa":"#888"}}>{displayCPU}</div>
+                      <div style={{fontSize:10,color:"#ccc",textTransform:"uppercase"}}>CPU</div>
                       {cpuTeamData&&<div style={{fontSize:20,fontWeight:900,color:wr.result==="loss"?"#c00":"#555",marginTop:2}}>{cpuTeamData.score}</div>}
                     </div>
                     {/* Upload button */}
@@ -3290,7 +3312,7 @@ team1.defense = yards the OPPONENT gained (what team1 allowed). Return only JSON
                       {isScanning?"Scanning...":(archivedGame?"Replace":"📷 Box Score")}
                       <input type="file" accept="image/*" style={{display:"none"}} ref={el=>fileRefs.current[key]=el} onChange={ev=>{
                         const file=ev.target.files?.[0]; if(!file) return;
-                        if(!window.confirm(`Scan box score for ${teamName} vs CPU?\nThis will use the Claude Vision API.`)){if(fileRefs.current[key])fileRefs.current[key].value="";return;}
+                        if(!window.confirm(`Scan box score for ${teamName} vs ${displayCPU}?\nThis will use the Claude Vision API.`)){if(fileRefs.current[key])fileRefs.current[key].value="";return;}
                         setScanning(key); setScanErrors(p=>({...p,[key]:null}));
                         (async()=>{
                           try{
@@ -3299,10 +3321,8 @@ team1.defense = yards the OPPONENT gained (what team1 allowed). Return only JSON
                             const text=await callClaudeVision(b64,file.type,prompt);
                             const json=JSON.parse(text.replace(/```json?|```/g,"").trim());
                             const e1=entries.find(e=>e.teamName===teamName);
-                            // Identify which JSON team is the player
-                            const playerIsTeam1=json.team1.score!==(wr.result==="loss"?Math.max(json.team1.score,json.team2.score):Math.min(json.team1.score,json.team2.score))||true;
                             json.team1.name=teamName; json.team1.userId=e1?.userId||"";
-                            json.team2.name="CPU"; json.team2.userId="";
+                            json.team2.name=displayCPU; json.team2.userId="";
                             const t1wins=json.team1.score>json.team2.score;
                             setWeekResults(prev=>prev.map(r=>r.teamName===teamName?{...r,result:t1wins?"win":"loss"}:r));
                             if(setup&&setSetup){
@@ -3323,7 +3343,7 @@ team1.defense = yards the OPPONENT gained (what team1 allowed). Return only JSON
                   {scanErrors[key]&&<div style={{padding:"6px 16px",fontSize:11,color:RED,background:"#fff0f0"}}>{scanErrors[key]}</div>}
                   <div style={{padding:"8px 16px 12px",background:"#fafafa",display:"flex",flexWrap:"wrap",gap:10,alignItems:"center"}}>
                     <span style={{fontSize:10,color:"#888",fontWeight:700,textTransform:"uppercase"}}>Override:</span>
-                    {[{label:`${teamName} W`,res:"win"},{label:"CPU W",res:"loss"}].map(opt=>(
+                    {[{label:`${teamName} W`,res:"win"},{label:`${displayCPU} W`,res:"loss"}].map(opt=>(
                       <button key={opt.res} onClick={()=>setWR(teamName,"result",opt.res)} style={btnStyle(wr.result===opt.res,opt.res==="win"?"#007a00":RED)}>{opt.label}</button>
                     ))}
                     <button onClick={()=>setWR(teamName,"result","none")} style={btnStyle(wr.result==="none","#888")}>Clear</button>
@@ -3334,7 +3354,7 @@ team1.defense = yards the OPPONENT gained (what team1 allowed). Return only JSON
                   </div>
                   {archivedGame&&myTeamData&&<div style={{padding:"4px 16px 10px",background:"#f0f8f0",fontSize:10,color:"#555",display:"grid",gridTemplateColumns:"1fr 1fr",gap:4}}>
                     <div><strong>{teamName}:</strong> {myTeamData.passing.comp}/{myTeamData.passing.att} {myTeamData.passing.yds}py {myTeamData.passing.tds}TD | {myTeamData.rushing.yds}ry {myTeamData.rushing.tds}TD | Def {myTeamData.defense.totalYdsAllowed}yds</div>
-                    <div><strong>CPU:</strong> {cpuTeamData.passing.comp}/{cpuTeamData.passing.att} {cpuTeamData.passing.yds}py {cpuTeamData.passing.tds}TD | {cpuTeamData.rushing.yds}ry {cpuTeamData.rushing.tds}TD</div>
+                    <div><strong>{displayCPU}:</strong> {cpuTeamData.passing.comp}/{cpuTeamData.passing.att} {cpuTeamData.passing.yds}py {cpuTeamData.passing.tds}TD | {cpuTeamData.rushing.yds}ry {cpuTeamData.rushing.tds}TD</div>
                   </div>}
                 </div>
               );
