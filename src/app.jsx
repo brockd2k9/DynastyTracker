@@ -1350,8 +1350,11 @@ function LeagueRecordBook({history,currentEntries,season,year,permanentUsers,set
 function ProfileTab({history,setupRows,currentEntries,season,year,permanentUsers,sel,setSel,pTab,setPTab,articles,setActiveArticle,playerStats}) {
   const isMobile = useIsMobile();
   const [expandedSeasons,setExpandedSeasons] = useState({});
-  // Use permanentUsers if available, otherwise fall back to setupRows
-  const allUsers = (permanentUsers?.length ? permanentUsers.map(u=>({userId:u.id,userName:u.defaultName,teamName:(setupRows||[]).find(r=>r.userId===u.id)?.teamName||u.teamName||""})) : setupRows)||[];
+  // Merge permanentUsers with setupRows so no one gets dropped
+  const puList = (permanentUsers||[]).map(u=>({userId:u.id,userName:u.defaultName,teamName:(setupRows||[]).find(r=>r.userId===u.id)?.teamName||u.teamName||""}));
+  const puIds = new Set(puList.map(u=>u.userId));
+  const extraRows = (setupRows||[]).filter(r=>r.userId&&!puIds.has(r.userId)).map(r=>({userId:r.userId,userName:r.userName,teamName:r.teamName}));
+  const allUsers = [...puList,...extraRows].filter(u=>u.userName);
   if (!allUsers.length) return <Card style={{padding:20}}><div style={{color:"#888",fontSize:14}}>No users found.</div></Card>;
 
   function getProfile(userId, fallbackUserName) {
