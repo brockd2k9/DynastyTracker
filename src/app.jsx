@@ -70,9 +70,11 @@ const FIXED_CATS = [
 ];
 const START_YEAR = 2024;
 const PASS = "RatedRKO99";
-const MODEL = "claude-sonnet-4-20250514";
-const API_URL = "https://api.anthropic.com/v1/messages";
-const HEADERS = {"Content-Type":"application/json"};
+const MODEL = "claude-sonnet-4-6";
+const ANTHROPIC_URL = "https://api.anthropic.com/v1/messages";
+const ANTHROPIC_HEADERS = (key) => ({"Content-Type":"application/json","x-api-key":key,"anthropic-version":"2023-06-01","anthropic-dangerous-direct-browser-access":"true"});
+
+let _claudeInFlight = false;
 
 function genId() {
   return Math.random().toString(36).slice(2,9) + Date.now().toString(36).slice(-4);
@@ -146,45 +148,53 @@ function articleHeadline(text) {
 }
 
 async function callClaudeVision(imageBase64, mediaType, prompt) {
+  if (_claudeInFlight) { console.warn("[callClaudeVision] Call already in flight — skipped"); return ""; }
   const apiKey = import.meta.env.VITE_ANTHROPIC_KEY;
   if (!apiKey) throw new Error("API key not configured — add VITE_ANTHROPIC_KEY to GitHub repo secrets.");
-  const r = await fetch("https://api.anthropic.com/v1/messages", {
-    method:"POST",
-    headers:{"Content-Type":"application/json","x-api-key":apiKey,"anthropic-version":"2023-06-01","anthropic-dangerous-direct-browser-access":"true"},
-    body:JSON.stringify({model:"claude-sonnet-5",max_tokens:1024,messages:[{role:"user",content:[
-      {type:"image",source:{type:"base64",media_type:mediaType,data:imageBase64}},
-      {type:"text",text:prompt}
-    ]}]}),
-  });
-  if (!r.ok){const e=await r.json().catch(()=>({}));throw new Error(e?.error?.message||`API error ${r.status}`);}
-  const data = await r.json();
-  return data.content?.[0]?.text||"";
+  const safePrompt = prompt.length > 20000 ? prompt.slice(0, 20000) + "\n\n[Context truncated]" : prompt;
+  _claudeInFlight = true;
+  try {
+    const r = await fetch(ANTHROPIC_URL, {
+      method:"POST",
+      headers:ANTHROPIC_HEADERS(apiKey),
+      body:JSON.stringify({model:MODEL,max_tokens:1024,messages:[{role:"user",content:[
+        {type:"image",source:{type:"base64",media_type:mediaType,data:imageBase64}},
+        {type:"text",text:safePrompt}
+      ]}]}),
+    });
+    if (!r.ok){const e=await r.json().catch(()=>({}));throw new Error(e?.error?.message||`API error ${r.status}`);}
+    const data = await r.json();
+    return data.content?.[0]?.text||"";
+  } finally {
+    _claudeInFlight = false;
+  }
 }
 
 async function callClaude(prompt) {
+  if (_claudeInFlight) { console.warn("[callClaude] Call already in flight — skipped"); return ""; }
   const apiKey = import.meta.env.VITE_ANTHROPIC_KEY;
-  console.log("[callClaude] apiKey present:", !!apiKey);
   if (!apiKey) throw new Error("API key not configured — add VITE_ANTHROPIC_KEY to GitHub repo secrets.");
-  const timeout = new Promise((_,reject)=>setTimeout(()=>reject(new Error("Request timed out after 30s")),30000));
-  const req = fetch("https://api.anthropic.com/v1/messages", {
-    method:"POST",
-    headers:{
-      "Content-Type":"application/json",
-      "x-api-key":apiKey,
-      "anthropic-version":"2023-06-01",
-      "anthropic-dangerous-direct-browser-access":"true",
-    },
-    body:JSON.stringify({model:"claude-haiku-4-5-20251001",max_tokens:4096,messages:[{role:"user",content:prompt}]}),
-  });
-  console.log("[callClaude] fetch started");
-  const r = await Promise.race([req, timeout]);
-  console.log("[callClaude] response status:", r.status);
-  if (!r.ok) {
-    const err = await r.json().catch(()=>({}));
-    throw new Error(err?.error?.message || `API error ${r.status}`);
+  const safePrompt = prompt.length > 20000 ? prompt.slice(0, 20000) + "\n\n[Context truncated for length]" : prompt;
+  _claudeInFlight = true;
+  try {
+    const timeoutId = { ref: null };
+    const timeout = new Promise((_,reject)=>{ timeoutId.ref = setTimeout(()=>reject(new Error("Request timed out after 45s")),45000); });
+    const req = fetch(ANTHROPIC_URL, {
+      method:"POST",
+      headers:ANTHROPIC_HEADERS(apiKey),
+      body:JSON.stringify({model:MODEL,max_tokens:4096,messages:[{role:"user",content:safePrompt}]}),
+    });
+    const r = await Promise.race([req, timeout]);
+    clearTimeout(timeoutId.ref);
+    if (!r.ok) {
+      const err = await r.json().catch(()=>({}));
+      throw new Error(err?.error?.message || `API error ${r.status}`);
+    }
+    const d = await r.json();
+    return d.content?.[0]?.text || "No content returned.";
+  } finally {
+    _claudeInFlight = false;
   }
-  const d = await r.json();
-  return d.content?.[0]?.text || "No content returned.";
 }
 
 const ff = "'Helvetica Neue',Arial,sans-serif";
