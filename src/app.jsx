@@ -3553,6 +3553,53 @@ function GameArchiveTab({setup,entries,RED,ff,isMobile}) {
   );
 }
 
+async function compressImage(file, maxW=900, quality=0.78) {
+  return new Promise(res=>{
+    const reader=new FileReader();
+    reader.onload=e=>{
+      const img=new Image();
+      img.onload=()=>{
+        const ratio=Math.min(1,maxW/img.width);
+        const canvas=document.createElement('canvas');
+        canvas.width=Math.round(img.width*ratio);
+        canvas.height=Math.round(img.height*ratio);
+        canvas.getContext('2d').drawImage(img,0,0,canvas.width,canvas.height);
+        res(canvas.toDataURL('image/jpeg',quality));
+      };
+      img.src=e.target.result;
+    };
+    reader.readAsDataURL(file);
+  });
+}
+
+function FeaturedCarousel({articles, setActiveArticle, RED, ff}) {
+  const [idx, setIdx] = useState(0);
+  const featured = (articles||[]).filter(a=>a.showOnHome&&a.imageUrl).slice(0,5);
+  useEffect(()=>{
+    if(featured.length<=1) return;
+    const t=setInterval(()=>setIdx(i=>(i+1)%featured.length),5000);
+    return()=>clearInterval(t);
+  },[featured.length]);
+  if(!featured.length) return null;
+  const a=featured[idx];
+  return (
+    <div style={{position:"relative",width:"100%",borderRadius:2,overflow:"hidden",marginBottom:0,cursor:"pointer",background:"#111"}} onClick={()=>setActiveArticle(a)}>
+      <img src={a.imageUrl} alt="" style={{width:"100%",maxHeight:340,objectFit:"cover",display:"block"}} onError={e=>{e.target.style.display="none";}}/>
+      <div style={{position:"absolute",bottom:0,left:0,right:0,background:"linear-gradient(transparent,rgba(0,0,0,0.88))",padding:"40px 18px 14px"}}>
+        <div style={{fontSize:10,color:a.reporterColor||RED,fontWeight:800,textTransform:"uppercase",letterSpacing:0.5,marginBottom:5,fontFamily:ff}}>{a.reporter||"Dynasty Central"} · {a.label}</div>
+        <div style={{fontSize:20,fontWeight:900,color:"#fff",lineHeight:1.2,fontFamily:ff}}>{articleHeadline(a.text)}</div>
+      </div>
+      {featured.length>1&&<>
+        <button onClick={e=>{e.stopPropagation();setIdx(i=>(i-1+featured.length)%featured.length);}} style={{position:"absolute",left:8,top:"50%",transform:"translateY(-50%)",background:"rgba(0,0,0,0.45)",color:"#fff",border:"none",borderRadius:"50%",width:34,height:34,cursor:"pointer",fontSize:18,lineHeight:"34px",textAlign:"center"}}>‹</button>
+        <button onClick={e=>{e.stopPropagation();setIdx(i=>(i+1)%featured.length);}} style={{position:"absolute",right:8,top:"50%",transform:"translateY(-50%)",background:"rgba(0,0,0,0.45)",color:"#fff",border:"none",borderRadius:"50%",width:34,height:34,cursor:"pointer",fontSize:18,lineHeight:"34px",textAlign:"center"}}>›</button>
+        <div style={{position:"absolute",bottom:10,right:14,display:"flex",gap:5}}>
+          {featured.map((_,i)=><div key={i} onClick={e=>{e.stopPropagation();setIdx(i);}} style={{width:7,height:7,borderRadius:"50%",background:i===idx?"#fff":"rgba(255,255,255,0.35)",cursor:"pointer",transition:"background 0.2s"}}/>)}
+        </div>
+      </>}
+    </div>
+  );
+}
+
 function ContentHub({sorted,entries,week,season,year,leagueName,history,leader,articles,setArticles,setActiveArticle,schedule,setup,setSetup,saveToDb}) {
   const [generating,setGenerating] = useState(null);
   const [genError,setGenError] = useState(null);
@@ -3566,6 +3613,11 @@ function ContentHub({sorted,entries,week,season,year,leagueName,history,leader,a
   const [draftText,setDraftText] = useState("");
   const [revisionNote,setRevisionNote] = useState("");
   const [revising,setRevising] = useState(false);
+  const [articleImage,setArticleImage] = useState(null);
+  const [showOnHome,setShowOnHome] = useState(false);
+  const articleImgRef = useRef();
+  const [selArticleId,setSelArticleId] = useState(null);
+  const manageImgRef = useRef();
   const [bibleProfiles,setBibleProfiles] = useState(()=>(setup?.leagueBible?.profiles||[]).length>0?setup.leagueBible.profiles:entries.map(e=>({name:e.userName||e.teamName,bio:""})));
   const [bibleStorylines,setBibleStorylines] = useState(setup?.leagueBible?.storylines||"");
   const [bibleSaved,setBibleSaved] = useState(false);
@@ -3927,14 +3979,70 @@ function ContentHub({sorted,entries,week,season,year,leagueName,history,leader,a
               <button onClick={requestRevision} disabled={revising||!revisionNote.trim()} style={{marginTop:8,background:revising||!revisionNote.trim()?"#ccc":"#444",color:"#fff",border:"none",borderRadius:2,padding:"8px 16px",cursor:revising||!revisionNote.trim()?"not-allowed":"pointer",fontFamily:ff,fontSize:12,fontWeight:800,textTransform:"uppercase"}}>{revising?"Revising…":"✏ Revise Article"}</button>
             </div>
 
+            {/* Featured image + homepage toggle */}
+            <div style={{borderTop:"1px solid #eee",marginTop:10,paddingTop:10,display:"flex",flexDirection:"column",gap:8}}>
+              <div style={{fontSize:11,fontWeight:800,textTransform:"uppercase",letterSpacing:0.5,color:"#555",fontFamily:ff}}>Featured Image</div>
+              <div style={{display:"flex",gap:10,alignItems:"flex-start",flexWrap:"wrap"}}>
+                <input ref={articleImgRef} type="file" accept="image/*" style={{display:"none"}} onChange={async e=>{const f=e.target.files?.[0];if(!f)return;const compressed=await compressImage(f);setArticleImage(compressed);if(articleImgRef.current)articleImgRef.current.value="";}}/>
+                <button onClick={()=>articleImgRef.current?.click()} style={{padding:"7px 14px",border:"1px dashed #ccc",borderRadius:2,cursor:"pointer",fontFamily:ff,fontSize:11,fontWeight:700,background:"#fafafa",color:"#555"}}>{articleImage?"Replace Image":"Upload Image"}</button>
+                {articleImage&&<><img src={articleImage} alt="" style={{height:52,borderRadius:2,objectFit:"cover"}}/><button onClick={()=>setArticleImage(null)} style={{padding:"4px 8px",border:"1px solid #eee",borderRadius:2,cursor:"pointer",fontFamily:ff,fontSize:10,background:"#fff",color:"#888"}}>Remove</button></>}
+              </div>
+              <label style={{display:"flex",alignItems:"center",gap:8,cursor:"pointer",userSelect:"none",fontSize:12,fontWeight:600,color:"#333",fontFamily:ff}}>
+                <input type="checkbox" checked={showOnHome} onChange={e=>setShowOnHome(e.target.checked)} style={{width:14,height:14,accentColor:draftArticle.reporterColor||RED}}/>
+                Show on Homepage carousel
+              </label>
+            </div>
+
             <div style={{display:"flex",gap:10,marginTop:10,alignItems:"center"}}>
-              <button onClick={()=>publishArticle({...draftArticle,text:draftText})} disabled={extracting||revising} style={{background:draftArticle.reporterColor||"#111",color:"#fff",border:"none",borderRadius:2,padding:"10px 20px",cursor:"pointer",fontFamily:ff,fontSize:13,fontWeight:800,textTransform:"uppercase"}}>Publish</button>
-              <button onClick={()=>{setDraftArticle(null);setDraftText("");setRevisionNote("");}} style={{background:"#fff",color:"#666",border:"1px solid #ccc",borderRadius:2,padding:"10px 20px",cursor:"pointer",fontFamily:ff,fontSize:13,fontWeight:700,textTransform:"uppercase"}}>Discard</button>
+              <button onClick={()=>{publishArticle({...draftArticle,text:draftText,imageUrl:articleImage||undefined,showOnHome});setArticleImage(null);setShowOnHome(false);}} disabled={extracting||revising} style={{background:draftArticle.reporterColor||"#111",color:"#fff",border:"none",borderRadius:2,padding:"10px 20px",cursor:"pointer",fontFamily:ff,fontSize:13,fontWeight:800,textTransform:"uppercase"}}>Publish</button>
+              <button onClick={()=>{setDraftArticle(null);setDraftText("");setRevisionNote("");setArticleImage(null);setShowOnHome(false);}} style={{background:"#fff",color:"#666",border:"1px solid #ccc",borderRadius:2,padding:"10px 20px",cursor:"pointer",fontFamily:ff,fontSize:13,fontWeight:700,textTransform:"uppercase"}}>Discard</button>
               {(extracting||revising)&&<span style={{fontSize:11,color:"#888",fontStyle:"italic"}}>{revising?"Revising…":"Updating Chronicle…"}</span>}
             </div>
           </div>
         </Card>
       )}
+
+      {/* Article Images & Homepage Control */}
+      {articles.length>0&&(()=>{
+        function saveArticleField(id, fields) {
+          const updated = articles.map(a=>a.id===id?{...a,...fields}:a);
+          setArticles(updated);
+          dbSave({articles:updated});
+        }
+        return (
+          <Card style={{overflow:"hidden"}}>
+            <CardHead bg="#1a3a6b">Article Images &amp; Homepage</CardHead>
+            <div style={{padding:14,display:"flex",flexDirection:"column",gap:0}}>
+              <div style={{fontSize:11,color:"#888",marginBottom:10}}>Upload featured images and control which articles appear in the homepage carousel.</div>
+              <input ref={manageImgRef} type="file" accept="image/*" style={{display:"none"}} onChange={async e=>{
+                const f=e.target.files?.[0];if(!f||!selArticleId)return;
+                const compressed=await compressImage(f);
+                saveArticleField(selArticleId,{imageUrl:compressed});
+                if(manageImgRef.current)manageImgRef.current.value="";
+              }}/>
+              {articles.slice(0,15).map(a=>(
+                <div key={a.id} style={{display:"flex",gap:10,alignItems:"center",padding:"10px 0",borderBottom:"1px solid #f0f0f0",flexWrap:"wrap"}}>
+                  <div style={{width:70,height:48,borderRadius:2,overflow:"hidden",background:"#f0f0f0",flexShrink:0,display:"flex",alignItems:"center",justifyContent:"center"}}>
+                    {a.imageUrl?<img src={a.imageUrl} alt="" style={{width:"100%",height:"100%",objectFit:"cover"}}/>:<span style={{fontSize:9,color:"#bbb",textAlign:"center",fontFamily:ff}}>No image</span>}
+                  </div>
+                  <div style={{flex:1,minWidth:120}}>
+                    <div style={{fontSize:10,color:a.reporterColor||RED,fontWeight:700,textTransform:"uppercase",letterSpacing:0.4,fontFamily:ff}}>{a.label} · S{a.season} Wk{a.week}</div>
+                    <div style={{fontSize:12,fontWeight:700,color:"#111",lineHeight:1.3,fontFamily:ff,marginTop:2}}>{articleHeadline(a.text)}</div>
+                  </div>
+                  <div style={{display:"flex",gap:8,alignItems:"center",flexShrink:0,flexWrap:"wrap"}}>
+                    <button onClick={()=>{setSelArticleId(a.id);manageImgRef.current?.click();}} style={{padding:"5px 11px",border:"1px solid #ccc",borderRadius:2,cursor:"pointer",fontFamily:ff,fontSize:10,fontWeight:700,background:"#fff",color:"#333",textTransform:"uppercase"}}>{a.imageUrl?"Replace":"Upload"}</button>
+                    {a.imageUrl&&<button onClick={()=>saveArticleField(a.id,{imageUrl:undefined,showOnHome:false})} style={{padding:"5px 8px",border:"1px solid #eee",borderRadius:2,cursor:"pointer",fontFamily:ff,fontSize:10,background:"#fff",color:"#888"}}>Remove</button>}
+                    {a.imageUrl&&<label style={{display:"flex",alignItems:"center",gap:5,cursor:"pointer",userSelect:"none",fontSize:11,fontWeight:600,color:"#333",fontFamily:ff}}>
+                      <input type="checkbox" checked={!!a.showOnHome} onChange={e=>saveArticleField(a.id,{showOnHome:e.target.checked})} style={{accentColor:RED}}/>
+                      Homepage
+                    </label>}
+                  </div>
+                </div>
+              ))}
+            </div>
+          </Card>
+        );
+      })()}
 
       {/* Articles */}
       {articles.length===0&&<Card style={{padding:"32px 20px",textAlign:"center"}}><div style={{fontSize:28,marginBottom:10}}>📰</div><div style={{fontSize:14,color:"#888"}}>No articles yet. Select a reporter and article type above.</div></Card>}
@@ -4431,6 +4539,9 @@ export default function App() {
           )}
 
           {tab==="Home"&&(<>
+            {/* Featured image carousel */}
+            <FeaturedCarousel articles={articles} setActiveArticle={setActiveArticle} RED={RED} ff={ff}/>
+
             {/* This week's matchups */}
             {schedule&&schedule[week]&&Object.keys(schedule[week]).length>0&&<WeekMatchupsCard schedule={schedule} week={week} sorted={sorted} leagueName={leagueName} season={season} setActiveArticle={setActiveArticle} articles={articles} setArticles={setArticles}/>}
 
