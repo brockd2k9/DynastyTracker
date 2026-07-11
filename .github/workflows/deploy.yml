@@ -2,7 +2,7 @@ name: Deploy to Cloudflare Workers
 
 on:
   push:
-    branches: [main]
+    branches: [main, claude/zealous-einstein-aafbau]
 
 jobs:
   deploy:
