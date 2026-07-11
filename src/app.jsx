@@ -70,9 +70,49 @@ const FIXED_CATS = [
 ];
 const START_YEAR = 2024;
 const PASS = "RatedRKO99";
-const MODEL = "claude-sonnet-4-20250514";
-const API_URL = "https://api.anthropic.com/v1/messages";
-const HEADERS = {"Content-Type":"application/json"};
+const MODEL = "claude-sonnet-4-6";
+const ANTHROPIC_URL = "https://api.anthropic.com/v1/messages";
+const ANTHROPIC_HEADERS = (key) => ({"Content-Type":"application/json","x-api-key":key,"anthropic-version":"2023-06-01","anthropic-dangerous-direct-browser-access":"true"});
+
+// sonnet-4-6 pricing: $3/MTok input, $15/MTok output
+const COST_PER_INPUT_TOKEN = 3 / 1_000_000;
+const COST_PER_OUTPUT_TOKEN = 15 / 1_000_000;
+const MAX_SESSION_CALLS = 20;
+const TOKEN_LIMIT = 8000;
+const CALL_COOLDOWN_MS = 3000;
+
+let _claudeInFlight = false;
+let _sessionCallCount = 0;
+let _lastCallFinishedAt = 0;
+
+function _estimateTokens(text) {
+  return Math.ceil(text.length / 4);
+}
+
+function _logCost(label, inputTokens, outputTokens) {
+  const inputCents = inputTokens * COST_PER_INPUT_TOKEN * 100;
+  const outputCents = outputTokens * COST_PER_OUTPUT_TOKEN * 100;
+  console.log(
+    `[Claude API] ${label} | model: ${MODEL} | input: ~${inputTokens} tokens ($${inputCents.toFixed(4)}¢) | output: ~${outputTokens} tokens ($${outputCents.toFixed(4)}¢) | total: ~$${(inputCents+outputCents).toFixed(4)}¢ | session calls: ${_sessionCallCount}/${MAX_SESSION_CALLS}`
+  );
+}
+
+function _checkSafeguards(promptText) {
+  if (_sessionCallCount >= MAX_SESSION_CALLS) {
+    throw new Error("API call limit reached for this session — refresh to continue");
+  }
+  const now = Date.now();
+  const elapsed = now - _lastCallFinishedAt;
+  if (_lastCallFinishedAt > 0 && elapsed < CALL_COOLDOWN_MS) {
+    throw new Error(`Please wait ${Math.ceil((CALL_COOLDOWN_MS - elapsed) / 1000)}s before making another request`);
+  }
+  const estimated = _estimateTokens(promptText);
+  if (estimated > TOKEN_LIMIT) {
+    console.warn(`[Claude API] Prompt estimated at ${estimated} tokens — truncating to ${TOKEN_LIMIT}`);
+    return promptText.slice(0, TOKEN_LIMIT * 4) + "\n\n[Context truncated for token limit]";
+  }
+  return promptText;
+}
 
 function genId() {
   return Math.random().toString(36).slice(2,9) + Date.now().toString(36).slice(-4);
@@ -146,49 +186,130 @@ function articleHeadline(text) {
 }
 
 async function callClaudeVision(imageBase64, mediaType, prompt) {
+  if (_claudeInFlight) { console.warn("[callClaudeVision] Call already in flight — skipped"); return ""; }
   const apiKey = import.meta.env.VITE_ANTHROPIC_KEY;
   if (!apiKey) throw new Error("API key not configured — add VITE_ANTHROPIC_KEY to GitHub repo secrets.");
-  const r = await fetch("https://api.anthropic.com/v1/messages", {
-    method:"POST",
-    headers:{"Content-Type":"application/json","x-api-key":apiKey,"anthropic-version":"2023-06-01","anthropic-dangerous-direct-browser-access":"true"},
-    body:JSON.stringify({model:"claude-sonnet-5",max_tokens:1024,messages:[{role:"user",content:[
-      {type:"image",source:{type:"base64",media_type:mediaType,data:imageBase64}},
-      {type:"text",text:prompt}
-    ]}]}),
-  });
-  if (!r.ok){const e=await r.json().catch(()=>({}));throw new Error(e?.error?.message||`API error ${r.status}`);}
-  const data = await r.json();
-  return data.content?.[0]?.text||"";
+  const safePrompt = _checkSafeguards(prompt);
+  _claudeInFlight = true;
+  _sessionCallCount++;
+  try {
+    const r = await fetch(ANTHROPIC_URL, {
+      method:"POST",
+      headers:ANTHROPIC_HEADERS(apiKey),
+      body:JSON.stringify({model:MODEL,max_tokens:1024,messages:[{role:"user",content:[
+        {type:"image",source:{type:"base64",media_type:mediaType,data:imageBase64}},
+        {type:"text",text:safePrompt}
+      ]}]}),
+    });
+    if (!r.ok){const e=await r.json().catch(()=>({}));throw new Error(e?.error?.message||`API error ${r.status}`);}
+    const data = await r.json();
+    const outputText = data.content?.[0]?.text||"";
+    _logCost("Vision/scorecard scan", _estimateTokens(safePrompt) + 300, _estimateTokens(outputText));
+    return outputText;
+  } finally {
+    _claudeInFlight = false;
+    _lastCallFinishedAt = Date.now();
+  }
 }
 
 async function callClaude(prompt) {
+  if (_claudeInFlight) { console.warn("[callClaude] Call already in flight — skipped"); return ""; }
   const apiKey = import.meta.env.VITE_ANTHROPIC_KEY;
-  console.log("[callClaude] apiKey present:", !!apiKey);
   if (!apiKey) throw new Error("API key not configured — add VITE_ANTHROPIC_KEY to GitHub repo secrets.");
-  const timeout = new Promise((_,reject)=>setTimeout(()=>reject(new Error("Request timed out after 30s")),30000));
-  const req = fetch("https://api.anthropic.com/v1/messages", {
-    method:"POST",
-    headers:{
-      "Content-Type":"application/json",
-      "x-api-key":apiKey,
-      "anthropic-version":"2023-06-01",
-      "anthropic-dangerous-direct-browser-access":"true",
-    },
-    body:JSON.stringify({model:"claude-haiku-4-5-20251001",max_tokens:4096,messages:[{role:"user",content:prompt}]}),
-  });
-  console.log("[callClaude] fetch started");
-  const r = await Promise.race([req, timeout]);
-  console.log("[callClaude] response status:", r.status);
-  if (!r.ok) {
-    const err = await r.json().catch(()=>({}));
-    throw new Error(err?.error?.message || `API error ${r.status}`);
+  const safePrompt = _checkSafeguards(prompt);
+  _claudeInFlight = true;
+  _sessionCallCount++;
+  try {
+    const timeoutId = { ref: null };
+    const timeout = new Promise((_,reject)=>{ timeoutId.ref = setTimeout(()=>reject(new Error("Request timed out after 45s")),45000); });
+    const req = fetch(ANTHROPIC_URL, {
+      method:"POST",
+      headers:ANTHROPIC_HEADERS(apiKey),
+      body:JSON.stringify({model:MODEL,max_tokens:4096,messages:[{role:"user",content:safePrompt}]}),
+    });
+    const r = await Promise.race([req, timeout]);
+    clearTimeout(timeoutId.ref);
+    if (!r.ok) {
+      const err = await r.json().catch(()=>({}));
+      throw new Error(err?.error?.message || `API error ${r.status}`);
+    }
+    const d = await r.json();
+    const outputText = d.content?.[0]?.text || "No content returned.";
+    _logCost("Article/text generation", _estimateTokens(safePrompt), _estimateTokens(outputText));
+    return outputText;
+  } finally {
+    _claudeInFlight = false;
+    _lastCallFinishedAt = Date.now();
   }
-  const d = await r.json();
-  return d.content?.[0]?.text || "No content returned.";
 }
 
 const ff = "'Helvetica Neue',Arial,sans-serif";
 const RED = "#cc0000";
+
+// ── Game Archive helpers ──────────────────────────────────────────────────────
+
+const EMPTY_BOX_TEAM = () => ({
+  name:"", userId:"", score:0,
+  passing:{comp:0,att:0,pct:0,yds:0,tds:0,int:0},
+  rushing:{att:0,yds:0,ypc:0,tds:0},
+  defense:{totalYdsAllowed:0,passYdsAllowed:0,rushYdsAllowed:0},
+  specialTeams:{fgMade:0,fgAtt:0,krTds:0,prTds:0},
+});
+
+function recomputePlayerStatsFromArchive(archive, existingPlayerStats, changedYear) {
+  const yearGames = (archive||[]).filter(g=>String(g.year)===String(changedYear));
+  const byUser = {};
+  for (const g of yearGames) {
+    for (const [team, opp] of [[g.team1,g.team2],[g.team2,g.team1]]) {
+      if (!team.userId) continue;
+      if (!byUser[team.userId]) byUser[team.userId] = [];
+      byUser[team.userId].push({team, opp});
+    }
+  }
+  const updated = {...existingPlayerStats};
+  for (const [userId, games] of Object.entries(byUser)) {
+    const s = games.reduce((acc,{team})=>({
+      passing:{att:acc.passing.att+team.passing.att,comp:acc.passing.comp+team.passing.comp,yds:acc.passing.yds+team.passing.yds,tds:acc.passing.tds+team.passing.tds,int:acc.passing.int+team.passing.int},
+      rushing:{att:acc.rushing.att+team.rushing.att,yds:acc.rushing.yds+team.rushing.yds,tds:acc.rushing.tds+team.rushing.tds,fum:0},
+      receiving:{rec:0,yds:0,tds:0},
+      defense:{int:0,fum:0,sacks:0,tds:0},
+      specialTeams:{fgAtt:acc.specialTeams.fgAtt+team.specialTeams.fgAtt,fgMade:acc.specialTeams.fgMade+team.specialTeams.fgMade,punts:0,puntYds:0,puntsIn20:0},
+    }), {passing:{att:0,comp:0,yds:0,tds:0,int:0},rushing:{att:0,yds:0,tds:0,fum:0},receiving:{rec:0,yds:0,tds:0},defense:{int:0,fum:0,sacks:0,tds:0},specialTeams:{fgAtt:0,fgMade:0,punts:0,puntYds:0,puntsIn20:0}});
+    updated[userId] = {...(existingPlayerStats[userId]||{}), [String(changedYear)]: s};
+  }
+  return updated;
+}
+
+function pickWeeklyAwards(games) {
+  if (!games.length) return {gotw:null,blowout:null,offMvp:null,defMvp:null};
+  let gotw=null, gotwMargin=Infinity, blowout=null, blowoutMargin=-1;
+  let offMvp=null, offMvpYds=-1, defMvp=null, defMvpYdsAllowed=Infinity;
+  for (const g of games) {
+    const margin = Math.abs(g.team1.score - g.team2.score);
+    if (margin < gotwMargin) { gotwMargin=margin; gotw={game:g,margin}; }
+    if (margin > blowoutMargin) { blowoutMargin=margin; blowout={game:g,margin}; }
+    for (const t of [g.team1,g.team2]) {
+      const offYds = t.passing.yds + t.rushing.yds;
+      if (offYds > offMvpYds) { offMvpYds=offYds; offMvp={team:t,game:g,yds:offYds}; }
+      if (t.defense.totalYdsAllowed < defMvpYdsAllowed) { defMvpYdsAllowed=t.defense.totalYdsAllowed; defMvp={team:t,game:g,ydsAllowed:t.defense.totalYdsAllowed}; }
+    }
+  }
+  return {gotw, blowout, offMvp, defMvp};
+}
+
+function buildRecapPrompt(games, awards, leagueName, week, season, year, reporter) {
+  const w = g => g.team1.score > g.team2.score ? g.team1 : g.team2;
+  const l = g => g.team1.score > g.team2.score ? g.team2 : g.team1;
+  const statLine = t => `${t.passing.comp}/${t.passing.att} (${t.passing.pct}%) ${t.passing.yds} pass yds ${t.passing.tds}TD/${t.passing.int}INT | ${t.rushing.att} rush, ${t.rushing.yds} yds (${t.rushing.ypc} YPC), ${t.rushing.tds} TD | Def: ${t.defense.totalYdsAllowed} total yds allowed (${t.defense.passYdsAllowed} pass / ${t.defense.rushYdsAllowed} rush) | FG ${t.specialTeams.fgMade}/${t.specialTeams.fgAtt}${t.specialTeams.krTds>0?` | ${t.specialTeams.krTds} KR TD`:''}${t.specialTeams.prTds>0?` | ${t.specialTeams.prTds} PR TD`:''}`;
+  const gameLines = games.map(g=>`${w(g).name} ${w(g).score}, ${l(g).name} ${l(g).score}\n  ${g.team1.name}: ${statLine(g.team1)}\n  ${g.team2.name}: ${statLine(g.team2)}`).join("\n\n");
+  const awardLines = [
+    awards.gotw ? `GAME OF THE WEEK: ${w(awards.gotw.game).name} def. ${l(awards.gotw.game).name} ${w(awards.gotw.game).score}-${l(awards.gotw.game).score} (margin: ${awards.gotw.margin})` : "",
+    awards.blowout && awards.blowout.margin > (awards.gotw?.margin||0) ? `BLOWOUT OF THE WEEK: ${w(awards.blowout.game).name} def. ${l(awards.blowout.game).name} ${w(awards.blowout.game).score}-${l(awards.blowout.game).score} (margin: ${awards.blowout.margin})` : "",
+    awards.offMvp ? `TOP OFFENSE: ${awards.offMvp.team.name} — ${awards.offMvp.yds} total yards (${awards.offMvp.team.passing.yds} pass / ${awards.offMvp.team.rushing.yds} rush)` : "",
+    awards.defMvp ? `TOP DEFENSE: ${awards.defMvp.team.name} — only ${awards.defMvp.ydsAllowed} yards allowed` : "",
+  ].filter(Boolean).join("\n");
+  return `You are ${reporter.name}, ${reporter.title} for Dynasty Central covering the "${leagueName}" dynasty. Your writing style is ${reporter.style}\n\nWrite a dramatic weekly recap for Season ${season} Week ${week} (${year}).\n\nWEEK ${week} RESULTS:\n${gameLines}\n\nWEEK ${week} AWARDS:\n${awardLines}\n\nWrite a 400-500 word recap that:\n- Opens with a punchy headline and lede capturing the week's biggest story\n- Covers each game with flavor and context, not just scores\n- Highlights the award winners with specific stat call-outs\n- Ends with dynasty standings implications and what to watch next week\n- Signs off with your name and title\n\nWrite in your distinct voice. No markdown formatting.`;
+}
 
 function SL({children}) {
   return <div style={{fontSize:11,fontWeight:800,letterSpacing:2,textTransform:"uppercase",color:"#555",borderLeft:`3px solid ${RED}`,paddingLeft:8,marginBottom:14,fontFamily:ff}}>{children}</div>;
@@ -231,6 +352,7 @@ function WeekMatchupsCard({schedule,week,sorted,leagueName,season,setActiveArtic
 
   const generateGOTWPreview = async () => {
     if(!gameOfWeek) return;
+    if(!window.confirm(`Generate Game of the Week preview?\n${gameOfWeek.team1} vs ${gameOfWeek.team2}\n\nThis will use the Claude API.`)) return;
     setGenerating(true);
     const t1 = sorted.find(t=>t.teamName===gameOfWeek.team1);
     const t2 = sorted.find(t=>t.teamName===gameOfWeek.team2);
@@ -1429,7 +1551,7 @@ function ProfileTab({history,setupRows,currentEntries,season,year,permanentUsers
           {pTab==="points"&&<div style={{display:"flex",flexDirection:"column",gap:14}}><SL>All-Time Points Breakdown</SL>{[["Game Wins",profile.ptBreakdown.game,"#007a00"],["Ranked Bonuses",profile.ptBreakdown.bonus,"#cc7700"],["Conf Standings",profile.ptBreakdown.conf,"#111"],["Conf Championship",profile.ptBreakdown.cc,"#111"],["Bowl & Playoff",profile.ptBreakdown.bowl,"#0066cc"],["Recruiting",profile.ptBreakdown.rec,"#111"],["Awards",profile.ptBreakdown.awards,"#cc7700"]].map(([label,val,color])=>{const pct=profile.totalPts>0?Math.round((val/profile.totalPts)*100):0;return(<div key={label} style={{padding:"8px 0",borderBottom:"1px solid #f0f0f0"}}><div style={{display:"flex",justifyContent:"space-between",marginBottom:4}}><span style={{fontSize:13,color:"#333"}}>{label}</span><span style={{fontSize:13,fontWeight:800,color}}>{val} <span style={{fontSize:11,color:"#aaa",fontWeight:400}}>({pct}%)</span></span></div><div style={{background:"#eee",borderRadius:2,height:6,overflow:"hidden"}}><div style={{width:`${pct}%`,height:"100%",background:color,borderRadius:2}}/></div></div>);})}
           <div style={{display:"flex",justifyContent:"space-between",padding:"10px 0"}}><span style={{fontSize:14,fontWeight:800}}>TOTAL</span><span style={{fontSize:16,fontWeight:900,color:RED}}>{profile.totalPts}</span></div></div>}
 
-          {pTab==="stats"&&<PlayerStatsTab userId={user.userId} userName={user.userName} playerStats={playerStats} season={season} year={year} ff={ff} RED={RED}/>}
+          {pTab==="stats"&&<PlayerStatsTab userId={user.userId} userName={user.userName} playerStats={playerStats} yearList={[]} ff={ff} RED={RED}/>}
           {pTab==="news"&&(()=>{
             const curEntry=currentEntries.find(e=>user.userId?e.userId===user.userId:e.userName===user.userName);
             const names=[curEntry?.userName,curEntry?.teamName,user.userName].filter(Boolean);
@@ -1472,8 +1594,7 @@ const EMPTY_STATS = () => ({
   rushing:{att:0,yds:0,tds:0,fum:0},
   receiving:{rec:0,yds:0,tds:0},
   defense:{int:0,fum:0,sacks:0,tds:0},
-  specialTeams:{fgAtt:0,fgMade:0,punts:0,puntYds:0,netAvg:0,puntsIn20:0,krTds:0,prTds:0,krTdsAllowed:0,prTdsAllowed:0},
-  misc:{offPts:0,defPts:0,offYds:0,defYds:0,passYds:0,rushYds:0,passYdsAllowed:0,rushYdsAllowed:0,turnoverDiff:0,thirdDownPct:0,fourthDownPct:0,fourthDownAtt:0,def3rdDownPct:0,def4thDownPct:0,twoPointPct:0,twoPointAtt:0,defTwoPointPct:0,redzoneOff:0,redzoneDef:0},
+  specialTeams:{fgAtt:0,fgMade:0,punts:0,puntYds:0,puntsIn20:0},
 });
 function sumStats(a, b) {
   const s = (obj1, obj2) => Object.fromEntries(Object.keys(obj1).map(k=>[k,(obj1[k]||0)+(obj2?.[k]||0)]));
@@ -1483,44 +1604,7 @@ function sumStats(a, b) {
     receiving: s(a.receiving, b?.receiving),
     defense: s(a.defense, b?.defense),
     specialTeams: s(a.specialTeams, b?.specialTeams),
-    misc: s(a.misc||EMPTY_STATS().misc, b?.misc||EMPTY_STATS().misc),
   };
-}
-// Fields that should be averaged (rates/percentages) rather than summed
-const MISC_AVG_FIELDS = new Set(['offPts','defPts','offYds','defYds','passYds','rushYds','passYdsAllowed','rushYdsAllowed','thirdDownPct','fourthDownPct','def3rdDownPct','def4thDownPct','twoPointPct','defTwoPointPct','redzoneOff','redzoneDef']);
-const ST_AVG_FIELDS = new Set(['netAvg']);
-// Merge a list of season stats — counting stats sum, rate/pct stats average
-function mergeStatsList(list) {
-  if(!list.length) return EMPTY_STATS();
-  const summed = list.reduce((acc,s)=>sumStats(acc,s), EMPTY_STATS());
-  const n = list.length;
-  // Fix misc: average rate/pct fields
-  const miscKeys = Object.keys(EMPTY_STATS().misc);
-  summed.misc = Object.fromEntries(miscKeys.map(k=>[k,
-    MISC_AVG_FIELDS.has(k)
-      ? parseFloat((list.reduce((s,st)=>s+(st.misc?.[k]||0),0)/n).toFixed(2))
-      : summed.misc[k]
-  ]));
-  // Fix specialTeams: average netAvg
-  const stKeys = Object.keys(EMPTY_STATS().specialTeams);
-  summed.specialTeams = Object.fromEntries(stKeys.map(k=>[k,
-    ST_AVG_FIELDS.has(k)
-      ? parseFloat((list.reduce((s,st)=>s+(st.specialTeams?.[k]||0),0)/n).toFixed(2))
-      : summed.specialTeams[k]
-  ]));
-  return summed;
-}
-// Normalize playerStats[userId] to always be {year: {season: statsObj}}
-function normalizeUserStats(raw) {
-  const out = {};
-  for (const [yr, v] of Object.entries(raw||{})) {
-    if (v && typeof v === 'object' && 'passing' in v) {
-      out[yr] = {"1": v}; // old flat format → season 1
-    } else if (v && typeof v === 'object') {
-      out[yr] = v;
-    }
-  }
-  return out;
 }
 function StatRow({label, val, sub}) {
   const ff="'Helvetica Neue',Arial,sans-serif";
@@ -1534,75 +1618,34 @@ function StatRow({label, val, sub}) {
     </div>
   );
 }
-function PlayerStatsTab({userId, userName, playerStats, season, year, ff, RED}) {
-  // view: "career" | "year-YYYY" (year aggregate) | "YYYY-S" (individual season)
+function PlayerStatsTab({userId, userName, playerStats, yearList, ff, RED}) {
   const [view, setView] = useState("career");
-  const [expandedYear, setExpandedYear] = useState(null);
   const [cat, setCat] = useState("offense");
   const [offSub, setOffSub] = useState("passing");
-  const norm = normalizeUserStats(playerStats?.[userId]);
-  // Build year list from dynasty timeline (START_YEAR → current year), always show even with no data
-  const currentYear = Number(year) || (START_YEAR + (Number(season)||1) - 1);
-  const dynastyYears = [];
-  for(let y=START_YEAR; y<=currentYear; y++) dynastyYears.push(String(y));
-  // Merge dynasty years with any years that have saved data (in case data exists beyond current year)
-  const allYearKeys = [...new Set([...dynastyYears, ...Object.keys(norm)])];
-  const years = allYearKeys.sort((a,b)=>Number(b)-Number(a));
-  const allStatsList = years.flatMap(yr=>Object.values(norm[yr]||{}));
-  // Determine which stats to show based on view level
-  const statsForView = (()=>{
-    if(view==="career") return mergeStatsList(allStatsList);
-    if(view.startsWith("year-")){
-      const yr=view.slice(5);
-      return mergeStatsList(Object.values(norm[yr]||{}));
-    }
-    const idx=view.indexOf("-");
-    const yr=view.slice(0,idx), s=view.slice(idx+1);
-    return norm[yr]?.[s]||EMPTY_STATS();
-  })();
+  const userStats = playerStats?.[userId]||{};
+  const years = Object.keys(userStats).map(Number).sort((a,b)=>b-a);
+  const statsForView = view==="career"
+    ? years.reduce((acc,y)=>sumStats(acc,userStats[y]), EMPTY_STATS())
+    : (userStats[view]||EMPTY_STATS());
   const p=statsForView.passing, ru=statsForView.rushing, re=statsForView.receiving;
-  const d=statsForView.defense, st=statsForView.specialTeams, mi=statsForView.misc||EMPTY_STATS().misc;
+  const d=statsForView.defense, st=statsForView.specialTeams;
   const compPct=p.att>0?((p.comp/p.att)*100).toFixed(1):"-";
   const ypassComp=p.comp>0?(p.yds/p.comp).toFixed(1):"-";
   const ypc=ru.att>0?(ru.yds/ru.att).toFixed(1):"-";
   const ypr=re.rec>0?(re.yds/re.rec).toFixed(1):"-";
   const fgPct=st.fgAtt>0?((st.fgMade/st.fgAtt)*100).toFixed(1):"-";
   const puntAvg=st.punts>0?(st.puntYds/st.punts).toFixed(1):"-";
-  const pct=(v)=>v>0?v+"%":"-";
   const btnStyle=(active)=>({padding:"6px 14px",border:"none",borderRadius:2,cursor:"pointer",fontFamily:ff,fontSize:11,fontWeight:800,textTransform:"uppercase",background:active?RED:"#eee",color:active?"#fff":"#555"});
-  const activeYr = view.startsWith("year-") ? view.slice(5) : view!=="career" ? view.split("-")[0] : null;
   return (
     <div style={{display:"flex",flexDirection:"column",gap:12}}>
-      {/* Level 1 — Career + Year buttons */}
+      {/* View selector */}
       <div style={{display:"flex",gap:6,flexWrap:"wrap"}}>
-        <button style={btnStyle(view==="career")} onClick={()=>{setView("career");setExpandedYear(null);}}>Career</button>
-        {years.map(yr=>(
-          <button key={yr} style={btnStyle(activeYr===yr)}
-            onClick={()=>{
-              if(expandedYear===yr){setExpandedYear(null);}
-              else{setExpandedYear(yr);setView(`year-${yr}`);}
-            }}>
-            {yr} {expandedYear===yr?"▲":"▼"}
-          </button>
-        ))}
+        <button style={btnStyle(view==="career")} onClick={()=>setView("career")}>Career</button>
+        {years.map(y=><button key={y} style={btnStyle(view===y)} onClick={()=>setView(y)}>{y}</button>)}
       </div>
-      {/* Level 2 — Season buttons under expanded year */}
-      {expandedYear&&(
-        <div style={{display:"flex",gap:6,flexWrap:"wrap",marginTop:-6,paddingLeft:10,borderLeft:`3px solid ${RED}`}}>
-          {(Object.keys(norm[expandedYear]||{}).length>0
-            ? Object.keys(norm[expandedYear]).sort((a,b)=>Number(a)-Number(b))
-            : ["1"]
-          ).map(s=>(
-            <button key={s} style={{...btnStyle(view===`${expandedYear}-${s}`),background:view===`${expandedYear}-${s}`?"#333":"#f0f0f0",color:view===`${expandedYear}-${s}`?"#fff":"#555"}}
-              onClick={()=>setView(`${expandedYear}-${s}`)}>
-              Season {s}
-            </button>
-          ))}
-        </div>
-      )}
       {/* Category selector */}
-      <div style={{display:"flex",gap:6,flexWrap:"wrap"}}>
-        {["offense","defense","specialTeams","misc"].map(c=><button key={c} style={btnStyle(cat===c)} onClick={()=>setCat(c)}>{c==="specialTeams"?"Special Teams":c==="misc"?"MISC":c.charAt(0).toUpperCase()+c.slice(1)}</button>)}
+      <div style={{display:"flex",gap:6}}>
+        {["offense","defense","specialTeams"].map(c=><button key={c} style={btnStyle(cat===c)} onClick={()=>setCat(c)}>{c==="specialTeams"?"Special Teams":c.charAt(0).toUpperCase()+c.slice(1)}</button>)}
       </div>
       {cat==="offense"&&<div style={{display:"flex",gap:6,marginTop:-4}}>
         {["passing","rushing","receiving"].map(s=><button key={s} style={{...btnStyle(offSub===s),background:offSub===s?"#333":"#f5f5f5",color:offSub===s?"#fff":"#555"}} onClick={()=>setOffSub(s)}>{s.charAt(0).toUpperCase()+s.slice(1)}</button>)}
@@ -1637,38 +1680,12 @@ function PlayerStatsTab({userId, userName, playerStats, season, year, ff, RED}) 
           <StatRow label="Defensive TDs" val={d.tds}/>
         </>}
         {cat==="specialTeams"&&<>
-          <StatRow label="Field Goals Attempted" val={st.fgAtt}/>
-          <StatRow label="Field Goals Made" val={st.fgMade}/>
+          <StatRow label="Field Goals Made" val={`${st.fgMade}/${st.fgAtt}`}/>
           <StatRow label="Field Goal %" val={fgPct==="-"?"-":fgPct+"%"}/>
           <StatRow label="Punts" val={st.punts}/>
-          <StatRow label="Punting Yards Average" val={puntAvg}/>
-          <StatRow label="Net Average" val={st.netAvg||0}/>
+          <StatRow label="Punting Yards" val={st.puntYds.toLocaleString()}/>
+          <StatRow label="Punt Average" val={puntAvg}/>
           <StatRow label="Punts Inside 20" val={st.puntsIn20}/>
-          <StatRow label="Kickoff Return Touchdowns" val={st.krTds||0}/>
-          <StatRow label="Punt Return Touchdowns" val={st.prTds||0}/>
-          <StatRow label="Kickoff Return Touchdowns Allowed" val={st.krTdsAllowed||0}/>
-          <StatRow label="Punt Return Touchdowns Allowed" val={st.prTdsAllowed||0}/>
-        </>}
-        {cat==="misc"&&<>
-          <StatRow label="Offensive Points Per Game" val={mi.offPts||0}/>
-          <StatRow label="Defensive Points Per Game" val={mi.defPts||0}/>
-          <StatRow label="Offensive Yards Per Game" val={mi.offYds||0}/>
-          <StatRow label="Defensive Yards Per Game" val={mi.defYds||0}/>
-          <StatRow label="Passing Yards Per Game" val={mi.passYds||0}/>
-          <StatRow label="Rushing Yards Per Game" val={mi.rushYds||0}/>
-          <StatRow label="Passing Yards Allowed Per Game" val={mi.passYdsAllowed||0}/>
-          <StatRow label="Rushing Yards Allowed Per Game" val={mi.rushYdsAllowed||0}/>
-          <StatRow label="Turnover Differential" val={mi.turnoverDiff>0?"+"+mi.turnoverDiff:mi.turnoverDiff||0}/>
-          <StatRow label="3rd Down %" val={pct(mi.thirdDownPct)}/>
-          <StatRow label="4th Down %" val={pct(mi.fourthDownPct)}/>
-          <StatRow label="4th Down Attempts" val={mi.fourthDownAtt||0}/>
-          <StatRow label="Defensive 3rd Down %" val={pct(mi.def3rdDownPct)}/>
-          <StatRow label="Defensive 4th Down %" val={pct(mi.def4thDownPct)}/>
-          <StatRow label="Two Point Conversion Attempts" val={mi.twoPointAtt||0}/>
-          <StatRow label="Two Point Conversion %" val={pct(mi.twoPointPct)}/>
-          <StatRow label="Defensive Two Point Conversion %" val={pct(mi.defTwoPointPct)}/>
-          <StatRow label="Red Zone Offense %" val={pct(mi.redzoneOff)}/>
-          <StatRow label="Red Zone Defense %" val={pct(mi.redzoneDef)}/>
         </>}
       </div>
     </div>
@@ -1679,27 +1696,25 @@ function PlayerStatsTab({userId, userName, playerStats, season, year, ff, RED}) 
 function PlayerStatsAdmin({setup, setSetup, saveToDb, permanentUsers, year, ff, RED}) {
   const [selUser, setSelUser] = useState(permanentUsers?.[0]?.id||"");
   const [selYear, setSelYear] = useState(year||2026);
-  const [selSeason, setSelSeason] = useState("1");
   const [saved, setSaved] = useState(false);
   const [parsing, setParsing] = useState(false);
   const [parseErr, setParseErr] = useState("");
   const [preview, setPreview] = useState(null);
   const [edits, setEdits] = useState({});
   const fileRef = useRef();
-  const normUser = normalizeUserStats(setup?.playerStats?.[selUser]);
-  const seasonsForYear = Object.keys(normUser[String(selYear)]||{}).sort((a,b)=>Number(a)-Number(b));
-  const userStats = normUser[String(selYear)]?.[selSeason]||EMPTY_STATS();
-  useEffect(()=>{setEdits({});setPreview(null);setParseErr("");},[selUser,selYear,selSeason]);
+  const userStats = setup?.playerStats?.[selUser]?.[selYear]||EMPTY_STATS();
+  useEffect(()=>{setEdits({});setPreview(null);setParseErr("");},[selUser,selYear]);
   function getVal(cat,field){return edits?.[cat]?.[field]??userStats[cat]?.[field]??0;}
   function setVal(cat,field,val){setEdits(p=>({...p,[cat]:{...p[cat],[field]:val===""?"":isNaN(Number(val))?p[cat]?.[field]??0:Number(val)}}));}
   async function handleImage(e){
     const file=e.target.files?.[0];if(!file)return;
+    if(!window.confirm("Scan this image for stats?\n\nThis will use the Claude Vision API.")) { if(fileRef.current)fileRef.current.value=""; return; }
     setParseErr("");setParsing(true);setPreview(URL.createObjectURL(file));
     try{
       const b64=await new Promise((res,rej)=>{const r=new FileReader();r.onload=()=>res(r.result.split(",")[1]);r.onerror=rej;r.readAsDataURL(file);});
       const prompt=`This is a screenshot of college football video game season stats. Extract ALL visible stats and return ONLY a JSON object with this exact structure (use 0 for any stat not visible):
-{"passing":{"att":0,"comp":0,"yds":0,"tds":0,"int":0},"rushing":{"att":0,"yds":0,"tds":0},"receiving":{"rec":0,"yds":0,"tds":0},"defense":{"int":0,"fum":0,"sacks":0,"tds":0},"specialTeams":{"fgAtt":0,"fgMade":0,"punts":0,"puntYds":0,"netAvg":0,"puntsIn20":0},"misc":{"offPts":0,"defPts":0,"offYds":0,"defYds":0,"passYds":0,"rushYds":0,"passYdsAllowed":0,"rushYdsAllowed":0,"turnoverDiff":0,"thirdDownPct":0,"fourthDownPct":0,"fourthDownAtt":0,"def3rdDownPct":0,"def4thDownPct":0,"twoPointPct":0,"twoPointAtt":0,"defTwoPointPct":0,"redzoneOff":0,"redzoneDef":0}}
-Return only the JSON, no explanation. Map what you see: passing yards→passing.yds, passing TDs→passing.tds, completions→passing.comp, attempts→passing.att, interceptions thrown→passing.int, rushing yards→rushing.yds, rushing TDs→rushing.tds, rushing attempts→rushing.att, receptions→receiving.rec, receiving yards→receiving.yds, receiving TDs→receiving.tds, defensive interceptions→defense.int, fumbles recovered→defense.fum, sacks→defense.sacks, defensive TDs→defense.tds, field goals made→specialTeams.fgMade, field goals attempted→specialTeams.fgAtt, punts→specialTeams.punts, punting yards→specialTeams.puntYds, net average→specialTeams.netAvg, punts inside 20→specialTeams.puntsIn20, offensive points per game→misc.offPts, defensive points per game→misc.defPts, offensive yards per game→misc.offYds, defensive yards per game→misc.defYds, passing yards per game→misc.passYds, rushing yards per game→misc.rushYds, passing yards allowed per game→misc.passYdsAllowed, rushing yards allowed per game→misc.rushYdsAllowed, turnover differential→misc.turnoverDiff, 3rd down percentage→misc.thirdDownPct, 4th down percentage→misc.fourthDownPct, red zone offense percentage→misc.redzoneOff, red zone defense percentage→misc.redzoneDef.`;
+{"passing":{"att":0,"comp":0,"yds":0,"tds":0},"rushing":{"att":0,"yds":0,"tds":0},"receiving":{"rec":0,"yds":0,"tds":0},"defense":{"int":0,"fum":0,"sacks":0,"tds":0},"specialTeams":{"fgAtt":0,"fgMade":0,"punts":0,"puntYds":0,"puntsIn20":0}}
+Return only the JSON, no explanation. Map what you see: passing yards→passing.yds, passing TDs→passing.tds, completions→passing.comp, attempts→passing.att, rushing yards→rushing.yds, rushing TDs→rushing.tds, rushing attempts→rushing.att, receptions→receiving.rec, receiving yards→receiving.yds, receiving TDs→receiving.tds, interceptions→defense.int, fumbles recovered→defense.fum, sacks→defense.sacks, defensive TDs→defense.tds, field goals made→specialTeams.fgMade, field goals attempted→specialTeams.fgAtt, punts→specialTeams.punts, punting yards→specialTeams.puntYds, punts inside 20→specialTeams.puntsIn20.`;
       const text=await callClaudeVision(b64,file.type,prompt);
       const json=JSON.parse(text.replace(/```json?|```/g,"").trim());
       setEdits(json);
@@ -1709,9 +1724,7 @@ Return only the JSON, no explanation. Map what you see: passing yards→passing.
   function saveStats(){
     const merged={...EMPTY_STATS()};
     Object.entries({...userStats,...edits}).forEach(([cat,fields])=>{if(merged[cat])merged[cat]={...merged[cat],...Object.fromEntries(Object.entries(fields).map(([k,v])=>([k,Number(v)||0])))};});
-    // Always save in new nested format: playerStats[user][year][season]
-    const existingForYear = normUser[String(selYear)]||{};
-    const updated={...setup,playerStats:{...(setup?.playerStats||{}),[selUser]:{...(setup?.playerStats?.[selUser]||{}),[selYear]:{...existingForYear,[selSeason]:merged}}}};
+    const updated={...setup,playerStats:{...(setup?.playerStats||{}),[selUser]:{...(setup?.playerStats?.[selUser]||{}),[selYear]:merged}}};
     setSetup(updated);saveToDb({setup:updated});setSaved(true);setTimeout(()=>setSaved(false),2000);
   }
   const inp=(cat,field,label)=>(
@@ -1721,29 +1734,15 @@ Return only the JSON, no explanation. Map what you see: passing yards→passing.
     </div>
   );
   const yearOpts=[];for(let y=2020;y<=2035;y++)yearOpts.push(y);
-  const nextSeason = String((seasonsForYear.length>0?Math.max(...seasonsForYear.map(Number)):0)+1);
   return (
     <div style={{display:"flex",flexDirection:"column",gap:12}}>
-      {/* User + Year */}
       <div style={{display:"flex",gap:10,flexWrap:"wrap"}}>
-        <select value={selUser} onChange={e=>{setSelUser(e.target.value);setSelSeason("1");}} style={{padding:"7px 10px",border:"1px solid #ccc",borderRadius:2,fontFamily:ff,fontSize:13,flex:1}}>
+        <select value={selUser} onChange={e=>setSelUser(e.target.value)} style={{padding:"7px 10px",border:"1px solid #ccc",borderRadius:2,fontFamily:ff,fontSize:13,flex:1}}>
           {(permanentUsers||[]).map(u=><option key={u.id} value={u.id}>{u.defaultName}</option>)}
         </select>
-        <select value={selYear} onChange={e=>{setSelYear(Number(e.target.value));setSelSeason("1");}} style={{padding:"7px 10px",border:"1px solid #ccc",borderRadius:2,fontFamily:ff,fontSize:13,width:90}}>
+        <select value={selYear} onChange={e=>setSelYear(Number(e.target.value))} style={{padding:"7px 10px",border:"1px solid #ccc",borderRadius:2,fontFamily:ff,fontSize:13,width:90}}>
           {yearOpts.map(y=><option key={y} value={y}>{y}</option>)}
         </select>
-      </div>
-      {/* Season selector for this year */}
-      <div style={{display:"flex",gap:8,alignItems:"center",flexWrap:"wrap"}}>
-        <span style={{fontSize:11,fontWeight:800,textTransform:"uppercase",color:"#888",fontFamily:ff}}>Season:</span>
-        {seasonsForYear.map(s=>(
-          <button key={s} onClick={()=>setSelSeason(s)} style={{padding:"5px 12px",border:"none",borderRadius:2,cursor:"pointer",fontFamily:ff,fontSize:11,fontWeight:800,textTransform:"uppercase",background:selSeason===s?RED:"#eee",color:selSeason===s?"#fff":"#555"}}>
-            Season {s}
-          </button>
-        ))}
-        <button onClick={()=>setSelSeason(nextSeason)} style={{padding:"5px 12px",border:`1px dashed ${RED}`,borderRadius:2,cursor:"pointer",fontFamily:ff,fontSize:11,fontWeight:800,textTransform:"uppercase",background:selSeason===nextSeason?"#ffe8e8":"transparent",color:RED}}>
-          + Season {nextSeason}
-        </button>
       </div>
       {/* Screenshot upload */}
       <Card>
@@ -1781,19 +1780,7 @@ Return only the JSON, no explanation. Map what you see: passing yards→passing.
       </Card>
       <Card><CardHead bg="#333">Special Teams</CardHead>
         <div style={{display:"grid",gridTemplateColumns:"repeat(auto-fill,minmax(130px,1fr))",gap:10,padding:"12px 14px"}}>
-          {inp("specialTeams","fgAtt","FG Attempted")}{inp("specialTeams","fgMade","FG Made")}{inp("specialTeams","punts","Punts")}{inp("specialTeams","puntYds","Punt Yards")}{inp("specialTeams","netAvg","Net Average")}{inp("specialTeams","puntsIn20","Punts Inside 20")}{inp("specialTeams","krTds","KR TDs")}{inp("specialTeams","prTds","PR TDs")}{inp("specialTeams","krTdsAllowed","KR TDs Allowed")}{inp("specialTeams","prTdsAllowed","PR TDs Allowed")}
-        </div>
-      </Card>
-      <Card><CardHead bg="#555">MISC (Per-Game / Percentages)</CardHead>
-        <div style={{display:"grid",gridTemplateColumns:"repeat(auto-fill,minmax(140px,1fr))",gap:10,padding:"12px 14px"}}>
-          {inp("misc","offPts","Off Pts/Game")}{inp("misc","defPts","Def Pts/Game")}
-          {inp("misc","offYds","Off Yds/Game")}{inp("misc","defYds","Def Yds/Game")}
-          {inp("misc","passYds","Pass Yds/Game")}{inp("misc","rushYds","Rush Yds/Game")}
-          {inp("misc","passYdsAllowed","Pass Yds Allowed/G")}{inp("misc","rushYdsAllowed","Rush Yds Allowed/G")}
-          {inp("misc","turnoverDiff","Turnover Diff")}{inp("misc","thirdDownPct","3rd Down %")}{inp("misc","fourthDownPct","4th Down %")}{inp("misc","fourthDownAtt","4th Down Att")}
-          {inp("misc","def3rdDownPct","Def 3rd Down %")}{inp("misc","def4thDownPct","Def 4th Down %")}
-          {inp("misc","twoPointAtt","2Pt Conv Att")}{inp("misc","twoPointPct","2Pt Conv %")}{inp("misc","defTwoPointPct","Def 2Pt Conv %")}
-          {inp("misc","redzoneOff","Redzone Off %")}{inp("misc","redzoneDef","Redzone Def %")}
+          {inp("specialTeams","fgMade","FG Made")}{inp("specialTeams","fgAtt","FG Attempted")}{inp("specialTeams","punts","Punts")}{inp("specialTeams","puntYds","Punt Yards")}{inp("specialTeams","puntsIn20","Punts Inside 20")}
         </div>
       </Card>
       <button onClick={saveStats} style={{background:saved?"#007a00":RED,color:"#fff",border:"none",borderRadius:2,padding:"10px 20px",cursor:"pointer",fontFamily:ff,fontSize:13,fontWeight:800,textTransform:"uppercase"}}>{saved?"✓ Saved":"Save Stats"}</button>
@@ -3095,11 +3082,70 @@ function HistoricalImportPanel({setupRows, history, onImport}) {
 }
 
 // ── EnterResultsPanel ─────────────────────────────────────────────────────
-function EnterResultsPanel({entries,weekResults,setWeekResults,week,setWeek,applyBulkResults,applyWeekResults,postSeasonInputs,setPSI,applyPostSeason,finalizeSeason,season,setSeason,year,setYear,teamNames,schedule,history,onImportHistory,setupRows,saveToDb}) {
+function EnterResultsPanel({entries,weekResults,setWeekResults,week,setWeek,applyBulkResults,applyWeekResults,postSeasonInputs,setPSI,applyPostSeason,finalizeSeason,season,setSeason,year,setYear,teamNames,schedule,history,onImportHistory,setupRows,saveToDb,setup,setSetup}) {
   const [entryWeek,setEntryWeek] = useState(week);
   const [resultsTab,setResultsTab] = useState("weekly");
-  const setWR=(i,f,v)=>setWeekResults(prev=>prev.map((r,idx)=>idx===i?{...r,[f]:v}:r));
+  const [scanning,setScanning] = useState(null);
+  const [scanErrors,setScanErrors] = useState({});
+  const fileRefs = useRef({});
+
+  const setWR=(teamName,field,val)=>setWeekResults(prev=>prev.map(r=>r.teamName===teamName?{...r,[field]:val}:r));
+  const getWR=(teamName)=>weekResults.find(r=>r.teamName===teamName)||{result:"none",ranked25:false,ranked10:false};
   const thisWeekSchedule = schedule?.[entryWeek]||{};
+
+  // Build matchup pairs from schedule
+  const confPairs=[], cpuTeams=[], byeTeams=[];
+  const seen=new Set();
+  for(const [team,opp] of Object.entries(thisWeekSchedule)){
+    if(opp==="BYE"){byeTeams.push(team);continue;}
+    if(opp==="CPU"){cpuTeams.push(team);continue;}
+    if(!opp)continue;
+    const key=[team,opp].sort().join("|");
+    if(!seen.has(key)){seen.add(key);confPairs.push([team,opp]);}
+  }
+  // Teams with no schedule entry (if schedule not fully set)
+  const unscheduled=entries.filter(e=>!thisWeekSchedule.hasOwnProperty(e.teamName)).map(e=>e.teamName);
+
+  async function handleBoxScoreUpload(t1Name,t2Name,e){
+    const file=e.target.files?.[0]; if(!file) return;
+    const key=[t1Name,t2Name].sort().join("|");
+    if(!window.confirm(`Scan box score for ${t1Name} vs ${t2Name}?\nThis will use the Claude Vision API.`)){
+      if(fileRefs.current[key])fileRefs.current[key].value=""; return;
+    }
+    setScanning(key); setScanErrors(p=>({...p,[key]:null}));
+    try {
+      const b64=await new Promise((res,rej)=>{const r=new FileReader();r.onload=()=>res(r.result.split(",")[1]);r.onerror=rej;r.readAsDataURL(file);});
+      const prompt=`This is a college football video game box score. Extract stats for BOTH teams and return ONLY this JSON (use 0 for missing stats):
+{"team1":{"name":"","score":0,"passing":{"comp":0,"att":0,"pct":0.0,"yds":0,"tds":0,"int":0},"rushing":{"att":0,"yds":0,"ypc":0.0,"tds":0},"defense":{"totalYdsAllowed":0,"passYdsAllowed":0,"rushYdsAllowed":0},"specialTeams":{"fgMade":0,"fgAtt":0,"krTds":0,"prTds":0}},"team2":{"name":"","score":0,"passing":{"comp":0,"att":0,"pct":0.0,"yds":0,"tds":0,"int":0},"rushing":{"att":0,"yds":0,"ypc":0.0,"tds":0},"defense":{"totalYdsAllowed":0,"passYdsAllowed":0,"rushYdsAllowed":0},"specialTeams":{"fgMade":0,"fgAtt":0,"krTds":0,"prTds":0}}}
+team1.defense = yards the OPPONENT gained (what team1 allowed). Return only JSON.`;
+      const text=await callClaudeVision(b64,file.type,prompt);
+      const json=JSON.parse(text.replace(/```json?|```/g,"").trim());
+      const e1=entries.find(e=>e.teamName===t1Name); const e2=entries.find(e=>e.teamName===t2Name);
+      json.team1.name=t1Name; json.team1.userId=e1?.userId||"";
+      json.team2.name=t2Name; json.team2.userId=e2?.userId||"";
+      // Set week results from score
+      const t1wins=json.team1.score>json.team2.score;
+      setWeekResults(prev=>prev.map(r=>{
+        if(r.teamName===t1Name) return{...r,result:t1wins?"win":"loss"};
+        if(r.teamName===t2Name) return{...r,result:t1wins?"loss":"win"};
+        return r;
+      }));
+      // Save to game archive
+      if(setup&&setSetup){
+        const newGame={id:genId(),year:Number(year),week:Number(entryWeek),season:Number(season),team1:json.team1,team2:json.team2};
+        const archive=setup?.gameArchive||[];
+        const filtered=archive.filter(g=>!(g.year===Number(year)&&g.week===Number(entryWeek)&&
+          ((g.team1.name===t1Name&&g.team2.name===t2Name)||(g.team1.name===t2Name&&g.team2.name===t1Name))));
+        const newArchive=[...filtered,newGame];
+        const newPlayerStats=recomputePlayerStatsFromArchive(newArchive,setup?.playerStats||{},year);
+        const updatedSetup={...setup,gameArchive:newArchive,playerStats:newPlayerStats};
+        setSetup(updatedSetup); saveToDb({setup:updatedSetup});
+      }
+    } catch(err){setScanErrors(p=>({...p,[key]:"Scan failed: "+err.message}));}
+    finally{setScanning(null); if(fileRefs.current[key])fileRefs.current[key].value="";}
+  }
+
+  const btnStyle=(active,color="#007a00")=>({padding:"5px 12px",borderRadius:2,border:"1px solid",borderColor:active?color:"#ddd",background:active?`${color}18`:"#fff",color:active?color:"#888",cursor:"pointer",fontSize:11,fontFamily:ff,fontWeight:800,textTransform:"uppercase"});
 
   return (
     <div style={{display:"flex",flexDirection:"column",gap:16}}>
@@ -3115,48 +3161,140 @@ function EnterResultsPanel({entries,weekResults,setWeekResults,week,setWeek,appl
       {resultsTab==="historical"&&<HistoricalImportPanel setupRows={setupRows} history={history||[]} onImport={onImportHistory}/>}
       {resultsTab==="weekly"&&<>
 
-      {/* Week / Season / Year selector */}
+      {/* Week navigation */}
       <Card>
-        <CardHead>Entry Context</CardHead>
-        <div style={{padding:"14px 16px",display:"flex",flexWrap:"wrap",gap:20,alignItems:"flex-end"}}>
-          <div>
-            <div style={{fontSize:10,fontWeight:700,color:"#888",textTransform:"uppercase",letterSpacing:1,marginBottom:6}}>Season</div>
-            <select value={season} onChange={e=>{const s=Number(e.target.value);setSeason(s);setEntryWeek(week);if(saveToDb)saveToDb({season:s});}} style={{fontSize:16,fontWeight:700,color:"#111",padding:"8px 12px",background:"#fff",border:`2px solid #cc0000`,borderRadius:2,cursor:"pointer",fontFamily:"'Helvetica Neue',Arial,sans-serif",minWidth:60}}>
-              {Array.from({length:20},(_,i)=>i+1).map(s=><option key={s} value={s}>S{s}</option>)}
-            </select>
-          </div>
-          <div>
-            <div style={{fontSize:10,fontWeight:700,color:"#888",textTransform:"uppercase",letterSpacing:1,marginBottom:6}}>Year</div>
-            <select value={year} onChange={e=>{const y=Number(e.target.value);setYear(y);if(saveToDb)saveToDb({year:y});}} style={{fontSize:16,fontWeight:700,color:"#111",padding:"8px 12px",background:"#fff",border:`2px solid #cc0000`,borderRadius:2,cursor:"pointer",fontFamily:"'Helvetica Neue',Arial,sans-serif",minWidth:80}}>
-              {Array.from({length:20},(_,i)=>2020+i).map(y=><option key={y} value={y}>{y}</option>)}
-            </select>
-          </div>
-          <div>
-            <div style={{fontSize:10,fontWeight:700,color:"#888",textTransform:"uppercase",letterSpacing:1,marginBottom:6}}>Week</div>
-            <div style={{display:"flex",alignItems:"center",gap:6}}>
-              <select value={entryWeek} onChange={e=>{const w=Number(e.target.value);setEntryWeek(w);}} style={{fontSize:16,fontWeight:700,color:"#111",padding:"8px 12px",background:"#fff",border:`2px solid #cc0000`,borderRadius:2,cursor:"pointer",fontFamily:"'Helvetica Neue',Arial,sans-serif",minWidth:80}}>
-                {Array.from({length:16},(_,i)=>i+1).map(w=><option key={w} value={w}>Week {w}{w===week?" (current)":""}</option>)}
+        <div style={{padding:"12px 16px",display:"flex",flexWrap:"wrap",gap:12,alignItems:"center",justifyContent:"space-between"}}>
+          <div style={{display:"flex",gap:10,alignItems:"center",flexWrap:"wrap"}}>
+            <div>
+              <div style={{fontSize:9,fontWeight:700,color:"#888",textTransform:"uppercase",letterSpacing:1,marginBottom:4}}>Season</div>
+              <select value={season} onChange={e=>{const s=Number(e.target.value);setSeason(s);if(saveToDb)saveToDb({season:s});}} style={{fontSize:14,fontWeight:700,color:"#111",padding:"6px 10px",background:"#fff",border:`2px solid ${RED}`,borderRadius:2,cursor:"pointer",fontFamily:ff,minWidth:55}}>
+                {Array.from({length:20},(_,i)=>i+1).map(s=><option key={s} value={s}>S{s}</option>)}
               </select>
-              {entryWeek!==week&&<button onClick={()=>{setWeek(entryWeek);saveToDb({week:entryWeek});}} style={{padding:"8px 10px",background:"#1a3a6b",color:"#fff",border:"none",borderRadius:2,cursor:"pointer",fontSize:11,fontWeight:800,fontFamily:ff,whiteSpace:"nowrap"}}>Set Current</button>}
+            </div>
+            <div>
+              <div style={{fontSize:9,fontWeight:700,color:"#888",textTransform:"uppercase",letterSpacing:1,marginBottom:4}}>Year</div>
+              <select value={year} onChange={e=>{const y=Number(e.target.value);setYear(y);if(saveToDb)saveToDb({year:y});}} style={{fontSize:14,fontWeight:700,color:"#111",padding:"6px 10px",background:"#fff",border:`2px solid ${RED}`,borderRadius:2,cursor:"pointer",fontFamily:ff,minWidth:70}}>
+                {Array.from({length:20},(_,i)=>2020+i).map(y=><option key={y} value={y}>{y}</option>)}
+              </select>
             </div>
           </div>
-          {entryWeek!==week&&<div style={{padding:"6px 12px",background:"#fffbf0",border:"1px solid #f0c040",borderRadius:2,fontSize:12,color:"#886600",fontWeight:600}}>⚠ Entering results for a past week — global week will not advance</div>}
+          <div style={{display:"flex",alignItems:"center",gap:8}}>
+            <button onClick={()=>setEntryWeek(w=>Math.max(1,w-1))} disabled={entryWeek<=1} style={{padding:"8px 14px",background:"#f0f0f0",border:"1px solid #ddd",borderRadius:2,cursor:entryWeek<=1?"not-allowed":"pointer",fontSize:13,fontWeight:700,color:entryWeek<=1?"#ccc":"#333",fontFamily:ff}}>← Prev</button>
+            <div style={{textAlign:"center",minWidth:80}}>
+              <div style={{fontSize:18,fontWeight:900,color:"#111"}}>Week {entryWeek}</div>
+              {entryWeek===week&&<div style={{fontSize:9,color:"#007a00",fontWeight:700,textTransform:"uppercase",letterSpacing:1}}>Current</div>}
+              {entryWeek!==week&&<button onClick={()=>{setWeek(entryWeek);saveToDb({week:entryWeek});}} style={{fontSize:9,color:"#1a3a6b",fontWeight:700,textTransform:"uppercase",background:"none",border:"none",cursor:"pointer",fontFamily:ff,letterSpacing:1}}>Set Current</button>}
+            </div>
+            <button onClick={()=>setEntryWeek(w=>Math.min(16,w+1))} disabled={entryWeek>=16} style={{padding:"8px 14px",background:"#f0f0f0",border:"1px solid #ddd",borderRadius:2,cursor:entryWeek>=16?"not-allowed":"pointer",fontSize:13,fontWeight:700,color:entryWeek>=16?"#ccc":"#333",fontFamily:ff}}>Next →</button>
+          </div>
         </div>
       </Card>
 
-      <BulkResultsUploader entries={entries} week={entryWeek} teamNames={teamNames} onConfirm={(results)=>applyBulkResults(results,entryWeek)}/>
-      {entryWeek<=12&&<Card><div style={{padding:16}}>
-        <SL>Manual Entry — Week {entryWeek}{entryWeek!==week?` (S${season} · ${year})`:""}</SL>
-        {Object.keys(thisWeekSchedule).length>0&&<div style={{background:"#f0f8f0",border:"1px solid #cce5cc",borderRadius:2,padding:"8px 12px",fontSize:12,color:"#555",marginBottom:12}}>✓ Schedule loaded — entering one team's result automatically updates their opponent's record.</div>}
-        {weekResults.map((wr,i)=>(
-          <div key={wr.teamName} style={{display:"flex",alignItems:"center",gap:8,flexWrap:"wrap",padding:"9px 0",borderBottom:"1px solid #f0f0f0"}}>
-            <div style={{width:130}}><div style={{fontSize:13,color:"#111",fontWeight:700}}>{wr.userName}</div><div style={{fontSize:10,color:"#888",textTransform:"uppercase",letterSpacing:0.5}}>{wr.teamName}</div></div>
-            <div style={{display:"flex",gap:6}}>{["win","loss","none"].map(opt=><button key={opt} onClick={()=>setWR(i,"result",opt)} style={{padding:"5px 10px",borderRadius:2,border:"1px solid",borderColor:wr.result===opt?(opt==="win"?"#007a00":opt==="loss"?RED:"#cc7700"):"#ddd",background:wr.result===opt?(opt==="win"?"#f0f8f0":opt==="loss"?"#fff8f8":"#fffbf0"):"#fff",color:wr.result===opt?(opt==="win"?"#007a00":opt==="loss"?RED:"#cc7700"):"#888",cursor:"pointer",fontSize:11,fontFamily:ff,fontWeight:800,textTransform:"uppercase"}}>{opt==="none"?"BYE":opt}</button>)}</div>
-            {wr.result==="win"&&<div style={{display:"flex",gap:10}}><label style={{display:"flex",alignItems:"center",gap:4,fontSize:11,color:"#888",cursor:"pointer"}}><input type="checkbox" checked={wr.ranked25} onChange={e=>setWR(i,"ranked25",e.target.checked)}/> vs Top 25</label><label style={{display:"flex",alignItems:"center",gap:4,fontSize:11,color:RED,cursor:"pointer",fontWeight:700}}><input type="checkbox" checked={wr.ranked10} onChange={e=>setWR(i,"ranked10",e.target.checked)}/> vs Top 10</label></div>}
+      {entryWeek<=12&&<>
+        {/* Conference matchups */}
+        {confPairs.length>0&&<Card style={{overflow:"hidden"}}>
+          <CardHead bg="#1a3a6b">Week {entryWeek} — Conference Matchups</CardHead>
+          <div style={{display:"flex",flexDirection:"column"}}>
+            {confPairs.map(([t1,t2])=>{
+              const key=[t1,t2].sort().join("|");
+              const wr1=getWR(t1), wr2=getWR(t2);
+              const isScanning=scanning===key;
+              const archivedGame=(setup?.gameArchive||[]).find(g=>g.year===Number(year)&&g.week===Number(entryWeek)&&((g.team1.name===t1&&g.team2.name===t2)||(g.team1.name===t2&&g.team2.name===t1)));
+              const winner=wr1.result==="win"?t1:wr2.result==="win"?t2:null;
+              const e1=entries.find(e=>e.teamName===t1), e2=entries.find(e=>e.teamName===t2);
+              return(
+                <div key={key} style={{borderBottom:"1px solid #eee"}}>
+                  {/* Matchup header */}
+                  <div style={{padding:"12px 16px",display:"flex",alignItems:"center",gap:12,flexWrap:"wrap",background:winner?"#f0f8f0":"#fff"}}>
+                    {/* Team 1 */}
+                    <div style={{flex:1,minWidth:100}}>
+                      <div style={{fontSize:13,fontWeight:900,color:wr1.result==="win"?"#007a00":wr1.result==="loss"?"#aaa":"#111"}}>{t1}</div>
+                      {e1?.userName&&<div style={{fontSize:10,color:"#888"}}>{e1.userName}</div>}
+                      {archivedGame&&<div style={{fontSize:20,fontWeight:900,color:wr1.result==="win"?"#007a00":"#555",marginTop:2}}>{(archivedGame.team1.name===t1?archivedGame.team1:archivedGame.team2).score}</div>}
+                    </div>
+                    <div style={{fontSize:11,fontWeight:800,color:"#bbb",flexShrink:0}}>VS</div>
+                    {/* Team 2 */}
+                    <div style={{flex:1,minWidth:100,textAlign:"right"}}>
+                      <div style={{fontSize:13,fontWeight:900,color:wr2.result==="win"?"#007a00":wr2.result==="loss"?"#aaa":"#111"}}>{t2}</div>
+                      {e2?.userName&&<div style={{fontSize:10,color:"#888"}}>{e2.userName}</div>}
+                      {archivedGame&&<div style={{fontSize:20,fontWeight:900,color:wr2.result==="win"?"#007a00":"#555",marginTop:2}}>{(archivedGame.team1.name===t2?archivedGame.team1:archivedGame.team2).score}</div>}
+                    </div>
+                    {/* Upload button */}
+                    <label style={{background:archivedGame?"#1a3a6b":RED,color:"#fff",fontSize:11,fontWeight:700,padding:"7px 12px",borderRadius:2,cursor:isScanning?"wait":"pointer",opacity:isScanning?0.6:1,fontFamily:ff,textTransform:"uppercase",letterSpacing:0.5,flexShrink:0,whiteSpace:"nowrap"}}>
+                      {isScanning?"Scanning...":(archivedGame?"Replace":"📷 Box Score")}
+                      <input type="file" accept="image/*" style={{display:"none"}} ref={el=>fileRefs.current[key]=el} onChange={e=>handleBoxScoreUpload(t1,t2,e)} disabled={!!scanning}/>
+                    </label>
+                  </div>
+                  {scanErrors[key]&&<div style={{padding:"6px 16px",fontSize:11,color:RED,background:"#fff0f0"}}>{scanErrors[key]}</div>}
+                  {/* Manual override + ranked checkboxes */}
+                  <div style={{padding:"8px 16px 12px",background:"#fafafa",display:"flex",flexWrap:"wrap",gap:10,alignItems:"center"}}>
+                    <div style={{display:"flex",gap:6,alignItems:"center"}}>
+                      <span style={{fontSize:10,color:"#888",fontWeight:700,textTransform:"uppercase"}}>Override:</span>
+                      {[{label:t1,win:t1,loss:t2},{label:t2,win:t2,loss:t1}].map(opt=>(
+                        <button key={opt.label} onClick={()=>{setWR(opt.win,"result","win");setWR(opt.loss,"result","loss");}} style={btnStyle(winner===opt.win)}>{opt.label} W</button>
+                      ))}
+                      <button onClick={()=>{setWR(t1,"result","none");setWR(t2,"result","none");}} style={btnStyle(!winner,"#888")}>Clear</button>
+                    </div>
+                    {winner&&<div style={{display:"flex",gap:10,marginLeft:"auto"}}>
+                      <label style={{display:"flex",alignItems:"center",gap:4,fontSize:11,color:"#888",cursor:"pointer"}}>
+                        <input type="checkbox" checked={getWR(winner).ranked25||false} onChange={e=>setWR(winner,"ranked25",e.target.checked)}/> vs Top 25
+                      </label>
+                      <label style={{display:"flex",alignItems:"center",gap:4,fontSize:11,color:RED,cursor:"pointer",fontWeight:700}}>
+                        <input type="checkbox" checked={getWR(winner).ranked10||false} onChange={e=>setWR(winner,"ranked10",e.target.checked)}/> vs Top 10
+                      </label>
+                    </div>}
+                  </div>
+                  {/* Archived stats preview */}
+                  {archivedGame&&<div style={{padding:"4px 16px 10px",background:"#f0f8f0",fontSize:10,color:"#555",display:"grid",gridTemplateColumns:"1fr 1fr",gap:4}}>
+                    {[archivedGame.team1,archivedGame.team2].map(t=>(
+                      <div key={t.name}><strong>{t.name}:</strong> {t.passing.comp}/{t.passing.att} {t.passing.yds}py {t.passing.tds}TD | {t.rushing.yds}ry {t.rushing.tds}TD | Def {t.defense.totalYdsAllowed}yds</div>
+                    ))}
+                  </div>}
+                </div>
+              );
+            })}
           </div>
-        ))}
-        <button onClick={()=>applyWeekResults(entryWeek)} style={{marginTop:14,background:RED,color:"#fff",border:"none",borderRadius:2,padding:"11px 22px",cursor:"pointer",fontFamily:ff,fontSize:14,fontWeight:800,textTransform:"uppercase"}}>Submit Week {entryWeek} →</button>
-      </div></Card>}
+        </Card>}
+
+        {/* CPU + BYE teams */}
+        {(cpuTeams.length>0||byeTeams.length>0||unscheduled.length>0)&&<Card style={{overflow:"hidden"}}>
+          <CardHead>CPU Games &amp; Byes</CardHead>
+          <div style={{padding:14,display:"flex",flexDirection:"column",gap:6}}>
+            {[...cpuTeams,...unscheduled].map(teamName=>{
+              const wr=getWR(teamName);
+              const entry=entries.find(e=>e.teamName===teamName);
+              return(
+                <div key={teamName} style={{display:"flex",alignItems:"center",gap:10,padding:"8px 0",borderBottom:"1px solid #f5f5f5",flexWrap:"wrap"}}>
+                  <div style={{minWidth:120}}><div style={{fontSize:13,fontWeight:700,color:"#111"}}>{entry?.userName||teamName}</div><div style={{fontSize:10,color:"#888",textTransform:"uppercase"}}>{teamName}{cpuTeams.includes(teamName)?" · CPU":""}</div></div>
+                  <div style={{display:"flex",gap:6}}>
+                    {["win","loss","none"].map(opt=><button key={opt} onClick={()=>setWR(teamName,"result",opt)} style={{...btnStyle(wr.result===opt,opt==="win"?"#007a00":opt==="loss"?RED:"#cc7700")}}>{opt==="none"?"BYE":opt}</button>)}
+                  </div>
+                  {wr.result==="win"&&<div style={{display:"flex",gap:10}}>
+                    <label style={{display:"flex",alignItems:"center",gap:4,fontSize:11,color:"#888",cursor:"pointer"}}><input type="checkbox" checked={wr.ranked25||false} onChange={e=>setWR(teamName,"ranked25",e.target.checked)}/> vs Top 25</label>
+                    <label style={{display:"flex",alignItems:"center",gap:4,fontSize:11,color:RED,cursor:"pointer",fontWeight:700}}><input type="checkbox" checked={wr.ranked10||false} onChange={e=>setWR(teamName,"ranked10",e.target.checked)}/> vs Top 10</label>
+                  </div>}
+                </div>
+              );
+            })}
+            {byeTeams.map(teamName=>{
+              const entry=entries.find(e=>e.teamName===teamName);
+              return(<div key={teamName} style={{display:"flex",alignItems:"center",gap:10,padding:"8px 0",borderBottom:"1px solid #f5f5f5"}}>
+                <div style={{minWidth:120}}><div style={{fontSize:13,fontWeight:700,color:"#aaa"}}>{entry?.userName||teamName}</div><div style={{fontSize:10,color:"#ccc",textTransform:"uppercase"}}>{teamName} · BYE</div></div>
+                <div style={{fontSize:11,color:"#ccc",fontWeight:700}}>BYE WEEK</div>
+              </div>);
+            })}
+            {confPairs.length===0&&cpuTeams.length===0&&byeTeams.length===0&&unscheduled.length===0&&<div style={{color:"#bbb",fontSize:12,textAlign:"center",padding:"12px 0"}}>Set the schedule first to see matchups here.</div>}
+          </div>
+        </Card>}
+
+        {/* Submit */}
+        <div style={{display:"flex",gap:10,flexWrap:"wrap"}}>
+          {entryWeek>1&&<button onClick={()=>{applyWeekResults(entryWeek);setEntryWeek(w=>Math.max(1,w-1));}} style={{padding:"12px 20px",background:"#f0f0f0",border:"1px solid #ddd",borderRadius:2,cursor:"pointer",fontFamily:ff,fontSize:13,fontWeight:800,color:"#555",textTransform:"uppercase"}}>← Submit &amp; Go Back</button>}
+          <button onClick={()=>applyWeekResults(entryWeek)} style={{flex:1,background:RED,color:"#fff",border:"none",borderRadius:2,padding:"13px 22px",cursor:"pointer",fontFamily:ff,fontSize:14,fontWeight:800,textTransform:"uppercase"}}>
+            {entryWeek>=week?`Submit Week ${entryWeek} & Advance to Week ${entryWeek+1} →`:`Submit Week ${entryWeek} →`}
+          </button>
+        </div>
+      </>}
       {week>12&&postSeasonInputs&&(()=>{
         const psi=postSeasonInputs;
         const ff2="'Helvetica Neue',Arial,sans-serif";
@@ -3259,6 +3397,71 @@ const REPORTERS = [
 ];
 
 // ── Content Hub Tab ───────────────────────────────────────────────────────
+
+function GameArchiveTab({setup,entries,RED,ff,isMobile}) {
+  const archive=setup?.gameArchive||[];
+  const [selYear,setSelYear]=useState(null);
+  const [selWeek,setSelWeek]=useState(null);
+
+  const years=[...new Set(archive.map(g=>g.year))].sort((a,b)=>b-a);
+  if(selYear===null&&years.length>0) { /* default to most recent */ }
+  const activeYear=selYear||years[0]||null;
+  const weeksForYear=[...new Set(archive.filter(g=>g.year===activeYear).map(g=>g.week))].sort((a,b)=>a-b);
+  const activeWeek=selWeek!==null?selWeek:(weeksForYear[weeksForYear.length-1]||null);
+  const weekGames=archive.filter(g=>g.year===activeYear&&g.week===activeWeek);
+  const awards=weekGames.length>0?pickWeeklyAwards(weekGames):null;
+
+  if(!archive.length) return <Card style={{padding:"40px 20px",textAlign:"center"}}><div style={{fontSize:32,marginBottom:10}}>📦</div><div style={{fontWeight:800,fontSize:16,color:"#111",marginBottom:6}}>No Games Archived Yet</div><div style={{fontSize:13,color:"#888"}}>The commissioner will upload box scores after each week.</div></Card>;
+
+  return (
+    <div style={{display:"flex",flexDirection:"column",gap:12}}>
+      <div style={{display:"flex",gap:8,flexWrap:"wrap",alignItems:"center"}}>
+        {years.map(y=><button key={y} onClick={()=>{setSelYear(y);setSelWeek(null);}} style={{padding:"6px 14px",border:`2px solid ${activeYear===y?RED:"#ddd"}`,borderRadius:2,background:activeYear===y?RED:"#fff",color:activeYear===y?"#fff":"#555",fontWeight:700,fontSize:12,cursor:"pointer",fontFamily:ff}}>{y}</button>)}
+      </div>
+      {activeYear&&<div style={{display:"flex",gap:6,flexWrap:"wrap"}}>
+        {weeksForYear.map(w=><button key={w} onClick={()=>setSelWeek(w)} style={{padding:"5px 12px",border:`2px solid ${activeWeek===w?"#1a3a6b":"#ddd"}`,borderRadius:2,background:activeWeek===w?"#1a3a6b":"#fff",color:activeWeek===w?"#fff":"#555",fontWeight:700,fontSize:11,cursor:"pointer",fontFamily:ff}}>Wk {w}</button>)}
+      </div>}
+
+      {awards&&<div style={{display:"grid",gridTemplateColumns:isMobile?"1fr 1fr":"repeat(4,1fr)",gap:8}}>
+        {[
+          ["🏆 GOTW",awards.gotw?`${awards.gotw.game.team1.score>awards.gotw.game.team2.score?awards.gotw.game.team1.name:awards.gotw.game.team2.name} (${awards.gotw.margin} pts)`:"-"],
+          ["💥 Blowout",awards.blowout?`${awards.blowout.game.team1.score>awards.blowout.game.team2.score?awards.blowout.game.team1.name:awards.blowout.game.team2.name} +${awards.blowout.margin}`:"-"],
+          ["🔥 Top Off.",awards.offMvp?`${awards.offMvp.team.name} ${awards.offMvp.yds}yds`:"-"],
+          ["🛡️ Top Def.",awards.defMvp?`${awards.defMvp.team.name} ${awards.defMvp.ydsAllowed}yds`:"-"],
+        ].map(([l,v])=><div key={l} style={{background:"#f7f7f7",border:"1px solid #eee",borderRadius:2,padding:"8px 10px"}}><div style={{fontSize:9,fontWeight:800,color:"#888",textTransform:"uppercase",letterSpacing:1,marginBottom:3}}>{l}</div><div style={{fontSize:11,fontWeight:700,color:"#111"}}>{v}</div></div>)}
+      </div>}
+
+      {weekGames.map(g=>{
+        const winner=g.team1.score>g.team2.score?g.team1:g.team2;
+        const loser=g.team1.score>g.team2.score?g.team2:g.team1;
+        return (
+          <Card key={g.id} style={{overflow:"hidden"}}>
+            <div style={{background:"#1a3a6b",padding:"10px 14px",display:"flex",justifyContent:"space-between",alignItems:"center"}}>
+              <div style={{color:"#fff",fontWeight:900,fontSize:14}}>{winner.name} <span style={{color:"#e8c84a"}}>{winner.score}</span></div>
+              <div style={{color:"rgba(255,255,255,0.5)",fontSize:11}}>Season {g.season} · Week {g.week}</div>
+              <div style={{color:"rgba(255,255,255,0.7)",fontWeight:700,fontSize:14}}>{loser.score} {loser.name}</div>
+            </div>
+            <div style={{padding:12,display:"grid",gridTemplateColumns:"1fr 1fr",gap:8,fontSize:11}}>
+              {[g.team1,g.team2].map(t=>(
+                <div key={t.name} style={{background:"#f9f9f9",borderRadius:2,padding:"10px 12px"}}>
+                  <div style={{fontWeight:900,color:t===winner?"#1a7a1a":"#111",fontSize:12,marginBottom:6,borderBottom:"1px solid #eee",paddingBottom:4}}>{t.name} — {t.score} pts</div>
+                  <div style={{display:"flex",flexDirection:"column",gap:2,color:"#444"}}>
+                    <div><span style={{color:"#888",fontWeight:700}}>PASS</span> {t.passing.comp}/{t.passing.att} · {t.passing.yds}yds · {t.passing.tds}TD · {t.passing.int}INT · {t.passing.pct}%</div>
+                    <div><span style={{color:"#888",fontWeight:700}}>RUSH</span> {t.rushing.att}att · {t.rushing.yds}yds · {t.rushing.ypc}YPC · {t.rushing.tds}TD</div>
+                    <div><span style={{color:"#888",fontWeight:700}}>DEF</span> {t.defense.totalYdsAllowed}yds ({t.defense.passYdsAllowed}p/{t.defense.rushYdsAllowed}r)</div>
+                    <div><span style={{color:"#888",fontWeight:700}}>ST</span> FG {t.specialTeams.fgMade}/{t.specialTeams.fgAtt}{t.specialTeams.krTds>0?` · KR ${t.specialTeams.krTds}TD`:""}{t.specialTeams.prTds>0?` · PR ${t.specialTeams.prTds}TD`:""}</div>
+                  </div>
+                </div>
+              ))}
+            </div>
+          </Card>
+        );
+      })}
+      {activeWeek!==null&&weekGames.length===0&&<div style={{color:"#888",fontSize:13,textAlign:"center",padding:20}}>No games archived for Week {activeWeek}.</div>}
+    </div>
+  );
+}
+
 function ContentHub({sorted,entries,week,season,year,leagueName,history,leader,articles,setArticles,setActiveArticle,schedule,setup,setSetup,saveToDb}) {
   const [generating,setGenerating] = useState(null);
   const [genError,setGenError] = useState(null);
@@ -3272,11 +3475,6 @@ function ContentHub({sorted,entries,week,season,year,leagueName,history,leader,a
   const [draftText,setDraftText] = useState("");
   const [revisionNote,setRevisionNote] = useState("");
   const [revising,setRevising] = useState(false);
-  const [articleImage,setArticleImage] = useState(null);
-  const [showOnHome,setShowOnHome] = useState(false);
-  const articleImgRef = useRef();
-  const [selArticleId,setSelArticleId] = useState(null);
-  const manageImgRef = useRef();
   const [bibleProfiles,setBibleProfiles] = useState(()=>(setup?.leagueBible?.profiles||[]).length>0?setup.leagueBible.profiles:entries.map(e=>({name:e.userName||e.teamName,bio:""})));
   const [bibleStorylines,setBibleStorylines] = useState(setup?.leagueBible?.storylines||"");
   const [bibleSaved,setBibleSaved] = useState(false);
@@ -3284,6 +3482,7 @@ function ContentHub({sorted,entries,week,season,year,leagueName,history,leader,a
   useEffect(()=>{if(setup?.leagueBible?.profiles?.length)setBibleProfiles(setup.leagueBible.profiles);if(setup?.leagueBible?.storylines!==undefined)setBibleStorylines(setup.leagueBible.storylines);},[setup?.leagueBible]);
 
   async function publishArticle(finalArticle) {
+    if(!window.confirm("Publish this article?\n\nThis will also run a brief Claude API call to extract storyline highlights for the League Bible.")) return;
     const newArticles=[finalArticle,...articles].slice(0,30);
     setArticles(newArticles);
     dbSave({articles:newArticles});
@@ -3309,6 +3508,7 @@ function ContentHub({sorted,entries,week,season,year,leagueName,history,leader,a
 
   async function requestRevision() {
     if(!revisionNote.trim())return;
+    if(!window.confirm("Send revision request to Claude API?\n\nThis will use the Claude API.")) return;
     setRevising(true);
     const r = reporter;
     try {
@@ -3393,6 +3593,8 @@ function ContentHub({sorted,entries,week,season,year,leagueName,history,leader,a
   async function generate(type) {
     if(type==="breaking"&&!breakingSubject){setGenError("Select a coach for the breaking news.");return;}
     if(type==="breaking"&&!breakingGuidance.trim()){setGenError("Add some guidance — what's the breaking news about?");return;}
+    const typeLabels = {powerrankings:"Power Rankings",preview:"Week Preview",recap:"Weekly Recap",seasonpreview:"Season Preview",hotakes:"Hot Takes",breaking:"Breaking News"};
+    if(!window.confirm(`Generate ${typeLabels[type]||"article"}?\n\nThis will use the Claude API.`)) return;
     setGenerating(type);
     setGenError(null);
     const r = reporter;
@@ -3437,52 +3639,60 @@ function ContentHub({sorted,entries,week,season,year,leagueName,history,leader,a
     }
   }
 
-  function saveArticleField(id, fields) {
-    const updated = articles.map(a=>a.id===id?{...a,...fields}:a);
-    setArticles(updated);
-    dbSave({articles:updated});
+  // Weekly recap from box scores
+  const [recapGenerating,setRecapGenerating] = useState(false);
+  const [recapError,setRecapError] = useState(null);
+  async function generateBoxScoreRecap() {
+    const weekGames=(setup?.gameArchive||[]).filter(g=>g.year===Number(year)&&g.week===Number(week));
+    if(!weekGames.length){setRecapError("No box scores uploaded for this week yet. Upload them in Enter Results first.");return;}
+    const reporter=REPORTERS[selectedReporter];
+    if(!window.confirm(`Generate Week ${week} Recap from ${weekGames.length} box score(s)?\nThis will use the Claude API.`)) return;
+    setRecapGenerating(true); setRecapError(null);
+    try {
+      const awards=pickWeeklyAwards(weekGames);
+      const prompt=buildRecapPrompt(weekGames,awards,leagueName,week,season,year,reporter);
+      const text=cleanArticle(await callClaude(prompt));
+      const article={id:Date.now(),type:"recap",label:"📰 Weekly Recap",week:Number(week),season:Number(season),text,reporter:reporter.name,reporterColor:reporter.color,reporterAvatar:reporter.avatar};
+      const newArticles=[article,...articles].slice(0,30);
+      setArticles(newArticles); saveToDb({articles:newArticles}); setActiveArticle(article);
+    } catch(e){setRecapError(e.message);}
+    finally{setRecapGenerating(false);}
   }
+  const weekGamesForRecap=(setup?.gameArchive||[]).filter(g=>g.year===Number(year)&&g.week===Number(week));
 
   return (
     <div style={{display:"flex",flexDirection:"column",gap:16}}>
 
-      {/* Article Images & Homepage Control */}
-      {articles.length>0&&<Card style={{overflow:"hidden"}}>
-        <CardHead bg="#1a3a6b">Article Images &amp; Homepage</CardHead>
-        <div style={{padding:14,display:"flex",flexDirection:"column",gap:0}}>
-          <div style={{fontSize:11,color:"#888",marginBottom:10}}>Upload featured images for articles and control which ones appear in the homepage carousel.</div>
-          <input ref={manageImgRef} type="file" accept="image/*" style={{display:"none"}} onChange={async e=>{
-            const f=e.target.files?.[0];if(!f||!selArticleId)return;
-            const compressed=await compressImage(f);
-            saveArticleField(selArticleId,{imageUrl:compressed});
-            if(manageImgRef.current)manageImgRef.current.value="";
-          }}/>
-          {articles.slice(0,15).map(a=>(
-            <div key={a.id} style={{display:"flex",gap:10,alignItems:"center",padding:"10px 0",borderBottom:"1px solid #f0f0f0",flexWrap:"wrap"}}>
-              {/* Thumbnail */}
-              <div style={{width:70,height:48,borderRadius:2,overflow:"hidden",background:"#f0f0f0",flexShrink:0,display:"flex",alignItems:"center",justifyContent:"center"}}>
-                {a.imageUrl
-                  ?<img src={a.imageUrl} alt="" style={{width:"100%",height:"100%",objectFit:"cover"}}/>
-                  :<span style={{fontSize:9,color:"#bbb",textAlign:"center",fontFamily:ff}}>No image</span>}
-              </div>
-              {/* Info */}
-              <div style={{flex:1,minWidth:120}}>
-                <div style={{fontSize:10,color:a.reporterColor||"#cc0000",fontWeight:700,textTransform:"uppercase",letterSpacing:0.4,fontFamily:ff}}>{a.label} · S{a.season} Wk{a.week}</div>
-                <div style={{fontSize:12,fontWeight:700,color:"#111",lineHeight:1.3,fontFamily:ff,marginTop:2}}>{articleHeadline(a.text)}</div>
-              </div>
-              {/* Controls */}
-              <div style={{display:"flex",gap:8,alignItems:"center",flexShrink:0,flexWrap:"wrap"}}>
-                <button onClick={()=>{setSelArticleId(a.id);manageImgRef.current?.click();}} style={{padding:"5px 11px",border:"1px solid #ccc",borderRadius:2,cursor:"pointer",fontFamily:ff,fontSize:10,fontWeight:700,background:"#fff",color:"#333",textTransform:"uppercase"}}>{a.imageUrl?"Replace":"Upload"}</button>
-                {a.imageUrl&&<button onClick={()=>saveArticleField(a.id,{imageUrl:undefined,showOnHome:false})} style={{padding:"5px 8px",border:"1px solid #eee",borderRadius:2,cursor:"pointer",fontFamily:ff,fontSize:10,background:"#fff",color:"#888"}}>Remove</button>}
-                {a.imageUrl&&<label style={{display:"flex",alignItems:"center",gap:5,cursor:"pointer",userSelect:"none",fontSize:11,fontWeight:600,color:"#333",fontFamily:ff}}>
-                  <input type="checkbox" checked={!!a.showOnHome} onChange={e=>saveArticleField(a.id,{showOnHome:e.target.checked})} style={{accentColor:"#cc0000"}}/>
-                  Homepage
-                </label>}
-              </div>
+      {/* Box score recap shortcut */}
+      {weekGamesForRecap.length>0&&(()=>{
+        const awards=pickWeeklyAwards(weekGamesForRecap);
+        const w=g=>g.team1.score>g.team2.score?g.team1:g.team2;
+        const l=g=>g.team1.score>g.team2.score?g.team2:g.team1;
+        return(
+          <Card style={{overflow:"hidden",borderLeft:`4px solid #1a3a6b`}}>
+            <CardHead bg="#1a3a6b">Week {week} Box Scores Ready — {weekGamesForRecap.length} game{weekGamesForRecap.length!==1?"s":""}</CardHead>
+            <div style={{padding:12,display:"grid",gridTemplateColumns:"1fr 1fr",gap:8,marginBottom:4}}>
+              {[
+                ["🏆 GOTW",awards.gotw?`${w(awards.gotw.game).name} def. ${l(awards.gotw.game).name} (${awards.gotw.margin})`:"-"],
+                ["💥 Blowout",awards.blowout?`${w(awards.blowout.game).name} +${awards.blowout.margin}`:"-"],
+                ["🔥 Top Off.",awards.offMvp?`${awards.offMvp.team.name} ${awards.offMvp.yds}yds`:"-"],
+                ["🛡️ Top Def.",awards.defMvp?`${awards.defMvp.team.name} ${awards.defMvp.ydsAllowed}yds`:"-"],
+              ].map(([label,val])=>(
+                <div key={label} style={{background:"#f0f4ff",borderRadius:2,padding:"8px 10px"}}>
+                  <div style={{fontSize:9,fontWeight:800,color:"#666",textTransform:"uppercase",letterSpacing:1,marginBottom:2}}>{label}</div>
+                  <div style={{fontSize:11,fontWeight:700,color:"#111"}}>{val}</div>
+                </div>
+              ))}
             </div>
-          ))}
-        </div>
-      </Card>}
+            {recapError&&<div style={{margin:"0 12px 8px",background:"#fff0f0",border:"1px solid #ffcccc",borderRadius:2,padding:"8px 12px",fontSize:12,color:RED}}>{recapError}</div>}
+            <div style={{padding:"0 12px 12px"}}>
+              <button onClick={generateBoxScoreRecap} disabled={recapGenerating} style={{width:"100%",background:recapGenerating?"#ccc":"#1a3a6b",color:"#fff",border:"none",borderRadius:2,padding:"10px",cursor:recapGenerating?"not-allowed":"pointer",fontFamily:ff,fontSize:13,fontWeight:800,textTransform:"uppercase"}}>
+                {recapGenerating?"Generating...":"📰 Generate Week "+week+" Recap from Box Scores"}
+              </button>
+            </div>
+          </Card>
+        );
+      })()}
 
       {/* Reporter selector */}
       <Card style={{overflow:"hidden"}}>
@@ -3626,22 +3836,9 @@ function ContentHub({sorted,entries,week,season,year,leagueName,history,leader,a
               <button onClick={requestRevision} disabled={revising||!revisionNote.trim()} style={{marginTop:8,background:revising||!revisionNote.trim()?"#ccc":"#444",color:"#fff",border:"none",borderRadius:2,padding:"8px 16px",cursor:revising||!revisionNote.trim()?"not-allowed":"pointer",fontFamily:ff,fontSize:12,fontWeight:800,textTransform:"uppercase"}}>{revising?"Revising…":"✏ Revise Article"}</button>
             </div>
 
-            {/* Featured image + homepage toggle */}
-            <div style={{borderTop:"1px solid #eee",marginTop:10,paddingTop:10,display:"flex",flexDirection:"column",gap:8}}>
-              <div style={{fontSize:11,fontWeight:800,textTransform:"uppercase",letterSpacing:0.5,color:"#555",fontFamily:ff}}>Featured Image</div>
-              <div style={{display:"flex",gap:10,alignItems:"flex-start",flexWrap:"wrap"}}>
-                <input ref={articleImgRef} type="file" accept="image/*" style={{display:"none"}} onChange={async e=>{const f=e.target.files?.[0];if(!f)return;const compressed=await compressImage(f);setArticleImage(compressed);if(articleImgRef.current)articleImgRef.current.value="";}}/>
-                <button onClick={()=>articleImgRef.current?.click()} style={{padding:"7px 14px",border:"1px dashed #ccc",borderRadius:2,cursor:"pointer",fontFamily:ff,fontSize:11,fontWeight:700,background:"#fafafa",color:"#555"}}>{articleImage?"Replace Image":"Upload Image"}</button>
-                {articleImage&&<><img src={articleImage} alt="" style={{height:52,borderRadius:2,objectFit:"cover"}}/><button onClick={()=>setArticleImage(null)} style={{padding:"4px 8px",border:"1px solid #eee",borderRadius:2,cursor:"pointer",fontFamily:ff,fontSize:10,background:"#fff",color:"#888"}}>Remove</button></>}
-              </div>
-              <label style={{display:"flex",alignItems:"center",gap:8,cursor:"pointer",userSelect:"none",fontSize:12,fontWeight:600,color:"#333",fontFamily:ff}}>
-                <input type="checkbox" checked={showOnHome} onChange={e=>setShowOnHome(e.target.checked)} style={{width:14,height:14,accentColor:draftArticle.reporterColor||RED}}/>
-                Show on Homepage carousel
-              </label>
-            </div>
             <div style={{display:"flex",gap:10,marginTop:10,alignItems:"center"}}>
-              <button onClick={()=>{publishArticle({...draftArticle,text:draftText,imageUrl:articleImage||undefined,showOnHome});setArticleImage(null);setShowOnHome(false);}} disabled={extracting||revising} style={{background:draftArticle.reporterColor||"#111",color:"#fff",border:"none",borderRadius:2,padding:"10px 20px",cursor:"pointer",fontFamily:ff,fontSize:13,fontWeight:800,textTransform:"uppercase"}}>Publish</button>
-              <button onClick={()=>{setDraftArticle(null);setDraftText("");setRevisionNote("");setArticleImage(null);setShowOnHome(false);}} style={{background:"#fff",color:"#666",border:"1px solid #ccc",borderRadius:2,padding:"10px 20px",cursor:"pointer",fontFamily:ff,fontSize:13,fontWeight:700,textTransform:"uppercase"}}>Discard</button>
+              <button onClick={()=>publishArticle({...draftArticle,text:draftText})} disabled={extracting||revising} style={{background:draftArticle.reporterColor||"#111",color:"#fff",border:"none",borderRadius:2,padding:"10px 20px",cursor:"pointer",fontFamily:ff,fontSize:13,fontWeight:800,textTransform:"uppercase"}}>Publish</button>
+              <button onClick={()=>{setDraftArticle(null);setDraftText("");setRevisionNote("");}} style={{background:"#fff",color:"#666",border:"1px solid #ccc",borderRadius:2,padding:"10px 20px",cursor:"pointer",fontFamily:ff,fontSize:13,fontWeight:700,textTransform:"uppercase"}}>Discard</button>
               {(extracting||revising)&&<span style={{fontSize:11,color:"#888",fontStyle:"italic"}}>{revising?"Revising…":"Updating Chronicle…"}</span>}
             </div>
           </div>
@@ -3674,51 +3871,6 @@ function ContentHub({sorted,entries,week,season,year,leagueName,history,leader,a
 
 // ── Main App ──────────────────────────────────────────────────────────────
 // Right Rail Component
-async function compressImage(file, maxW=900, quality=0.78) {
-  return new Promise(res=>{
-    const reader=new FileReader();
-    reader.onload=e=>{
-      const img=new Image();
-      img.onload=()=>{
-        const ratio=Math.min(1,maxW/img.width);
-        const canvas=document.createElement('canvas');
-        canvas.width=Math.round(img.width*ratio);
-        canvas.height=Math.round(img.height*ratio);
-        canvas.getContext('2d').drawImage(img,0,0,canvas.width,canvas.height);
-        res(canvas.toDataURL('image/jpeg',quality));
-      };
-      img.src=e.target.result;
-    };
-    reader.readAsDataURL(file);
-  });
-}
-function FeaturedCarousel({articles, setActiveArticle, RED, ff}) {
-  const [idx, setIdx] = useState(0);
-  const featured = (articles||[]).filter(a=>a.showOnHome&&a.imageUrl).slice(0,5);
-  useEffect(()=>{
-    if(featured.length<=1) return;
-    const t=setInterval(()=>setIdx(i=>(i+1)%featured.length),5000);
-    return()=>clearInterval(t);
-  },[featured.length]);
-  if(!featured.length) return null;
-  const a=featured[idx];
-  return (
-    <div style={{position:"relative",width:"100%",borderRadius:2,overflow:"hidden",marginBottom:0,cursor:"pointer",background:"#111"}} onClick={()=>setActiveArticle(a)}>
-      <img src={a.imageUrl} alt="" style={{width:"100%",maxHeight:340,objectFit:"cover",display:"block"}} onError={e=>{e.target.style.display="none";}}/>
-      <div style={{position:"absolute",bottom:0,left:0,right:0,background:"linear-gradient(transparent,rgba(0,0,0,0.88))",padding:"40px 18px 14px"}}>
-        <div style={{fontSize:10,color:a.reporterColor||RED,fontWeight:800,textTransform:"uppercase",letterSpacing:0.5,marginBottom:5,fontFamily:ff}}>{a.reporter||"Dynasty Central"} · {a.label}</div>
-        <div style={{fontSize:20,fontWeight:900,color:"#fff",lineHeight:1.2,fontFamily:ff}}>{articleHeadline(a.text)}</div>
-      </div>
-      {featured.length>1&&<>
-        <button onClick={e=>{e.stopPropagation();setIdx(i=>(i-1+featured.length)%featured.length);}} style={{position:"absolute",left:8,top:"50%",transform:"translateY(-50%)",background:"rgba(0,0,0,0.45)",color:"#fff",border:"none",borderRadius:"50%",width:34,height:34,cursor:"pointer",fontSize:18,lineHeight:"34px",textAlign:"center"}}>‹</button>
-        <button onClick={e=>{e.stopPropagation();setIdx(i=>(i+1)%featured.length);}} style={{position:"absolute",right:8,top:"50%",transform:"translateY(-50%)",background:"rgba(0,0,0,0.45)",color:"#fff",border:"none",borderRadius:"50%",width:34,height:34,cursor:"pointer",fontSize:18,lineHeight:"34px",textAlign:"center"}}>›</button>
-        <div style={{position:"absolute",bottom:10,right:14,display:"flex",gap:5}}>
-          {featured.map((_,i)=><div key={i} onClick={e=>{e.stopPropagation();setIdx(i);}} style={{width:7,height:7,borderRadius:"50%",background:i===idx?"#fff":"rgba(255,255,255,0.35)",cursor:"pointer",transition:"background 0.2s"}}/>)}
-        </div>
-      </>}
-    </div>
-  );
-}
 function RightRail({sorted,articles,entries,week,season,leader,setActiveArticle,setupRows}) {
   const RED = "#cc0000";
   const ff  = "'Helvetica Neue',Arial,sans-serif";
@@ -3728,16 +3880,13 @@ function RightRail({sorted,articles,entries,week,season,leader,setActiveArticle,
 
           <Card><CardHead>Top Headlines</CardHead><div style={{padding:"4px 0"}}>
             {sorted.length===0&&<div style={{padding:"12px",fontSize:12,color:"#888",fontStyle:"italic"}}>No standings yet.</div>}
-            {articles.slice(0,5).map(a=>(
-              <div key={a.id} onClick={()=>setActiveArticle(a)} style={{padding:"10px 12px",borderBottom:"1px solid #f0f0f0",cursor:"pointer",display:"flex",gap:9,alignItems:"flex-start"}} onMouseEnter={e=>e.currentTarget.style.background="#f7f7f7"} onMouseLeave={e=>e.currentTarget.style.background="transparent"}>
-                {a.imageUrl&&<img src={a.imageUrl} alt="" style={{width:54,height:40,objectFit:"cover",borderRadius:2,flexShrink:0}} onError={e=>{e.target.style.display="none";}}/>}
-                <div style={{flex:1,minWidth:0}}>
-                  <div style={{display:"flex",alignItems:"center",gap:5,marginBottom:3}}>
-                    {a.reporterAvatar&&<div style={{width:14,height:14,borderRadius:"50%",background:a.reporterColor||RED,display:"flex",alignItems:"center",justifyContent:"center",fontSize:6,fontWeight:800,color:"#fff",flexShrink:0}}>{a.reporterAvatar}</div>}
-                    <div style={{fontSize:9,color:a.reporterColor||RED,fontWeight:700,letterSpacing:0.5,textTransform:"uppercase"}}>{a.reporter||"Dynasty Central"} · {a.label}</div>
-                  </div>
-                  <div style={{fontSize:12,fontWeight:700,color:"#111",lineHeight:1.35}}>{articleHeadline(a.text)}</div>
+            {articles.slice(0,4).map(a=>(
+              <div key={a.id} onClick={()=>setActiveArticle(a)} style={{padding:"10px 12px",borderBottom:"1px solid #f0f0f0",cursor:"pointer"}} onMouseEnter={e=>e.currentTarget.style.background="#f7f7f7"} onMouseLeave={e=>e.currentTarget.style.background="transparent"}>
+                <div style={{display:"flex",alignItems:"center",gap:6,marginBottom:4}}>
+                  {a.reporterAvatar&&<div style={{width:18,height:18,borderRadius:"50%",background:a.reporterColor||RED,display:"flex",alignItems:"center",justifyContent:"center",fontSize:7,fontWeight:800,color:"#fff",flexShrink:0}}>{a.reporterAvatar}</div>}
+                  <div style={{fontSize:10,color:a.reporterColor||RED,fontWeight:700,letterSpacing:0.5,textTransform:"uppercase"}}>{a.reporter||"Dynasty Central"} · {a.label}</div>
                 </div>
+                <div style={{fontSize:13,fontWeight:700,color:"#111",lineHeight:1.4}}>{articleHeadline(a.text)}</div>
               </div>
             ))}
             {articles.length===0&&<>
@@ -4130,7 +4279,7 @@ export default function App() {
 
       {/* Nav tabs */}
       <div style={{background:RED,display:"flex",alignItems:"center",overflowX:"auto",WebkitOverflowScrolling:"touch"}}>
-        {(isMobile?[["Home","Home"],["Stndgs","Standings"],["Sched","Schedule"],["History","History"],["Profiles","Profiles"],["Rules","Rules"],["RedZone","Redzone"],["Discord","Discord"]]:[["Home","Home"],["Standings","Standings"],["Schedule","Schedule"],["History","History"],["Profiles","Profiles"],["Rules","Rules"],["RedZone","Redzone"],["Join Discord","Discord"]]).map(([label,val])=>(
+        {(isMobile?[["Home","Home"],["Stndgs","Standings"],["Sched","Schedule"],["Archive","Archive"],["History","History"],["Profiles","Profiles"],["Rules","Rules"],["RedZone","Redzone"],["Discord","Discord"]]:[["Home","Home"],["Standings","Standings"],["Schedule","Schedule"],["Archive","Archive"],["History","History"],["Profiles","Profiles"],["Rules","Rules"],["RedZone","Redzone"],["Join Discord","Discord"]]).map(([label,val])=>(
           <button key={val} onClick={()=>setTab(val)} style={{flex:"0 0 auto",padding:isMobile?"0 10px":"0 14px",height:isMobile?38:40,background:tab===val?"rgba(255,255,255,0.18)":"transparent",border:"none",borderBottom:tab===val?"3px solid #fff":"3px solid transparent",color:"#fff",cursor:"pointer",fontSize:isMobile?10:11,fontWeight:tab===val?800:500,fontFamily:ff,textTransform:"uppercase",letterSpacing:0.3,whiteSpace:"nowrap"}}>{label}</button>
         ))}
       </div>
@@ -4193,9 +4342,6 @@ export default function App() {
           {tab==="Home"&&(<>
             {/* This week's matchups */}
             {schedule&&schedule[week]&&Object.keys(schedule[week]).length>0&&<WeekMatchupsCard schedule={schedule} week={week} sorted={sorted} leagueName={leagueName} season={season} setActiveArticle={setActiveArticle} articles={articles} setArticles={setArticles}/>}
-
-            {/* Featured image carousel */}
-            <FeaturedCarousel articles={articles} setActiveArticle={setActiveArticle} RED={RED} ff={ff}/>
 
             {/* Current standings summary */}
             <Card style={{overflow:"hidden"}}>
@@ -4310,6 +4456,7 @@ export default function App() {
 
           {tab==="History"&&<HistoryTab history={history} setHistory={setHistory} saveToDb={saveToDb} commUnlocked={commUnlocked} yearRosters={setup?.yearRosters} permanentUsers={setup?.permanentUsers} currentEntries={entries} season={season} year={year} setupRows={setup?.rows||[]}/>}
           {tab==="Profiles"&&<ProfileTab history={history} setupRows={(setup?.rows||[]).filter(r=>r.active!==false)} currentEntries={activeEntries} season={season} year={year} permanentUsers={setup?.permanentUsers?.filter(u=>(setup?.rows||[]).some(r=>r.userId===u.id&&r.active!==false))} sel={profileSel} setSel={setProfileSel} pTab={profilePTab} setPTab={setProfilePTab} articles={articles} setActiveArticle={setActiveArticle} playerStats={setup?.playerStats}/>}
+          {tab==="Archive"&&<GameArchiveTab setup={setup} entries={activeEntries} RED={RED} ff={ff} isMobile={isMobile}/>}
           {tab==="Schedule"&&<ScheduleTab schedule={schedule} entries={activeEntries} week={week} season={season}/>}
           {tab==="Rules"&&(()=>{
             const customCats=(pc.customCategories||[]);
@@ -4412,9 +4559,9 @@ export default function App() {
         </div>
         <div style={{maxWidth:800,margin:"0 auto",padding:"20px 14px"}}>
           {commTab==="Season History"&&<HistoryTab history={history} setHistory={setHistory} saveToDb={saveToDb} commUnlocked={true} entries={entries} setEntries={setEntries} season={season} week={week} setWeek={setWeek} yearRosters={setup?.yearRosters} permanentUsers={setup?.permanentUsers} currentEntries={entries} year={year} setupRows={setup?.rows||[]}/>}
-          {commTab==="Enter Results"&&<EnterResultsPanel entries={activeEntries} weekResults={weekResults} setWeekResults={setWeekResults} week={week} setWeek={setWeek} applyBulkResults={applyBulkResults} applyWeekResults={applyWeekResults} postSeasonInputs={postSeasonInputs} setPSI={setPSI} applyPostSeason={applyPostSeason} finalizeSeason={finalizeSeason} season={season} setSeason={setSeason} year={year} setYear={setYear} teamNames={teamNames} schedule={schedule} history={history} onImportHistory={importHistoricalSeason} setupRows={setup?.rows||[]} saveToDb={saveToDb}/>}
+          {commTab==="Enter Results"&&<EnterResultsPanel entries={activeEntries} weekResults={weekResults} setWeekResults={setWeekResults} week={week} setWeek={setWeek} applyBulkResults={applyBulkResults} applyWeekResults={applyWeekResults} postSeasonInputs={postSeasonInputs} setPSI={setPSI} applyPostSeason={applyPostSeason} finalizeSeason={finalizeSeason} season={season} setSeason={setSeason} year={year} setYear={setYear} teamNames={teamNames} schedule={schedule} history={history} onImportHistory={importHistoricalSeason} setupRows={setup?.rows||[]} saveToDb={saveToDb} setup={setup} setSetup={setSetup}/>}
           {commTab==="Schedule"&&<SchedulePanel entries={activeEntries} schedule={schedule} setSchedule={setSchedule}/>}
-          {commTab==="Content"&&<ContentHub sorted={sorted} entries={activeEntries} week={week} season={season} year={year} leagueName={leagueName} history={history} leader={leader} articles={articles} setArticles={setArticles} setActiveArticle={setActiveArticle} schedule={schedule} setup={setup} setSetup={setSetup} saveToDb={saveToDb}/>}
+{commTab==="Content"&&<ContentHub sorted={sorted} entries={activeEntries} week={week} season={season} year={year} leagueName={leagueName} history={history} leader={leader} articles={articles} setArticles={setArticles} setActiveArticle={setActiveArticle} schedule={schedule} setup={setup} setSetup={setSetup} saveToDb={saveToDb}/>}
           {commTab==="Player Stats"&&<PlayerStatsAdmin setup={setup} setSetup={setSetup} saveToDb={saveToDb} permanentUsers={setup?.permanentUsers||[]} year={year} ff={ff} RED={RED}/>}
           {commTab==="League Setup"&&<SetupPanel entries={entries} setup={setup} postSeasonInputs={postSeasonInputs} setPSI={setPSI} handleStart={handleStart} setCommissionerUnlocked={setCommUnlocked} season={season} year={year} setEntries={setEntries} setWeekResults={setWeekResults} setSetup={setSetup} saveToDb={saveToDb} history={history} setHistory={setHistory} autoLiveStatuses={autoLiveStatuses} autoEmbedUrls={autoEmbedUrls}/>}
         </div>
