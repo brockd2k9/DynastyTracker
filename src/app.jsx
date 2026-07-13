@@ -260,6 +260,14 @@ function articleHeadline(text) {
   return (text||"").split("\n").map(l=>l.trim()).find(l=>l.length>0) || text?.slice(0,80) || "";
 }
 
+// Everything after the headline line, for display once the headline is pulled out into its own element.
+function articleBodyWithoutHeadline(text) {
+  const lines = (text||"").split("\n");
+  const idx = lines.findIndex(l=>l.trim().length>0);
+  if (idx===-1) return "";
+  return lines.slice(idx+1).join("\n").replace(/^\n+/,"");
+}
+
 async function callClaudeVision(imageBase64, mediaType, prompt) {
   if (_claudeInFlight) { console.warn("[callClaudeVision] Call already in flight — skipped"); return ""; }
   const safePrompt = _checkSafeguards(prompt);
@@ -5091,12 +5099,14 @@ export default function App() {
               <div style={{fontSize:11,color:"rgba(255,255,255,0.7)"}}>{activeArticle.label} · Season {activeArticle.season} · Week {activeArticle.week}</div>
             </div>
           </div>
+          {activeArticle.imageUrl&&!isEditingArticle&&<img src={activeArticle.imageUrl} alt="" style={{width:"100%",maxHeight:380,objectFit:"cover",display:"block"}}/>}
           <div style={{padding:"24px 24px 32px"}}>
             {isEditingArticle ? (
               <textarea value={articleEditText} onChange={e=>setArticleEditText(e.target.value)} rows={16} style={{width:"100%",boxSizing:"border-box",fontSize:14,lineHeight:1.7,color:"#222",fontFamily:"Georgia, serif",padding:12,border:"1px solid #ccc",borderRadius:2,resize:"vertical"}} autoFocus/>
-            ) : (
-              <div style={{fontSize:15,lineHeight:1.9,color:"#222",whiteSpace:"pre-wrap",fontFamily:"Georgia, serif"}}>{activeArticle.text}</div>
-            )}
+            ) : (<>
+              <div style={{fontSize:24,fontWeight:900,color:"#111",lineHeight:1.3,fontFamily:ff,marginBottom:14}}>{articleHeadline(activeArticle.text)}</div>
+              <div style={{fontSize:15,lineHeight:1.9,color:"#222",whiteSpace:"pre-wrap",fontFamily:"Georgia, serif"}}>{articleBodyWithoutHeadline(activeArticle.text)}</div>
+            </>)}
           </div>
           <div style={{background:"#f7f7f7",padding:"12px 18px",borderTop:"1px solid #ddd",display:"flex",justifyContent:"space-between",alignItems:"center"}}>
             {isEditingArticle ? (<>
