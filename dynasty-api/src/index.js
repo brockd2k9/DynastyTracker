@@ -25,12 +25,16 @@ const SCHEDULE_SYSTEM =
   "The valid dynasty team names are provided in the teams array. " +
   "Extract every visible week and its matchups. For each week, identify every dynasty team " +
   "and their opponent. If the opponent is another dynasty team, use their exact name from " +
-  "the teams list. If the opponent is a non-dynasty CPU-controlled team, write 'CPU'. " +
+  "the teams list. If the opponent is a non-dynasty CPU-controlled team, write its team name " +
+  "prefixed with 'CPU:' — for example 'CPU:Florida State' or 'CPU:Ohio'. Always include the " +
+  "real school/team name if it is visible anywhere in the image; only write the bare literal " +
+  "'CPU' (no colon, no name) if no opponent name is visible at all for that game. " +
   "If it is a bye week, write 'BYE'. " +
   "Return ONLY valid JSON in exactly this format with no extra text or markdown: " +
-  "{\"1\":{\"TeamA\":\"TeamB\",\"TeamB\":\"TeamA\"},\"2\":{\"TeamA\":\"CPU\"},\"3\":{\"TeamA\":\"BYE\"}} " +
+  "{\"1\":{\"TeamA\":\"TeamB\",\"TeamB\":\"TeamA\"},\"2\":{\"TeamA\":\"CPU:Florida State\"},\"3\":{\"TeamA\":\"BYE\"}} " +
   "Use only week numbers as keys (integers as strings). Only include weeks and teams " +
-  "visible in the image. Match all team names to the closest entry in the teams list.";
+  "visible in the image. Match all dynasty team names to the closest entry in the teams list — " +
+  "never match a CPU opponent's name to an entry in the teams list.";
 
 export default {
   async fetch(request, env) {
