@@ -376,6 +376,73 @@ function buildRecapPrompt(games, awards, leagueName, week, season, year, reporte
   return `You are ${reporter.name}, ${reporter.title} for Dynasty Central covering the "${leagueName}" dynasty. Your writing style is ${reporter.style}\n\nWrite a dramatic weekly recap for Season ${season} Week ${week} (${year}).\n\nWEEK ${week} RESULTS:\n${gameLines}\n\nWEEK ${week} AWARDS:\n${awardLines}\n\nWrite a 400-500 word recap that:\n- Opens with a punchy headline and lede capturing the week's biggest story\n- Covers each game with flavor and context, not just scores\n- Highlights the award winners with specific stat call-outs\n- Ends with dynasty standings implications and what to watch next week\n- Signs off with your name and title\n\nWrite in your distinct voice. No markdown formatting.`;
 }
 
+// ── Auto weekly content (news / review / preview) generated on week-advance ─
+const PERSONALITY_CAMEO_NOTE = `\n\nOPTIONAL COLOR (rare — most articles should skip this entirely): if it truly fits, you may include one brief moment where a coach or player shows up on a sports talk show, podcast, or radio hit for a soundbite or reaction. Invent a plausible show/hosts each time and vary it — never reuse the same fictional show twice in a row. Do not force it in; the vast majority of articles should have zero mention of a talk-show appearance.`;
+
+function autoBibleContext(setup) {
+  const profiles=(setup?.leagueBible?.profiles||[]).filter(p=>p.bio?.trim());
+  const storylines=(setup?.leagueBible?.storylines||"").trim();
+  const chronicle=(setup?.leagueBible?.chronicle||[]).slice(0,20);
+  if(!profiles.length&&!storylines&&!chronicle.length)return "";
+  let ctx="";
+  if(profiles.length){ctx+=`\n\nLEAGUE PERSONALITIES — use these character details to add color, storylines, and personality to your writing. Reference them naturally and with humor where appropriate:\n${profiles.map(p=>`${p.name}: ${p.bio}`).join("\n")}`;}
+  if(storylines){ctx+=`\n\nLEAGUE STORYLINES — weave these season narratives into your writing naturally:\n${storylines}`;}
+  if(chronicle.length){ctx+=`\n\nLEAGUE CHRONICLE — recent story developments (most recent first). Build on these threads:\n${chronicle.map(e=>`S${e.season} Wk${e.week} (${e.date}): ${e.summary}`).join("\n")}`;}
+  return ctx;
+}
+
+function autoStandingsText(sorted, leader) {
+  return sorted.map((t,i)=>{const tot=calcTotal(t);const coach=t.userName&&t.userName!==t.teamName?`${t.userName}/${t.teamName}`:`${t.teamName}`;return `${i+1}. ${coach} — ${t.wins}W ${t.losses}L — ${tot} pts${i===0?" [LEADER]":` (-${leader-tot})`}`;}).join("\n");
+}
+
+function autoWeekMatchupsText(schedule, wk, sorted) {
+  if(!schedule[wk]) return "Schedule not available";
+  const teamToCoach = Object.fromEntries(sorted.filter(t=>t.userName&&t.userName!==t.teamName).map(t=>[t.teamName,t.userName]));
+  const fmt=(team,opp)=>{
+    const c1=teamToCoach[team]; const c2=teamToCoach[opp];
+    const t1=c1?`${c1} (${team})`:team; const t2=c2?`${c2} (${opp})`:opp;
+    if(opp==="BYE")return `${t1}: BYE`;
+    if(isCPUOpp(opp))return `${t1} vs ${formatOpp(opp)} (non-conf)`;
+    return `${t1} vs ${t2}`;
+  };
+  const seen=new Set();const games=[];
+  Object.entries(schedule[wk]).forEach(([team,opp])=>{const key=[team,opp].sort().join("vs");if(!seen.has(key)){seen.add(key);games.push(fmt(team,opp));}});
+  return games.join("\n");
+}
+
+function autoByline(reporter, leagueName, year, history, sorted, setup) {
+  const leagueAge = history.length > 0 ? `This is year ${year} of the league (its ${year===2024?"1st":year===2025?"2nd":year===2026?"3rd":year===2027?"4th":year===2028?"5th":(year-2023)+"th"} year of existence, founded in 2024). ` : "";
+  const pastChamps = history.length > 0 ? `Past dynasty champions: ${[...history].reverse().slice(0,5).map(s=>`${s.year} S${s.seasonNum||"?"}: ${s.champion}`).join(", ")}. ` : "";
+  const rosterContext = sorted.some(t=>t.userName&&t.userName!==t.teamName) ? `\n\nCOACH ROSTER — these coaches and their programs are the same entity, never separate. Vary how you refer to them throughout the piece — mix and match naturally: "Big Johnson's Texas State," "Texas State under Big Johnson," "Big Johnson and the Bobcats," "the Big Johnson era at Texas State," just "Big Johnson," just "Texas State," etc. Never introduce them the same way twice. Never list coaches and teams as if they're different people/things:\n${sorted.filter(t=>t.userName&&t.userName!==t.teamName).map(t=>`${t.userName} → ${t.teamName}`).join("\n")}` : "";
+  return `You are ${reporter.name}, ${reporter.title} for Dynasty Central covering the "${leagueName}" dynasty. Your writing style is ${reporter.style}\n\n${leagueAge}${pastChamps}This is NOT the inaugural season — the league has history and established rivalries.${rosterContext}${autoBibleContext(setup)}\n\nAlways sign your articles with your name and title at the end.\n\n`;
+}
+
+function buildAutoNewsPrompt({reporter, leagueName, season, completedWeek, year, history, sorted, leader, setup, cameoNote}) {
+  const byline = autoByline(reporter, leagueName, year, history, sorted, setup);
+  const standingsText = autoStandingsText(sorted, leader);
+  return `${byline}Write a Week ${completedWeek} NEWS roundup for the "${leagueName}" dynasty, Season ${season} — a step back from the box score to cover the storylines: standings shakeups, hot and cold streaks, teams rising or fading from contention, and anything brewing between rivals.\n\nCurrent standings after Week ${completedWeek}:\n${standingsText}\n\nTarget length: 650-800 words. Open with the week's defining storyline, then move through 2-4 more angles worth watching. This is NOT a game-by-game recap and NOT a preview of next week — focus on what these results mean for the dynasty race and the people/programs involved. Write in your distinct voice.${cameoNote||""}`;
+}
+
+function buildAutoWeekReviewFallbackPrompt({reporter, leagueName, season, completedWeek, year, history, sorted, leader, setup, schedule, cameoNote}) {
+  const byline = autoByline(reporter, leagueName, year, history, sorted, setup);
+  const standingsText = autoStandingsText(sorted, leader);
+  const matchups = autoWeekMatchupsText(schedule, completedWeek, sorted);
+  const confGames = buildGamesList(schedule, completedWeek).filter(g=>g.opp!=="BYE"&&!isCPUOpp(g.opp));
+  const gotw = pickGOTW(confGames, sorted);
+  const gotwLine = gotw ? `\n\nGAME OF THE WEEK (spotlight this as the marquee matchup — dramatize the result and make up a final score consistent with the standings/records above): ${gotw.team1} (#${gotw.rank1} in dynasty points) vs ${gotw.team2} (#${gotw.rank2} in dynasty points)` : "";
+  return `${byline}Write a dramatic Week ${completedWeek} REVIEW for Season ${season} of the "${leagueName}" dynasty.\n\nStandings after this week:\n${standingsText}\n\nThis week's matchups:\n${matchups}${gotwLine}\n\nTarget length: 650-800 words. Recap the week's actual games — make up exciting final scores and details consistent with the results above, lead with the Game of the Week, highlight upsets and dominant performances, and close with dynasty standings implications and what to watch next week. Write in your distinct voice.${cameoNote||""}`;
+}
+
+function buildAutoWeekPreviewPrompt({reporter, leagueName, season, newWeek, year, history, sorted, leader, setup, schedule, cameoNote}) {
+  const byline = autoByline(reporter, leagueName, year, history, sorted, setup);
+  const standingsText = autoStandingsText(sorted, leader);
+  const matchups = autoWeekMatchupsText(schedule, newWeek, sorted);
+  const confGames = buildGamesList(schedule, newWeek).filter(g=>g.opp!=="BYE"&&!isCPUOpp(g.opp));
+  const gotw = pickGOTW(confGames, sorted);
+  const gotwLine = gotw ? `\n\nGAME OF THE WEEK (the marquee matchup this week — give it a dedicated, extra-detailed section, but still preview every other game too): ${gotw.team1} (#${gotw.rank1} in dynasty points) vs ${gotw.team2} (#${gotw.rank2} in dynasty points)` : "";
+  return `${byline}Write a Week ${newWeek} PREVIEW for the "${leagueName}" dynasty, Season ${season}.\n\nCurrent standings:\n${standingsText}\n\nTHIS WEEK'S ACTUAL MATCHUPS (preview every one of them, even briefly):\n${matchups}${gotwLine}\n\nTarget length: 650-800 words. Preview each scheduled matchup — storylines, stakes, and who has the edge — giving the Game of the Week the most space. Reference the real games only, never invent different matchups. Write in your distinct voice.${cameoNote||""}`;
+}
+
 function SL({children}) {
   return <div style={{fontSize:11,fontWeight:800,letterSpacing:2,textTransform:"uppercase",color:"#555",borderLeft:`3px solid ${RED}`,paddingLeft:8,marginBottom:14,fontFamily:ff}}>{children}</div>;
 }
@@ -4514,48 +4581,109 @@ export default function App() {
   const teamNames=activeEntries.map(e=>e.teamName);
   const leagueName=setup?.leagueName||"Dynasty Central";
 
+  // Auto-generates the Week News / Week Review / Week Preview articles the moment
+  // a week's results are submitted and the schedule advances. Fire-and-forget from
+  // the caller; every Claude call is individually try/caught so one failure never
+  // blocks the others, and the 3s inter-call cooldown enforced by callClaude's
+  // safeguards is respected with explicit spacing instead of racing it.
+  async function triggerAutoWeeklyArticles(completedWeek, newWeek, entriesAfter) {
+    if (articles.some(a=>a.autoWeek===completedWeek && a.autoSeason===season)) return;
+    const activeAfter = entriesAfter.filter(e=>(e.userId&&activeUserIds.has(e.userId))||(!e.userId&&activeUserNames.has(e.userName)));
+    const sortedAfter = [...activeAfter].sort((a,b)=>calcTotal(b)-calcTotal(a));
+    const leaderAfter = sortedAfter[0]?calcTotal(sortedAfter[0]):0;
+    const leagueNameLocal = setup?.leagueName||"Dynasty Central";
+    const cameoSlot = completedWeek % 3;
+    const r0 = REPORTERS[completedWeek%REPORTERS.length];
+    const r1 = REPORTERS[(completedWeek+1)%REPORTERS.length];
+    const r2 = REPORTERS[(completedWeek+2)%REPORTERS.length];
+    const sleep = ms => new Promise(res=>setTimeout(res,ms));
+    const newArticles = [];
+
+    try {
+      const prompt = buildAutoNewsPrompt({reporter:r0, leagueName:leagueNameLocal, season, completedWeek, year, history, sorted:sortedAfter, leader:leaderAfter, setup, cameoNote: cameoSlot===0?PERSONALITY_CAMEO_NOTE:""});
+      const text = cleanArticle(await callClaude(prompt));
+      if(text) newArticles.push({id:Date.now(), type:"weeknews", label:`📰 Week ${completedWeek} News`, week:completedWeek, season, text, reporter:r0.name, reporterColor:r0.color, reporterAvatar:r0.avatar, autoWeek:completedWeek, autoSeason:season});
+    } catch(e) { console.error("Auto news article failed:", e); }
+
+    await sleep(3200);
+
+    try {
+      const weekGames = (setup?.gameArchive||[]).filter(g=>g.year===Number(year)&&g.week===Number(completedWeek));
+      let text;
+      if (weekGames.length) {
+        const awards = pickWeeklyAwards(weekGames);
+        const prompt = buildRecapPrompt(weekGames, awards, leagueNameLocal, completedWeek, season, year, r1) + (cameoSlot===1?PERSONALITY_CAMEO_NOTE:"");
+        text = cleanArticle(await callClaude(prompt));
+      } else {
+        const prompt = buildAutoWeekReviewFallbackPrompt({reporter:r1, leagueName:leagueNameLocal, season, completedWeek, year, history, sorted:sortedAfter, leader:leaderAfter, setup, schedule, cameoNote: cameoSlot===1?PERSONALITY_CAMEO_NOTE:""});
+        text = cleanArticle(await callClaude(prompt));
+      }
+      if(text) newArticles.push({id:Date.now()+1, type:"recap", label:`📰 Week ${completedWeek} Review`, week:completedWeek, season, text, reporter:r1.name, reporterColor:r1.color, reporterAvatar:r1.avatar, autoWeek:completedWeek, autoSeason:season});
+    } catch(e) { console.error("Auto week review failed:", e); }
+
+    await sleep(3200);
+
+    try {
+      const prompt = buildAutoWeekPreviewPrompt({reporter:r2, leagueName:leagueNameLocal, season, newWeek, year, history, sorted:sortedAfter, leader:leaderAfter, setup, schedule, cameoNote: cameoSlot===2?PERSONALITY_CAMEO_NOTE:""});
+      const text = cleanArticle(await callClaude(prompt));
+      if(text) newArticles.push({id:Date.now()+2, type:"preview", label:`🔭 Week ${newWeek} Preview`, week:newWeek, season, text, reporter:r2.name, reporterColor:r2.color, reporterAvatar:r2.avatar, autoWeek:completedWeek, autoSeason:season});
+    } catch(e) { console.error("Auto week preview failed:", e); }
+
+    if (newArticles.length) {
+      setArticles(prev=>{
+        const merged=[...newArticles.reverse(),...prev].slice(0,30);
+        saveToDb({articles:merged});
+        return merged;
+      });
+    }
+  }
+
   function applyWeekResults(targetWeek=week) {
     const thisWeekSchedule = schedule[targetWeek] || {};
-    setEntries(prev=>{
-      // Build a map of results entered this week
-      const resultsMap = {};
-      weekResults.forEach(r=>{ if(r.result!=="none") resultsMap[r.teamName]=r; });
-      return prev.map(entry=>{
-        const r = resultsMap[entry.teamName];
-        const opp = thisWeekSchedule[entry.teamName];
-        // If this team has a scheduled opponent who entered a result, mirror it
-        let effectiveResult = r?.result;
-        let effectiveR25 = r?.ranked25||false;
-        let effectiveR10 = r?.ranked10||false;
-        if (!effectiveResult && opp && !isCPUOpp(opp) && opp!=="BYE" && resultsMap[opp]) {
-          // Mirror opponent result
-          const oppResult = resultsMap[opp].result;
-          effectiveResult = oppResult==="win"?"loss":oppResult==="loss"?"win":undefined;
-          effectiveR25 = false; effectiveR10 = false;
-        }
-        if(!effectiveResult)return entry;
-        let pts=0,bonus=0;
-        if(effectiveResult==="win"){pts=pc.win;bonus=effectiveR10?pc.top10Bonus:effectiveR25?pc.top25Bonus:0;}
-        const log={week:targetWeek,result:effectiveResult,ranked25:effectiveR25,ranked10:effectiveR10,pts:pts+bonus,opponent:opp||"Unknown"};
-        // Update H2H if opponent is a dynasty member
-        const h2h={...entry.h2h||{}};
-        if(opp&&!isCPUOpp(opp)&&opp!=="BYE"){
-          if(!h2h[opp])h2h[opp]={wins:0,losses:0};
-          if(effectiveResult==="win")h2h[opp].wins++;
-          else if(effectiveResult==="loss")h2h[opp].losses++;
-        }
-        const isConfGame=opp&&!isCPUOpp(opp)&&opp!=="BYE"&&opp!=="Unknown"&&teamNames.includes(opp);
-        return{...entry,wins:effectiveResult==="win"?entry.wins+1:entry.wins,losses:effectiveResult==="loss"?entry.losses+1:entry.losses,confWins:isConfGame&&effectiveResult==="win"?(entry.confWins||0)+1:(entry.confWins||0),confLosses:isConfGame&&effectiveResult==="loss"?(entry.confLosses||0)+1:(entry.confLosses||0),gamePts:entry.gamePts+pts,rankedBonusPts:entry.rankedBonusPts+bonus,weekLog:[...(entry.weekLog||[]),log],h2h};
-      });
+    // Build a map of results entered this week
+    const resultsMap = {};
+    weekResults.forEach(r=>{ if(r.result!=="none") resultsMap[r.teamName]=r; });
+    const nextEntries = entries.map(entry=>{
+      const r = resultsMap[entry.teamName];
+      const opp = thisWeekSchedule[entry.teamName];
+      // If this team has a scheduled opponent who entered a result, mirror it
+      let effectiveResult = r?.result;
+      let effectiveR25 = r?.ranked25||false;
+      let effectiveR10 = r?.ranked10||false;
+      if (!effectiveResult && opp && !isCPUOpp(opp) && opp!=="BYE" && resultsMap[opp]) {
+        // Mirror opponent result
+        const oppResult = resultsMap[opp].result;
+        effectiveResult = oppResult==="win"?"loss":oppResult==="loss"?"win":undefined;
+        effectiveR25 = false; effectiveR10 = false;
+      }
+      if(!effectiveResult)return entry;
+      let pts=0,bonus=0;
+      if(effectiveResult==="win"){pts=pc.win;bonus=effectiveR10?pc.top10Bonus:effectiveR25?pc.top25Bonus:0;}
+      const log={week:targetWeek,result:effectiveResult,ranked25:effectiveR25,ranked10:effectiveR10,pts:pts+bonus,opponent:opp||"Unknown"};
+      // Update H2H if opponent is a dynasty member
+      const h2h={...entry.h2h||{}};
+      if(opp&&!isCPUOpp(opp)&&opp!=="BYE"){
+        if(!h2h[opp])h2h[opp]={wins:0,losses:0};
+        if(effectiveResult==="win")h2h[opp].wins++;
+        else if(effectiveResult==="loss")h2h[opp].losses++;
+      }
+      const isConfGame=opp&&!isCPUOpp(opp)&&opp!=="BYE"&&opp!=="Unknown"&&teamNames.includes(opp);
+      return{...entry,wins:effectiveResult==="win"?entry.wins+1:entry.wins,losses:effectiveResult==="loss"?entry.losses+1:entry.losses,confWins:isConfGame&&effectiveResult==="win"?(entry.confWins||0)+1:(entry.confWins||0),confLosses:isConfGame&&effectiveResult==="loss"?(entry.confLosses||0)+1:(entry.confLosses||0),gamePts:entry.gamePts+pts,rankedBonusPts:entry.rankedBonusPts+bonus,weekLog:[...(entry.weekLog||[]),log],h2h};
     });
+    setEntries(nextEntries);
     setWeekResults(prev=>prev.map(r=>({...r,result:"none",ranked25:false,ranked10:false})));
-    if(targetWeek>=week){const newWeek=targetWeek+1;setWeek(newWeek);setTimeout(()=>saveToDb({week:newWeek}),100);}
-    else{setTimeout(()=>saveToDb({}),100);}
+    if(targetWeek>=week){
+      const newWeek=targetWeek+1;
+      setWeek(newWeek);
+      setTimeout(()=>saveToDb({week:newWeek,entries:nextEntries}),100);
+      triggerAutoWeeklyArticles(targetWeek,newWeek,nextEntries).catch(e=>console.error("Auto weekly articles failed:",e));
+    }
+    else{setTimeout(()=>saveToDb({entries:nextEntries}),100);}
   }
 
   function applyBulkResults(results, targetWeek=week) {
     const thisWeekSchedule=schedule[targetWeek]||{};
-    setEntries(prev=>prev.map(entry=>{
+    const nextEntries = entries.map(entry=>{
       const r=results.find(x=>x.leagueTeam===entry.teamName);
       if(!r)return entry;
       let pts=0,bonus=0;
@@ -4566,10 +4694,16 @@ export default function App() {
       if(opp&&!isCPUOpp(opp)&&!["BYE","Unknown"].includes(opp)){if(!h2h[opp])h2h[opp]={wins:0,losses:0};if(r.result==="win")h2h[opp].wins++;else if(r.result==="loss")h2h[opp].losses++;}
       const isConfGame=opp&&!isCPUOpp(opp)&&!["BYE","Unknown"].includes(opp)&&teamNames.includes(opp);
       return{...entry,wins:r.result==="win"?entry.wins+1:entry.wins,losses:r.result==="loss"?entry.losses+1:entry.losses,confWins:isConfGame&&r.result==="win"?(entry.confWins||0)+1:(entry.confWins||0),confLosses:isConfGame&&r.result==="loss"?(entry.confLosses||0)+1:(entry.confLosses||0),gamePts:entry.gamePts+pts,rankedBonusPts:entry.rankedBonusPts+bonus,weekLog:[...(entry.weekLog||[]),log],h2h};
-    }));
+    });
+    setEntries(nextEntries);
     setWeekResults(prev=>prev.map(r=>({...r,result:"none",ranked25:false,ranked10:false})));
-    if(targetWeek>=week){const newWeek=targetWeek+1;setWeek(newWeek);setTimeout(()=>saveToDb({week:newWeek}),100);}
-    else{setTimeout(()=>saveToDb({}),100);}
+    if(targetWeek>=week){
+      const newWeek=targetWeek+1;
+      setWeek(newWeek);
+      setTimeout(()=>saveToDb({week:newWeek,entries:nextEntries}),100);
+      triggerAutoWeeklyArticles(targetWeek,newWeek,nextEntries).catch(e=>console.error("Auto weekly articles failed:",e));
+    }
+    else{setTimeout(()=>saveToDb({entries:nextEntries}),100);}
   }
 
   function applyPostSeason() {
