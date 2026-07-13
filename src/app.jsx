@@ -1143,12 +1143,19 @@ function HistoryTab({history, setHistory, saveToDb, commUnlocked, entries, setEn
 }
 
 // ── Profile Tab ───────────────────────────────────────────────────────────
-function ScheduleTab({schedule,entries,week,season}) {
+function ScheduleTab({schedule,entries,week,season,setupRows}) {
   const isMobile = useIsMobile();
   const [view,setView] = useState("full");
   const [expanded,setExpanded] = useState({}); // key -> bool
   const weeks = Object.keys(schedule||{}).map(Number).sort((a,b)=>a-b);
   const teams = entries.map(e=>e.teamName).sort();
+
+  // teamName -> logo URL, built from entries (which carry userId/userName) via the shared setupRows lookup
+  const logoByTeam = {};
+  entries.forEach(e=>{
+    const logo = getPlayerImages(setupRows, e.userId, e.userName).teamLogo;
+    if (logo) logoByTeam[e.teamName] = logo;
+  });
 
   // Build a lookup: teamName -> weekNum -> weekLog entry (with stats)
   const resultLookup = {};
@@ -1190,14 +1197,14 @@ function ScheduleTab({schedule,entries,week,season}) {
         {/* Score header */}
         <div style={{display:"flex",alignItems:"stretch",background:"#1a1a1a",borderBottom:"1px solid #333"}}>
           <div style={{flex:1,padding:"10px 14px",textAlign:"right"}}>
-            <div style={{fontSize:13,fontWeight:wA?900:600,color:wA?"#fff":"#888"}}>{teamA}</div>
+            <div style={{fontSize:13,fontWeight:wA?900:600,color:wA?"#fff":"#888",display:"flex",alignItems:"center",justifyContent:"flex-end",gap:5}}>{teamA}<TeamLogo url={logoByTeam[teamA]} size={16}/></div>
             {(scoreA!=null)&&<div style={{fontSize:22,fontWeight:900,color:wA?"#fff":"#888",lineHeight:1.1}}>{scoreA}</div>}
           </div>
           <div style={{padding:"10px 8px",display:"flex",alignItems:"center",justifyContent:"center"}}>
             <div style={{fontSize:9,fontWeight:800,color:"#555",textTransform:"uppercase",letterSpacing:1}}>FINAL</div>
           </div>
           <div style={{flex:1,padding:"10px 14px",textAlign:"left"}}>
-            <div style={{fontSize:13,fontWeight:wB?900:600,color:wB?"#fff":"#888"}}>{teamB}</div>
+            <div style={{fontSize:13,fontWeight:wB?900:600,color:wB?"#fff":"#888",display:"flex",alignItems:"center",gap:5}}><TeamLogo url={logoByTeam[teamB]} size={16}/>{teamB}</div>
             {(scoreB!=null)&&<div style={{fontSize:22,fontWeight:900,color:wB?"#fff":"#888",lineHeight:1.1}}>{scoreB}</div>}
           </div>
         </div>
@@ -1245,6 +1252,7 @@ function ScheduleTab({schedule,entries,week,season}) {
           {/* Home side */}
           <div style={{flex:1,display:"flex",alignItems:"center",justifyContent:"flex-end",gap:5,minWidth:0}}>
             <span style={{fontSize:13,fontWeight:played?(winHome?800:500):700,color:played?(winHome?"#111":"#999"):"#111",textAlign:"right",overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{home}</span>
+            <TeamLogo url={logoByTeam[home]} size={18}/>
             {played&&<span style={{fontSize:10,fontWeight:800,padding:"1px 5px",borderRadius:2,background:winHome?"#e8f5e9":"#fff0f0",color:winHome?"#007a00":RED,flexShrink:0}}>{winHome?"W":"L"}</span>}
           </div>
 
@@ -1265,6 +1273,7 @@ function ScheduleTab({schedule,entries,week,season}) {
           {/* Away side */}
           <div style={{flex:1,display:"flex",alignItems:"center",gap:5,minWidth:0}}>
             {played&&<span style={{fontSize:10,fontWeight:800,padding:"1px 5px",borderRadius:2,background:winAway?"#e8f5e9":"#fff0f0",color:winAway?"#007a00":RED,flexShrink:0}}>{winAway?"W":"L"}</span>}
+            <TeamLogo url={logoByTeam[away]} size={18}/>
             <span style={{fontSize:13,fontWeight:played?(winAway?800:500):700,color:isCPU?"#aaa":played?(winAway?"#111":"#999"):"#111",overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{formatOpp(away)}</span>
           </div>
 
@@ -1292,7 +1301,7 @@ function ScheduleTab({schedule,entries,week,season}) {
       <Card style={{overflow:"hidden"}}>
         <div style={{display:"flex",overflowX:"auto",borderBottom:"1px solid #eee"}}>
           <button onClick={()=>setView("full")} style={{padding:"9px 16px",background:"transparent",border:"none",borderBottom:view==="full"?`3px solid ${RED}`:"3px solid transparent",color:view==="full"?"#111":"#888",cursor:"pointer",fontSize:11,fontWeight:700,fontFamily:ff,textTransform:"uppercase",letterSpacing:0.5,whiteSpace:"nowrap"}}>Full Schedule</button>
-          {teams.map(t=><button key={t} onClick={()=>setView(t)} style={{padding:"9px 14px",background:"transparent",border:"none",borderBottom:view===t?`3px solid ${RED}`:"3px solid transparent",color:view===t?"#111":"#888",cursor:"pointer",fontSize:11,fontWeight:700,fontFamily:ff,whiteSpace:"nowrap"}}>{t}</button>)}
+          {teams.map(t=><button key={t} onClick={()=>setView(t)} style={{padding:"9px 14px",background:"transparent",border:"none",borderBottom:view===t?`3px solid ${RED}`:"3px solid transparent",color:view===t?"#111":"#888",cursor:"pointer",fontSize:11,fontWeight:700,fontFamily:ff,whiteSpace:"nowrap",display:"flex",alignItems:"center",gap:6}}><TeamLogo url={logoByTeam[t]} size={16}/>{t}</button>)}
         </div>
 
         {view==="full"&&(
@@ -1323,6 +1332,7 @@ function ScheduleTab({schedule,entries,week,season}) {
         {view!=="full"&&(
           <div>
             <div style={{padding:"12px 14px",borderBottom:"1px solid #eee",display:"flex",alignItems:"center",gap:10}}>
+              <TeamLogo url={logoByTeam[view]} size={26}/>
               <div style={{fontSize:16,fontWeight:900,color:"#111"}}>{view}</div>
               <div style={{fontSize:11,color:"#888"}}>Season {season} Schedule</div>
             </div>
@@ -1346,6 +1356,7 @@ function ScheduleTab({schedule,entries,week,season}) {
                     </div>
                     <div style={{flex:1,display:"flex",alignItems:"center",gap:8}}>
                       {played&&<span style={{fontSize:10,fontWeight:800,padding:"2px 6px",borderRadius:2,background:won?"#e8f5e9":"#fff0f0",color:won?"#007a00":RED,flexShrink:0}}>{won?"W":"L"}</span>}
+                      <TeamLogo url={logoByTeam[opp]} size={18}/>
                       <span style={{fontSize:13,fontWeight:700,color:isCPUOpp(opp)||opp==="BYE"?"#aaa":"#111"}}>{opp==="BYE"?"BYE WEEK":formatOpp(opp)}</span>
                     </div>
                     {played&&(myScore!=null||theirScore!=null)&&(
@@ -4820,7 +4831,7 @@ export default function App() {
           {tab==="History"&&<HistoryTab history={history} setHistory={setHistory} saveToDb={saveToDb} commUnlocked={commUnlocked} yearRosters={setup?.yearRosters} permanentUsers={setup?.permanentUsers} currentEntries={entries} season={season} year={year} setupRows={setup?.rows||[]}/>}
           {tab==="Profiles"&&<ProfileTab history={history} setupRows={(setup?.rows||[]).filter(r=>r.active!==false)} currentEntries={activeEntries} season={season} year={year} permanentUsers={setup?.permanentUsers?.filter(u=>(setup?.rows||[]).some(r=>r.userId===u.id&&r.active!==false))} sel={profileSel} setSel={setProfileSel} pTab={profilePTab} setPTab={setProfilePTab} articles={articles} setActiveArticle={setActiveArticle} playerStats={setup?.playerStats}/>}
           {tab==="Archive"&&<GameArchiveTab setup={setup} entries={activeEntries} RED={RED} ff={ff} isMobile={isMobile}/>}
-          {tab==="Schedule"&&<ScheduleTab schedule={schedule} entries={activeEntries} week={week} season={season}/>}
+          {tab==="Schedule"&&<ScheduleTab schedule={schedule} entries={activeEntries} week={week} season={season} setupRows={setup?.rows||[]}/>}
           {tab==="Rules"&&(()=>{
             const customCats=(pc.customCategories||[]);
             const ptsCards=[
