@@ -460,6 +460,7 @@ function SchedulePanel({entries,schedule,setSchedule}) {
   const [schedResult,setSchedResult] = useState("");
   const teamNames = (entries||[]).map(e=>e.teamName);
   const WEEKS = Array.from({length:14},(_,i)=>i);
+  const POST_SEASON_LABELS = {14:"Conf. Champ",15:"Bowl Games",16:"Playoffs R1",17:"Playoffs R2",18:"Playoffs R3",19:"Natl. Champ"};
   const OPPONENTS = ["BYE","CPU",...teamNames];
   const SUPA_URL2 = "https://uyaqmdljwwslskoqxvpn.supabase.co";
   const SUPA_KEY2 = "sb_publishable_GNVG6TW43VXjW7IhWcBtmA_L_mMok1C";
@@ -521,7 +522,8 @@ function SchedulePanel({entries,schedule,setSchedule}) {
   }
 
   function clearWeek(wk) {
-    if(!window.confirm(`Clear all matchups for Week ${wk}?`))return;
+    const label=POST_SEASON_LABELS[wk]||`Week ${wk}`;
+    if(!window.confirm(`Clear all matchups for ${label}?`))return;
     setSchedule(prev=>{const ns={...prev};delete ns[wk];return ns;});
     setSaved(false);
   }
@@ -596,15 +598,23 @@ function SchedulePanel({entries,schedule,setSchedule}) {
             })}
           </div>
         </div>
-        <div style={{display:"flex",gap:6,flexWrap:"wrap",marginBottom:14}}>
+        <div style={{display:"flex",gap:6,flexWrap:"wrap",marginBottom:6}}>
           {WEEKS.map(w=>{
             const gset=teamNames.filter(t=>schedule[w]?.[t]).length;
             const done=gset===teamNames.length&&teamNames.length>0;
             return(<button key={w} onClick={()=>setEditWeek(w)} style={{padding:"5px 12px",borderRadius:2,border:"1px solid",borderColor:editWeek===w?RED:done?"#cce5cc":"#ddd",background:editWeek===w?RED:done?"#f0f8f0":"#fff",color:editWeek===w?"#fff":done?"#007a00":"#555",cursor:"pointer",fontSize:12,fontWeight:700,fontFamily:ff}}>Wk {w}</button>);
           })}
         </div>
+        <div style={{display:"flex",gap:6,flexWrap:"wrap",marginBottom:14,paddingTop:6,borderTop:"1px solid #eee"}}>
+          {Object.entries(POST_SEASON_LABELS).map(([w,label])=>{
+            const wn=Number(w);
+            const gset=teamNames.filter(t=>schedule[wn]?.[t]).length;
+            const done=gset>0;
+            return(<button key={w} onClick={()=>setEditWeek(wn)} style={{padding:"5px 12px",borderRadius:2,border:"1px solid",borderColor:editWeek===wn?RED:done?"#cce5cc":"#ddd",background:editWeek===wn?RED:done?"#f0f8f0":"#fff",color:editWeek===wn?"#fff":done?"#007a00":"#555",cursor:"pointer",fontSize:11,fontWeight:700,fontFamily:ff}}>{label}</button>);
+          })}
+        </div>
         <div style={{background:"#f9f9f9",border:"1px solid #eee",borderRadius:3,padding:14,marginBottom:14}}>
-          <div style={{fontSize:12,fontWeight:800,color:"#111",marginBottom:10,textTransform:"uppercase",letterSpacing:0.5}}>Week {editWeek} Matchups</div>
+          <div style={{fontSize:12,fontWeight:800,color:"#111",marginBottom:10,textTransform:"uppercase",letterSpacing:0.5}}>{POST_SEASON_LABELS[editWeek]||`Week ${editWeek}`} Matchups</div>
           <div style={{display:"flex",flexDirection:"column",gap:6}}>
             {teamNames.map(team=>{
               const opp=getOpp(editWeek,team);
