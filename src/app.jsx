@@ -1143,47 +1143,108 @@ function HistoryTab({history, setHistory, saveToDb, commUnlocked, entries, setEn
 }
 
 // ── Profile Tab ───────────────────────────────────────────────────────────
-function ScheduleTab({schedule,entries,week,season,setupRows}) {
+function ScheduleTab({schedule,entries,week,season,year,setup,setupRows,history}) {
   const isMobile = useIsMobile();
   const [view,setView] = useState("full");
   const [expanded,setExpanded] = useState({}); // key -> bool
-  const weeks = Object.keys(schedule||{}).map(Number).sort((a,b)=>a-b);
-  const teams = entries.map(e=>e.teamName).sort();
+  const [selYear,setSelYear] = useState(year);
+
+  // Which years have browsable data: the live current year, plus any year snapshotted
+  // at season finalization (setup.scheduleArchive) or present in finalized season history.
+  const scheduleArchive = setup?.scheduleArchive||{};
+  const availableYears = [...new Set([year, ...Object.keys(scheduleArchive).map(Number), ...(history||[]).map(h=>h.year)])].sort((a,b)=>b-a);
+  const isCurrentYear = selYear===year;
+
+  // For a past year, reconstruct the roster/results from the most recently finalized season that year
+  // (finalStandings is the same shape as the live entries array).
+  const pastYearEntries = (() => {
+    if (isCurrentYear) return entries;
+    const matches=(history||[]).filter(h=>h.year===selYear);
+    return matches[matches.length-1]?.finalStandings||[];
+  })();
+  const effEntries = isCurrentYear ? entries : pastYearEntries;
+  const effSchedule = isCurrentYear ? schedule : (scheduleArchive[selYear]||{});
+
+  const weeks = Object.keys(effSchedule||{}).map(Number).sort((a,b)=>a-b);
+  const teams = effEntries.map(e=>e.teamName).sort();
 
   // teamName -> logo URL, built from entries (which carry userId/userName) via the shared setupRows lookup
   const logoByTeam = {};
-  entries.forEach(e=>{
+  effEntries.forEach(e=>{
     const logo = getPlayerImages(setupRows, e.userId, e.userName).teamLogo;
     if (logo) logoByTeam[e.teamName] = logo;
   });
 
   // Build a lookup: teamName -> weekNum -> weekLog entry (with stats)
   const resultLookup = {};
-  entries.forEach(e=>{
+  effEntries.forEach(e=>{
     resultLookup[e.teamName]={};
     (e.weekLog||[]).forEach(log=>{ resultLookup[e.teamName][log.week]=log; });
   });
 
-  // For a given matchup, find the recorded game result (winner, scores)
-  // Stats come from the bulk uploader's log.stats field
+  // Commissioner-uploaded box scores (setup.gameArchive) for the selected year — richer than weekLog.stats
+  const archiveByKey = {};
+  (setup?.gameArchive||[]).forEach(g=>{
+    if (g.year!==selYear) return;
+    archiveByKey[`${g.week}-${g.team1.name}`] = {mine:g.team1, opp:g.team2};
+    archiveByKey[`${g.week}-${g.team2.name}`] = {mine:g.team2, opp:g.team1};
+  });
+
+  // For a given matchup, find the recorded game result (winner, scores) — prefers the commissioner's
+  // uploaded box score (setup.gameArchive) over the thinner bulk-import weekLog.stats when both exist.
   function getGameResult(teamA, teamB, w) {
+    const archA = archiveByKey[`${w}-${teamA}`];
     const logA = resultLookup[teamA]?.[w];
     const logB = resultLookup[teamB]?.[w];
-    if (!logA && !logB) return null;
-    const winner = logA?.result==="win" ? teamA : logB?.result==="win" ? teamB : null;
-    const loser  = logA?.result==="loss"? teamA : logB?.result==="loss"? teamB : null;
-    // Scores — stored as stats.score_for / score_against if available, else derive from stats
+    if (!archA && !logA && !logB) return null;
     const statsA = logA?.stats || null;
     const statsB = logB?.stats || null;
-    // score fields: may be stored as score_for/score_against on the log itself
-    const scoreA = logA?.score ?? logA?.scoreFor ?? null;
-    const scoreB = logB?.score ?? logB?.scoreFor ?? null;
-    return {winner, loser, logA, logB, statsA, statsB, scoreA, scoreB};
+    const scoreA = archA ? archA.mine.score : (logA?.score ?? logA?.scoreFor ?? null);
+    const scoreB = archA ? archA.opp.score : (logB?.score ?? logB?.scoreFor ?? null);
+    const winner = scoreA!=null&&scoreB!=null ? (scoreA>scoreB?teamA:scoreB>scoreA?teamB:null) : (logA?.result==="win"?teamA:logB?.result==="win"?teamB:null);
+    const loser = winner ? (winner===teamA?teamB:teamA) : (logA?.result==="loss"?teamA:logB?.result==="loss"?teamB:null);
+    return {winner, loser, logA, logB, statsA, statsB, scoreA, scoreB, archiveGame: archA||null};
   }
 
   function BoxScore({teamA, teamB, result}) {
-    const {logA, logB, statsA, statsB, scoreA, scoreB, winner} = result;
-    const wA = logA?.result==="win", wB = logB?.result==="win";
+    const {statsA, statsB, scoreA, scoreB, archiveGame} = result;
+    const wA = scoreA!=null&&scoreB!=null ? scoreA>scoreB : result.winner===teamA;
+    const wB = scoreA!=null&&scoreB!=null ? scoreB>scoreA : result.winner===teamB;
+
+    if (archiveGame) {
+      const {mine,opp} = archiveGame;
+      return (
+        <div style={{background:"#111",padding:0,borderTop:"1px solid #333"}}>
+          <div style={{display:"flex",alignItems:"stretch",background:"#1a1a1a",borderBottom:"1px solid #333"}}>
+            <div style={{flex:1,padding:"10px 14px",textAlign:"right"}}>
+              <div style={{fontSize:13,fontWeight:wA?900:600,color:wA?"#fff":"#888",display:"flex",alignItems:"center",justifyContent:"flex-end",gap:5}}>{teamA}<TeamLogo url={logoByTeam[teamA]} size={16}/></div>
+              <div style={{fontSize:22,fontWeight:900,color:wA?"#fff":"#888",lineHeight:1.1}}>{mine.score}</div>
+            </div>
+            <div style={{padding:"10px 8px",display:"flex",alignItems:"center",justifyContent:"center"}}>
+              <div style={{fontSize:9,fontWeight:800,color:"#555",textTransform:"uppercase",letterSpacing:1}}>FINAL</div>
+            </div>
+            <div style={{flex:1,padding:"10px 14px",textAlign:"left"}}>
+              <div style={{fontSize:13,fontWeight:wB?900:600,color:wB?"#fff":"#888",display:"flex",alignItems:"center",gap:5}}><TeamLogo url={logoByTeam[teamB]} size={16}/>{teamB}</div>
+              <div style={{fontSize:22,fontWeight:900,color:wB?"#fff":"#888",lineHeight:1.1}}>{opp.score}</div>
+            </div>
+          </div>
+          <div style={{padding:12,display:"grid",gridTemplateColumns:"1fr 1fr",gap:8,fontSize:11}}>
+            {[{name:teamA,t:mine,win:wA},{name:teamB,t:opp,win:wB}].map(({name,t,win})=>(
+              <div key={name} style={{background:"#1a1a1a",borderRadius:2,padding:"10px 12px"}}>
+                <div style={{fontWeight:900,color:win?"#4ade80":"#fff",fontSize:12,marginBottom:6,borderBottom:"1px solid #333",paddingBottom:4}}>{name} — {t.score} pts</div>
+                <div style={{display:"flex",flexDirection:"column",gap:2,color:"#ccc"}}>
+                  <div><span style={{color:"#888",fontWeight:700}}>PASS</span> {t.passing.comp}/{t.passing.att} · {t.passing.yds}yds · {t.passing.tds}TD · {t.passing.int}INT · {t.passing.pct}%</div>
+                  <div><span style={{color:"#888",fontWeight:700}}>RUSH</span> {t.rushing.att}att · {t.rushing.yds}yds · {t.rushing.ypc}YPC · {t.rushing.tds}TD</div>
+                  <div><span style={{color:"#888",fontWeight:700}}>DEF</span> {t.defense.totalYdsAllowed}yds ({t.defense.passYdsAllowed}p/{t.defense.rushYdsAllowed}r)</div>
+                  <div><span style={{color:"#888",fontWeight:700}}>ST</span> FG {t.specialTeams.fgMade}/{t.specialTeams.fgAtt}{t.specialTeams.krTds>0?` · KR ${t.specialTeams.krTds}TD`:""}{t.specialTeams.prTds>0?` · PR ${t.specialTeams.prTds}TD`:""}</div>
+                </div>
+              </div>
+            ))}
+          </div>
+        </div>
+      );
+    }
+
     const rows = [
       ["Passing Yds",    statsA?.passing_yards, statsB?.passing_yards],
       ["Rushing Yds",    statsA?.rushing_yards, statsB?.rushing_yards],
@@ -1287,16 +1348,25 @@ function ScheduleTab({schedule,entries,week,season,setupRows}) {
   // Per-team schedule with result lookup — a week with no entry for this team is an implicit bye
   function getTeamSchedule(teamName) {
     return weeks.map(w=>{
-      const opp=schedule[w]?.[teamName]||"BYE";
+      const opp=effSchedule[w]?.[teamName]||"BYE";
       const log=resultLookup[teamName]?.[w]||null;
       return{week:w,opp,log};
     });
   }
 
-  if(!weeks.length) return <Card style={{padding:20,textAlign:"center",color:"#888",fontSize:13}}>No schedule set up yet. Add matchups in Commissioner Mode.</Card>;
-
   return(
     <div style={{display:"flex",flexDirection:"column",gap:14}}>
+      {availableYears.length>1&&(
+        <div style={{display:"flex",gap:6,flexWrap:"wrap",alignItems:"center"}}>
+          <span style={{fontSize:11,fontWeight:700,color:"#888",textTransform:"uppercase",letterSpacing:0.5}}>Season:</span>
+          {availableYears.map(y=>(
+            <button key={y} onClick={()=>{setSelYear(y);setView("full");}} style={{padding:"5px 12px",borderRadius:2,border:"1px solid",borderColor:selYear===y?RED:"#ddd",background:selYear===y?RED:"#fff",color:selYear===y?"#fff":"#555",cursor:"pointer",fontSize:12,fontWeight:700,fontFamily:ff}}>{y}{y===year?" (Current)":""}</button>
+          ))}
+        </div>
+      )}
+      {!weeks.length ? (
+        <Card style={{padding:20,textAlign:"center",color:"#888",fontSize:13}}>{isCurrentYear?"No schedule set up yet. Add matchups in Commissioner Mode.":`No schedule available for ${selYear}.`}</Card>
+      ) : (
       <Card style={{overflow:"hidden"}}>
         <div style={{display:"flex",overflowX:"auto",borderBottom:"1px solid #eee"}}>
           <button onClick={()=>setView("full")} style={{padding:"9px 16px",background:"transparent",border:"none",borderBottom:view==="full"?`3px solid ${RED}`:"3px solid transparent",color:view==="full"?"#111":"#888",cursor:"pointer",fontSize:11,fontWeight:700,fontFamily:ff,textTransform:"uppercase",letterSpacing:0.5,whiteSpace:"nowrap"}}>Full Schedule</button>
@@ -1308,7 +1378,7 @@ function ScheduleTab({schedule,entries,week,season,setupRows}) {
             {weeks.map(w=>{
               const matchups=[];
               const seen=new Set();
-              Object.entries(schedule[w]||{}).forEach(([team,opp])=>{
+              Object.entries(effSchedule[w]||{}).forEach(([team,opp])=>{
                 const key=[team,opp].sort().join("||");
                 if(!seen.has(key)){seen.add(key);matchups.push({home:team,away:opp});}
               });
@@ -1316,8 +1386,8 @@ function ScheduleTab({schedule,entries,week,season,setupRows}) {
                 <div key={w}>
                   <div style={{background:"#f7f7f7",padding:"7px 14px",display:"flex",alignItems:"center",gap:10,borderBottom:"1px solid #eee"}}>
                     <span style={{fontSize:10,fontWeight:800,color:RED,textTransform:"uppercase",letterSpacing:1}}>{w>13?"Post-Season":`Week ${w}`}</span>
-                    {w===week&&<span style={{background:RED,color:"#fff",fontSize:9,fontWeight:800,padding:"1px 6px",borderRadius:10,textTransform:"uppercase",letterSpacing:0.5}}>Current</span>}
-                    {w<week&&<span style={{background:"#007a00",color:"#fff",fontSize:9,fontWeight:800,padding:"1px 6px",borderRadius:10,textTransform:"uppercase",letterSpacing:0.5}}>Final</span>}
+                    {isCurrentYear&&w===week&&<span style={{background:RED,color:"#fff",fontSize:9,fontWeight:800,padding:"1px 6px",borderRadius:10,textTransform:"uppercase",letterSpacing:0.5}}>Current</span>}
+                    {isCurrentYear&&w<week&&<span style={{background:"#007a00",color:"#fff",fontSize:9,fontWeight:800,padding:"1px 6px",borderRadius:10,textTransform:"uppercase",letterSpacing:0.5}}>Final</span>}
                   </div>
                   {matchups.map(({home,away},i)=>(
                     <MatchupRow key={i} home={home} away={away} w={w}/>
@@ -1336,22 +1406,22 @@ function ScheduleTab({schedule,entries,week,season,setupRows}) {
               <div style={{fontSize:11,color:"#888"}}>Season {season} Schedule</div>
             </div>
             {getTeamSchedule(view).map(({week:w,opp,log})=>{
-              const played=!!log;
-              const won=log?.result==="win";
+              const isCPU = isCPUOpp(opp)||opp==="BYE";
+              const gameResult = !isCPU ? getGameResult(view, opp, w) : null;
+              const played = !!gameResult;
+              const won = gameResult?.winner===view;
               const key=`team-${view}-${w}`;
               const isOpen=expanded[key];
-              const oppLog=resultLookup[opp]?.[w]||null;
-              // Scores for this team
-              const myScore=log?.scoreFor??log?.score??null;
-              const theirScore=oppLog?.scoreFor??oppLog?.score??null;
+              const myScore=gameResult?.scoreA??null;
+              const theirScore=gameResult?.scoreB??null;
               return(
                 <div key={w} style={{borderBottom:"1px solid #eee"}}>
                   <div
                     onClick={played?()=>setExpanded(p=>({...p,[key]:!p[key]})):undefined}
-                    style={{display:"flex",alignItems:"center",padding:"10px 14px",gap:10,cursor:played?"pointer":"default",background:w===week?"#fff8f8":isOpen?"#fafafa":"transparent"}}
+                    style={{display:"flex",alignItems:"center",padding:"10px 14px",gap:10,cursor:played?"pointer":"default",background:isCurrentYear&&w===week?"#fff8f8":isOpen?"#fafafa":"transparent"}}
                   >
                     <div style={{width:50,flexShrink:0}}>
-                      <div style={{fontSize:12,fontWeight:w===week?800:500,color:w===week?RED:"#555",textAlign:"center"}}>{w>13?"Post":w===week?<span style={{background:RED,color:"#fff",fontSize:9,fontWeight:800,padding:"1px 5px",borderRadius:10}}>NOW</span>:`Wk ${w}`}</div>
+                      <div style={{fontSize:12,fontWeight:isCurrentYear&&w===week?800:500,color:isCurrentYear&&w===week?RED:"#555",textAlign:"center"}}>{w>13?"Post":isCurrentYear&&w===week?<span style={{background:RED,color:"#fff",fontSize:9,fontWeight:800,padding:"1px 5px",borderRadius:10}}>NOW</span>:`Wk ${w}`}</div>
                     </div>
                     <div style={{flex:1,display:"flex",alignItems:"center",gap:8}}>
                       {played&&<span style={{fontSize:10,fontWeight:800,padding:"2px 6px",borderRadius:2,background:won?"#e8f5e9":"#fff0f0",color:won?"#007a00":RED,flexShrink:0}}>{won?"W":"L"}</span>}
@@ -1365,16 +1435,17 @@ function ScheduleTab({schedule,entries,week,season,setupRows}) {
                         <span style={{color:!won?"#007a00":RED}}>{theirScore??"-"}</span>
                       </div>
                     )}
-                    {played&&!myScore&&!theirScore&&<span style={{fontSize:9,fontWeight:800,color:"#007a00",textTransform:"uppercase",padding:"1px 5px",background:"#f0f8f0",borderRadius:2,flexShrink:0}}>FINAL</span>}
+                    {played&&myScore==null&&theirScore==null&&<span style={{fontSize:9,fontWeight:800,color:"#007a00",textTransform:"uppercase",padding:"1px 5px",background:"#f0f8f0",borderRadius:2,flexShrink:0}}>FINAL</span>}
                     {played&&<span style={{fontSize:11,color:"#ccc",flexShrink:0}}>{isOpen?"▲":"▼"}</span>}
                   </div>
-                  {played&&isOpen&&<BoxScore teamA={view} teamB={opp} result={{winner:won?view:opp,loser:won?opp:view,logA:log,logB:oppLog,statsA:log?.stats||null,statsB:oppLog?.stats||null,scoreA:myScore,scoreB:theirScore}}/>}
+                  {played&&isOpen&&<BoxScore teamA={view} teamB={opp} result={gameResult}/>}
                 </div>
               );
             })}
           </div>
         )}
       </Card>
+      )}
     </div>
   );
 }
@@ -3660,70 +3731,6 @@ const REPORTERS = [
 
 // ── Content Hub Tab ───────────────────────────────────────────────────────
 
-function GameArchiveTab({setup,entries,RED,ff,isMobile}) {
-  const archive=setup?.gameArchive||[];
-  const [selYear,setSelYear]=useState(null);
-  const [selWeek,setSelWeek]=useState(null);
-
-  const years=[...new Set(archive.map(g=>g.year))].sort((a,b)=>b-a);
-  if(selYear===null&&years.length>0) { /* default to most recent */ }
-  const activeYear=selYear||years[0]||null;
-  const weeksForYear=[...new Set(archive.filter(g=>g.year===activeYear).map(g=>g.week))].sort((a,b)=>a-b);
-  const activeWeek=selWeek!==null?selWeek:(weeksForYear[weeksForYear.length-1]||null);
-  const weekGames=archive.filter(g=>g.year===activeYear&&g.week===activeWeek);
-  const awards=weekGames.length>0?pickWeeklyAwards(weekGames):null;
-
-  if(!archive.length) return <Card style={{padding:"40px 20px",textAlign:"center"}}><div style={{fontSize:32,marginBottom:10}}>📦</div><div style={{fontWeight:800,fontSize:16,color:"#111",marginBottom:6}}>No Games Archived Yet</div><div style={{fontSize:13,color:"#888"}}>The commissioner will upload box scores after each week.</div></Card>;
-
-  return (
-    <div style={{display:"flex",flexDirection:"column",gap:12}}>
-      <div style={{display:"flex",gap:8,flexWrap:"wrap",alignItems:"center"}}>
-        {years.map(y=><button key={y} onClick={()=>{setSelYear(y);setSelWeek(null);}} style={{padding:"6px 14px",border:`2px solid ${activeYear===y?RED:"#ddd"}`,borderRadius:2,background:activeYear===y?RED:"#fff",color:activeYear===y?"#fff":"#555",fontWeight:700,fontSize:12,cursor:"pointer",fontFamily:ff}}>{y}</button>)}
-      </div>
-      {activeYear&&<div style={{display:"flex",gap:6,flexWrap:"wrap"}}>
-        {weeksForYear.map(w=><button key={w} onClick={()=>setSelWeek(w)} style={{padding:"5px 12px",border:`2px solid ${activeWeek===w?"#1a3a6b":"#ddd"}`,borderRadius:2,background:activeWeek===w?"#1a3a6b":"#fff",color:activeWeek===w?"#fff":"#555",fontWeight:700,fontSize:11,cursor:"pointer",fontFamily:ff}}>Wk {w}</button>)}
-      </div>}
-
-      {awards&&<div style={{display:"grid",gridTemplateColumns:isMobile?"1fr 1fr":"repeat(4,1fr)",gap:8}}>
-        {[
-          ["🏆 GOTW",awards.gotw?`${awards.gotw.game.team1.score>awards.gotw.game.team2.score?awards.gotw.game.team1.name:awards.gotw.game.team2.name} (${awards.gotw.margin} pts)`:"-"],
-          ["💥 Blowout",awards.blowout?`${awards.blowout.game.team1.score>awards.blowout.game.team2.score?awards.blowout.game.team1.name:awards.blowout.game.team2.name} +${awards.blowout.margin}`:"-"],
-          ["🔥 Top Off.",awards.offMvp?`${awards.offMvp.team.name} ${awards.offMvp.yds}yds`:"-"],
-          ["🛡️ Top Def.",awards.defMvp?`${awards.defMvp.team.name} ${awards.defMvp.ydsAllowed}yds`:"-"],
-        ].map(([l,v])=><div key={l} style={{background:"#f7f7f7",border:"1px solid #eee",borderRadius:2,padding:"8px 10px"}}><div style={{fontSize:9,fontWeight:800,color:"#888",textTransform:"uppercase",letterSpacing:1,marginBottom:3}}>{l}</div><div style={{fontSize:11,fontWeight:700,color:"#111"}}>{v}</div></div>)}
-      </div>}
-
-      {weekGames.map(g=>{
-        const winner=g.team1.score>g.team2.score?g.team1:g.team2;
-        const loser=g.team1.score>g.team2.score?g.team2:g.team1;
-        return (
-          <Card key={g.id} style={{overflow:"hidden"}}>
-            <div style={{background:"#1a3a6b",padding:"10px 14px",display:"flex",justifyContent:"space-between",alignItems:"center"}}>
-              <div style={{color:"#fff",fontWeight:900,fontSize:14}}>{winner.name} <span style={{color:"#e8c84a"}}>{winner.score}</span></div>
-              <div style={{color:"rgba(255,255,255,0.5)",fontSize:11}}>Season {g.season} · Week {g.week}</div>
-              <div style={{color:"rgba(255,255,255,0.7)",fontWeight:700,fontSize:14}}>{loser.score} {loser.name}</div>
-            </div>
-            <div style={{padding:12,display:"grid",gridTemplateColumns:"1fr 1fr",gap:8,fontSize:11}}>
-              {[g.team1,g.team2].map(t=>(
-                <div key={t.name} style={{background:"#f9f9f9",borderRadius:2,padding:"10px 12px"}}>
-                  <div style={{fontWeight:900,color:t===winner?"#1a7a1a":"#111",fontSize:12,marginBottom:6,borderBottom:"1px solid #eee",paddingBottom:4}}>{t.name} — {t.score} pts</div>
-                  <div style={{display:"flex",flexDirection:"column",gap:2,color:"#444"}}>
-                    <div><span style={{color:"#888",fontWeight:700}}>PASS</span> {t.passing.comp}/{t.passing.att} · {t.passing.yds}yds · {t.passing.tds}TD · {t.passing.int}INT · {t.passing.pct}%</div>
-                    <div><span style={{color:"#888",fontWeight:700}}>RUSH</span> {t.rushing.att}att · {t.rushing.yds}yds · {t.rushing.ypc}YPC · {t.rushing.tds}TD</div>
-                    <div><span style={{color:"#888",fontWeight:700}}>DEF</span> {t.defense.totalYdsAllowed}yds ({t.defense.passYdsAllowed}p/{t.defense.rushYdsAllowed}r)</div>
-                    <div><span style={{color:"#888",fontWeight:700}}>ST</span> FG {t.specialTeams.fgMade}/{t.specialTeams.fgAtt}{t.specialTeams.krTds>0?` · KR ${t.specialTeams.krTds}TD`:""}{t.specialTeams.prTds>0?` · PR ${t.specialTeams.prTds}TD`:""}</div>
-                  </div>
-                </div>
-              ))}
-            </div>
-          </Card>
-        );
-      })}
-      {activeWeek!==null&&weekGames.length===0&&<div style={{color:"#888",fontSize:13,textAlign:"center",padding:20}}>No games archived for Week {activeWeek}.</div>}
-    </div>
-  );
-}
-
 async function compressImage(file, maxW=900, quality=0.78) {
   return new Promise(res=>{
     const reader=new FileReader();
@@ -4594,9 +4601,12 @@ export default function App() {
       const override = nextRoster?.find(r=>r.userId===e.userId);
       return INITIAL_ENTRY(override?.userName||e.userName, override?.teamName||e.teamName, e.userId);
     });
+    // Snapshot this year's schedule so it stays browsable on the Schedule page after the season resets
+    const updatedSetup={...setup,scheduleArchive:{...(setup?.scheduleArchive||{}),[year]:schedule}};
+    setSetup(updatedSetup);
     setHistory(prev=>{
       const next=[...prev,histEntry];
-      setTimeout(()=>dbSave({history:next,season:newSeason,year,week:1,entries:fresh,post_season_inputs:FRESH_PSI(fresh)}),100);
+      setTimeout(()=>dbSave({history:next,season:newSeason,year,week:1,entries:fresh,post_season_inputs:FRESH_PSI(fresh),setup:updatedSetup}),100);
       return next;
     });
     setEntries(fresh);setWeek(1);setSeason(newSeason);
@@ -4649,7 +4659,7 @@ export default function App() {
 
       {/* Nav tabs */}
       <div style={{background:RED,display:"flex",alignItems:"center",overflowX:"auto",WebkitOverflowScrolling:"touch"}}>
-        {(isMobile?[["Home","Home"],["Stndgs","Standings"],["Sched","Schedule"],["Archive","Archive"],["History","History"],["Profiles","Profiles"],["Rules","Rules"],["RedZone","Redzone"],["Discord","Discord"]]:[["Home","Home"],["Standings","Standings"],["Schedule","Schedule"],["Archive","Archive"],["History","History"],["Profiles","Profiles"],["Rules","Rules"],["RedZone","Redzone"],["Join Discord","Discord"]]).map(([label,val])=>(
+        {(isMobile?[["Home","Home"],["Stndgs","Standings"],["Sched","Schedule"],["History","History"],["Profiles","Profiles"],["Rules","Rules"],["RedZone","Redzone"],["Discord","Discord"]]:[["Home","Home"],["Standings","Standings"],["Schedule","Schedule"],["History","History"],["Profiles","Profiles"],["Rules","Rules"],["RedZone","Redzone"],["Join Discord","Discord"]]).map(([label,val])=>(
           <button key={val} onClick={()=>setTab(val)} style={{flex:"0 0 auto",padding:isMobile?"0 10px":"0 14px",height:isMobile?38:40,background:tab===val?"rgba(255,255,255,0.18)":"transparent",border:"none",borderBottom:tab===val?"3px solid #fff":"3px solid transparent",color:"#fff",cursor:"pointer",fontSize:isMobile?10:11,fontWeight:tab===val?800:500,fontFamily:ff,textTransform:"uppercase",letterSpacing:0.3,whiteSpace:"nowrap"}}>{label}</button>
         ))}
       </div>
@@ -4829,8 +4839,7 @@ export default function App() {
 
           {tab==="History"&&<HistoryTab history={history} setHistory={setHistory} saveToDb={saveToDb} commUnlocked={commUnlocked} yearRosters={setup?.yearRosters} permanentUsers={setup?.permanentUsers} currentEntries={entries} season={season} year={year} setupRows={setup?.rows||[]}/>}
           {tab==="Profiles"&&<ProfileTab history={history} setupRows={(setup?.rows||[]).filter(r=>r.active!==false)} currentEntries={activeEntries} season={season} year={year} permanentUsers={setup?.permanentUsers?.filter(u=>(setup?.rows||[]).some(r=>r.userId===u.id&&r.active!==false))} sel={profileSel} setSel={setProfileSel} pTab={profilePTab} setPTab={setProfilePTab} articles={articles} setActiveArticle={setActiveArticle} playerStats={setup?.playerStats}/>}
-          {tab==="Archive"&&<GameArchiveTab setup={setup} entries={activeEntries} RED={RED} ff={ff} isMobile={isMobile}/>}
-          {tab==="Schedule"&&<ScheduleTab schedule={schedule} entries={activeEntries} week={week} season={season} setupRows={setup?.rows||[]}/>}
+          {tab==="Schedule"&&<ScheduleTab schedule={schedule} entries={activeEntries} week={week} season={season} year={year} setup={setup} setupRows={setup?.rows||[]} history={history}/>}
           {tab==="Rules"&&(()=>{
             const customCats=(pc.customCategories||[]);
             const ptsCards=[
