@@ -626,12 +626,12 @@ function SchedulePanel({entries,schedule,setSchedule}) {
                 setWeekParsing(true); setWeekParseResult("");
                 try{
                   const b64=await new Promise((res,rej)=>{const r=new FileReader();r.onload=()=>res(r.result.split(",")[1]);r.onerror=rej;r.readAsDataURL(file);});
-                  const resp=await fetch("https://dynasty-api.brockdrury.workers.dev/api/parse-screenshot",{
-                    method:"POST",headers:{"Content-Type":"application/json"},
-                    body:JSON.stringify({image:b64,mediaType:file.type||"image/jpeg",teams:teamNames,type:"schedule"}),
-                  });
-                  if(!resp.ok){const err=await resp.json().catch(()=>({}));throw new Error(err?.error||`API error ${resp.status}`);}
-                  const parsed=await resp.json();
+                  const teamsText=teamNames.length>0?`\n\nValid dynasty team names: ${teamNames.join(", ")}`:"";
+                  const prompt=`You are parsing a College Football 27 dynasty schedule screenshot. Extract every visible week and its matchups. For each week, identify every dynasty team and their opponent. If the opponent is another dynasty team use their exact name. If the opponent is a non-dynasty CPU team write "CPU". If it is a bye week write "BYE". Return ONLY valid JSON in exactly this format with no extra text or markdown: {"1":{"TeamA":"TeamB","TeamB":"TeamA"},"2":{"TeamA":"CPU"},"3":{"TeamA":"BYE"}} Use only week numbers as keys. Only include weeks and teams visible in the image. Match all team names to the closest entry in the teams list.${teamsText}`;
+                  const rawText=await callClaudeVision(b64,file.type||"image/jpeg",prompt);
+                  const cleaned=rawText.replace(/^```(?:json)?\s*/i,"").replace(/\s*```$/,"").trim();
+                  const jsonStr=cleaned.match(/\{[\s\S]*\}/)?.[0]??cleaned;
+                  const parsed=JSON.parse(jsonStr);
                   let filled=0;
                   setSchedule(prev=>{
                     const ns={...prev};
