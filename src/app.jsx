@@ -459,7 +459,7 @@ function SchedulePanel({entries,schedule,setSchedule}) {
   const [schedParsing,setSchedParsing] = useState(false);
   const [schedResult,setSchedResult] = useState("");
   const teamNames = (entries||[]).map(e=>e.teamName);
-  const WEEKS = Array.from({length:12},(_,i)=>i+1);
+  const WEEKS = Array.from({length:13},(_,i)=>i);
   const OPPONENTS = ["BYE","CPU",...teamNames];
   const SUPA_URL2 = "https://uyaqmdljwwslskoqxvpn.supabase.co";
   const SUPA_KEY2 = "sb_publishable_GNVG6TW43VXjW7IhWcBtmA_L_mMok1C";
@@ -574,7 +574,7 @@ function SchedulePanel({entries,schedule,setSchedule}) {
     <div style={{display:"flex",flexDirection:"column",gap:16}}>
       <Card style={{padding:16}}>
         <SL>Import Schedule from Screenshot</SL>
-        <p style={{fontSize:13,color:"#888",marginBottom:12,lineHeight:1.5}}>Take a screenshot of your dynasty schedule screen and Claude will read all 12 weeks automatically.</p>
+        <p style={{fontSize:13,color:"#888",marginBottom:12,lineHeight:1.5}}>Take a screenshot of your dynasty schedule screen and Claude will read all 13 weeks automatically (including Week 0).</p>
         <input type="file" accept="image/*" onChange={handleSchedImage} style={{color:"#111",fontSize:13,marginBottom:12,display:"block"}}/>
         {schedImgPreview&&<img src={schedImgPreview} alt="schedule preview" style={{maxWidth:"100%",maxHeight:180,borderRadius:2,border:"1px solid #ddd",marginBottom:12,display:"block"}}/>}
         <button onClick={parseScheduleImage} disabled={!schedImg||schedParsing} style={{background:schedImg&&!schedParsing?RED:"#ccc",color:"#fff",border:"none",borderRadius:2,padding:"9px 18px",cursor:schedImg&&!schedParsing?"pointer":"not-allowed",fontFamily:ff,fontSize:13,fontWeight:800,textTransform:"uppercase"}}>{schedParsing?"Reading Schedule...":"Parse Schedule →"}</button>
@@ -3192,7 +3192,7 @@ team1.defense = yards the OPPONENT gained (what team1 allowed). Return only JSON
             </div>
           </div>
           <div style={{display:"flex",alignItems:"center",gap:8}}>
-            <button onClick={()=>setEntryWeek(w=>Math.max(1,w-1))} disabled={entryWeek<=1} style={{padding:"8px 14px",background:"#f0f0f0",border:"1px solid #ddd",borderRadius:2,cursor:entryWeek<=1?"not-allowed":"pointer",fontSize:13,fontWeight:700,color:entryWeek<=1?"#ccc":"#333",fontFamily:ff}}>← Prev</button>
+            <button onClick={()=>setEntryWeek(w=>Math.max(0,w-1))} disabled={entryWeek<=0} style={{padding:"8px 14px",background:"#f0f0f0",border:"1px solid #ddd",borderRadius:2,cursor:entryWeek<=0?"not-allowed":"pointer",fontSize:13,fontWeight:700,color:entryWeek<=0?"#ccc":"#333",fontFamily:ff}}>← Prev</button>
             <div style={{textAlign:"center",minWidth:80}}>
               <div style={{fontSize:18,fontWeight:900,color:"#111"}}>Week {entryWeek}</div>
               {entryWeek===week&&<div style={{fontSize:9,color:"#007a00",fontWeight:700,textTransform:"uppercase",letterSpacing:1}}>Current</div>}
@@ -3372,7 +3372,7 @@ team1.defense = yards the OPPONENT gained (what team1 allowed). Return only JSON
 
         {/* Submit */}
         <div style={{display:"flex",gap:10,flexWrap:"wrap"}}>
-          {entryWeek>1&&<button onClick={()=>{applyWeekResults(entryWeek);setEntryWeek(w=>Math.max(1,w-1));}} style={{padding:"12px 20px",background:"#f0f0f0",border:"1px solid #ddd",borderRadius:2,cursor:"pointer",fontFamily:ff,fontSize:13,fontWeight:800,color:"#555",textTransform:"uppercase"}}>← Submit &amp; Go Back</button>}
+          {entryWeek>0&&<button onClick={()=>{applyWeekResults(entryWeek);setEntryWeek(w=>Math.max(0,w-1));}} style={{padding:"12px 20px",background:"#f0f0f0",border:"1px solid #ddd",borderRadius:2,cursor:"pointer",fontFamily:ff,fontSize:13,fontWeight:800,color:"#555",textTransform:"uppercase"}}>← Submit &amp; Go Back</button>}
           <button onClick={()=>applyWeekResults(entryWeek)} style={{flex:1,background:RED,color:"#fff",border:"none",borderRadius:2,padding:"13px 22px",cursor:"pointer",fontFamily:ff,fontSize:14,fontWeight:800,textTransform:"uppercase"}}>
             {entryWeek>=week?`Submit Week ${entryWeek} & Advance to Week ${entryWeek+1} →`:`Submit Week ${entryWeek} →`}
           </button>
