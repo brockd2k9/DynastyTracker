@@ -5,7 +5,7 @@ const NavCtx = createContext(null);
 function Name({children, userId, userName, style={}}) {
   const nav = useContext(NavCtx);
   if (!nav) return <span style={style}>{children}</span>;
-  return <span onClick={()=>nav(userId, userName)} style={{cursor:"pointer",textDecoration:"underline dotted",textUnderlineOffset:2,...style}} title={`View ${children}'s profile`}>{children}</span>;
+  return <span onClick={e=>{e.stopPropagation();nav(userId, userName);}} style={{cursor:"pointer",textDecoration:"underline dotted",textUnderlineOffset:2,...style}} title={`View ${children}'s profile`}>{children}</span>;
 }
 
 function useIsMobile() {
@@ -1170,10 +1170,22 @@ function ScheduleTab({schedule,entries,week,season,year,setup,setupRows,history}
 
   // teamName -> logo URL, built from entries (which carry userId/userName) via the shared setupRows lookup
   const logoByTeam = {};
+  // teamName -> {userId,userName}, so real dynasty teams' names can link to their profile
+  const ownerByTeam = {};
   effEntries.forEach(e=>{
     const logo = getPlayerImages(setupRows, e.userId, e.userName).teamLogo;
     if (logo) logoByTeam[e.teamName] = logo;
+    ownerByTeam[e.teamName] = {userId:e.userId, userName:e.userName};
   });
+  // Wrap a team name in a profile link when it's one of our dynasty teams; CPU/BYE opponents stay plain text.
+  // `name` is the lookup key (always the raw team name); `display` optionally overrides the rendered text
+  // (e.g. formatOpp() output like "Florida State (CPU)") while still looking up the owner by the raw name.
+  function TeamNameLink({name, display, style}) {
+    const owner = ownerByTeam[name];
+    const text = display ?? name;
+    if (!owner) return <span style={style}>{text}</span>;
+    return <Name userId={owner.userId} userName={owner.userName} style={style}>{text}</Name>;
+  }
 
   // Build a lookup: teamName -> weekNum -> weekLog entry (with stats)
   const resultLookup = {};
@@ -1217,21 +1229,21 @@ function ScheduleTab({schedule,entries,week,season,year,setup,setupRows,history}
         <div style={{background:"#111",padding:0,borderTop:"1px solid #333"}}>
           <div style={{display:"flex",alignItems:"stretch",background:"#1a1a1a",borderBottom:"1px solid #333"}}>
             <div style={{flex:1,padding:"10px 14px",textAlign:"right"}}>
-              <div style={{fontSize:13,fontWeight:wA?900:600,color:wA?"#fff":"#888",display:"flex",alignItems:"center",justifyContent:"flex-end",gap:5}}>{teamA}<TeamLogo url={logoByTeam[teamA]} size={16}/></div>
+              <div style={{fontSize:13,fontWeight:wA?900:600,color:wA?"#fff":"#888",display:"flex",alignItems:"center",justifyContent:"flex-end",gap:5}}><TeamNameLink name={teamA}/><TeamLogo url={logoByTeam[teamA]} size={16}/></div>
               <div style={{fontSize:22,fontWeight:900,color:wA?"#fff":"#888",lineHeight:1.1}}>{mine.score}</div>
             </div>
             <div style={{padding:"10px 8px",display:"flex",alignItems:"center",justifyContent:"center"}}>
               <div style={{fontSize:9,fontWeight:800,color:"#555",textTransform:"uppercase",letterSpacing:1}}>FINAL</div>
             </div>
             <div style={{flex:1,padding:"10px 14px",textAlign:"left"}}>
-              <div style={{fontSize:13,fontWeight:wB?900:600,color:wB?"#fff":"#888",display:"flex",alignItems:"center",gap:5}}><TeamLogo url={logoByTeam[teamB]} size={16}/>{teamB}</div>
+              <div style={{fontSize:13,fontWeight:wB?900:600,color:wB?"#fff":"#888",display:"flex",alignItems:"center",gap:5}}><TeamLogo url={logoByTeam[teamB]} size={16}/><TeamNameLink name={teamB}/></div>
               <div style={{fontSize:22,fontWeight:900,color:wB?"#fff":"#888",lineHeight:1.1}}>{opp.score}</div>
             </div>
           </div>
           <div style={{padding:12,display:"grid",gridTemplateColumns:"1fr 1fr",gap:8,fontSize:11}}>
             {[{name:teamA,t:mine,win:wA},{name:teamB,t:opp,win:wB}].map(({name,t,win})=>(
               <div key={name} style={{background:"#1a1a1a",borderRadius:2,padding:"10px 12px"}}>
-                <div style={{fontWeight:900,color:win?"#4ade80":"#fff",fontSize:12,marginBottom:6,borderBottom:"1px solid #333",paddingBottom:4}}>{name} — {t.score} pts</div>
+                <div style={{fontWeight:900,color:win?"#4ade80":"#fff",fontSize:12,marginBottom:6,borderBottom:"1px solid #333",paddingBottom:4}}><TeamNameLink name={name}/> — {t.score} pts</div>
                 <div style={{display:"flex",flexDirection:"column",gap:2,color:"#ccc"}}>
                   <div><span style={{color:"#888",fontWeight:700}}>PASS</span> {t.passing.comp}/{t.passing.att} · {t.passing.yds}yds · {t.passing.tds}TD · {t.passing.int}INT · {t.passing.pct}%</div>
                   <div><span style={{color:"#888",fontWeight:700}}>RUSH</span> {t.rushing.att}att · {t.rushing.yds}yds · {t.rushing.ypc}YPC · {t.rushing.tds}TD</div>
@@ -1258,14 +1270,14 @@ function ScheduleTab({schedule,entries,week,season,year,setup,setupRows,history}
         {/* Score header */}
         <div style={{display:"flex",alignItems:"stretch",background:"#1a1a1a",borderBottom:"1px solid #333"}}>
           <div style={{flex:1,padding:"10px 14px",textAlign:"right"}}>
-            <div style={{fontSize:13,fontWeight:wA?900:600,color:wA?"#fff":"#888",display:"flex",alignItems:"center",justifyContent:"flex-end",gap:5}}>{teamA}<TeamLogo url={logoByTeam[teamA]} size={16}/></div>
+            <div style={{fontSize:13,fontWeight:wA?900:600,color:wA?"#fff":"#888",display:"flex",alignItems:"center",justifyContent:"flex-end",gap:5}}><TeamNameLink name={teamA}/><TeamLogo url={logoByTeam[teamA]} size={16}/></div>
             {(scoreA!=null)&&<div style={{fontSize:22,fontWeight:900,color:wA?"#fff":"#888",lineHeight:1.1}}>{scoreA}</div>}
           </div>
           <div style={{padding:"10px 8px",display:"flex",alignItems:"center",justifyContent:"center"}}>
             <div style={{fontSize:9,fontWeight:800,color:"#555",textTransform:"uppercase",letterSpacing:1}}>FINAL</div>
           </div>
           <div style={{flex:1,padding:"10px 14px",textAlign:"left"}}>
-            <div style={{fontSize:13,fontWeight:wB?900:600,color:wB?"#fff":"#888",display:"flex",alignItems:"center",gap:5}}><TeamLogo url={logoByTeam[teamB]} size={16}/>{teamB}</div>
+            <div style={{fontSize:13,fontWeight:wB?900:600,color:wB?"#fff":"#888",display:"flex",alignItems:"center",gap:5}}><TeamLogo url={logoByTeam[teamB]} size={16}/><TeamNameLink name={teamB}/></div>
             {(scoreB!=null)&&<div style={{fontSize:22,fontWeight:900,color:wB?"#fff":"#888",lineHeight:1.1}}>{scoreB}</div>}
           </div>
         </div>
@@ -1312,7 +1324,7 @@ function ScheduleTab({schedule,entries,week,season,year,setup,setupRows,history}
         >
           {/* Home side */}
           <div style={{flex:1,display:"flex",alignItems:"center",justifyContent:"flex-end",gap:5,minWidth:0}}>
-            <span style={{fontSize:13,fontWeight:played?(winHome?800:500):700,color:played?(winHome?"#111":"#999"):"#111",textAlign:"right",overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{home}</span>
+            <TeamNameLink name={home} style={{fontSize:13,fontWeight:played?(winHome?800:500):700,color:played?(winHome?"#111":"#999"):"#111",textAlign:"right",overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}/>
             <TeamLogo url={logoByTeam[home]} size={18}/>
             {played&&<span style={{fontSize:10,fontWeight:800,padding:"1px 5px",borderRadius:2,background:winHome?"#e8f5e9":"#fff0f0",color:winHome?"#007a00":RED,flexShrink:0}}>{winHome?"W":"L"}</span>}
           </div>
@@ -1335,7 +1347,7 @@ function ScheduleTab({schedule,entries,week,season,year,setup,setupRows,history}
           <div style={{flex:1,display:"flex",alignItems:"center",gap:5,minWidth:0}}>
             {played&&<span style={{fontSize:10,fontWeight:800,padding:"1px 5px",borderRadius:2,background:winAway?"#e8f5e9":"#fff0f0",color:winAway?"#007a00":RED,flexShrink:0}}>{winAway?"W":"L"}</span>}
             <TeamLogo url={logoByTeam[away]} size={18}/>
-            <span style={{fontSize:13,fontWeight:played?(winAway?800:500):700,color:isCPU?"#aaa":played?(winAway?"#111":"#999"):"#111",overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{formatOpp(away)}</span>
+            <TeamNameLink name={away} display={formatOpp(away)} style={{fontSize:13,fontWeight:played?(winAway?800:500):700,color:isCPU?"#aaa":played?(winAway?"#111":"#999"):"#111",overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}/>
           </div>
 
           {played&&<span style={{fontSize:11,color:"#ccc",flexShrink:0}}>{isOpen?"▲":"▼"}</span>}
@@ -1402,7 +1414,7 @@ function ScheduleTab({schedule,entries,week,season,year,setup,setupRows,history}
           <div>
             <div style={{padding:"12px 14px",borderBottom:"1px solid #eee",display:"flex",alignItems:"center",gap:10}}>
               <TeamLogo url={logoByTeam[view]} size={26}/>
-              <div style={{fontSize:16,fontWeight:900,color:"#111"}}>{view}</div>
+              <TeamNameLink name={view} style={{fontSize:16,fontWeight:900,color:"#111"}}/>
               <div style={{fontSize:11,color:"#888"}}>Season {season} Schedule</div>
             </div>
             {getTeamSchedule(view).map(({week:w,opp,log})=>{
@@ -1426,7 +1438,7 @@ function ScheduleTab({schedule,entries,week,season,year,setup,setupRows,history}
                     <div style={{flex:1,display:"flex",alignItems:"center",gap:8}}>
                       {played&&<span style={{fontSize:10,fontWeight:800,padding:"2px 6px",borderRadius:2,background:won?"#e8f5e9":"#fff0f0",color:won?"#007a00":RED,flexShrink:0}}>{won?"W":"L"}</span>}
                       <TeamLogo url={logoByTeam[opp]} size={18}/>
-                      <span style={{fontSize:13,fontWeight:700,color:isCPUOpp(opp)||opp==="BYE"?"#aaa":"#111"}}>{opp==="BYE"?"BYE WEEK":formatOpp(opp)}</span>
+                      <TeamNameLink name={opp} display={opp==="BYE"?"BYE WEEK":formatOpp(opp)} style={{fontSize:13,fontWeight:700,color:isCPUOpp(opp)||opp==="BYE"?"#aaa":"#111"}}/>
                     </div>
                     {played&&(myScore!=null||theirScore!=null)&&(
                       <div style={{fontSize:14,fontWeight:900,color:"#111",flexShrink:0}}>
