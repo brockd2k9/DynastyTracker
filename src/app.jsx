@@ -379,8 +379,8 @@ function buildRecapPrompt(games, awards, leagueName, week, season, year, reporte
 function SL({children}) {
   return <div style={{fontSize:11,fontWeight:800,letterSpacing:2,textTransform:"uppercase",color:"#555",borderLeft:`3px solid ${RED}`,paddingLeft:8,marginBottom:14,fontFamily:ff}}>{children}</div>;
 }
-function Card({children,style={}}) {
-  return <div style={{background:"#fff",border:"1px solid #ddd",borderRadius:2,...style}}>{children}</div>;
+function Card({children,style={},...rest}) {
+  return <div style={{background:"#fff",border:"1px solid #ddd",borderRadius:2,...style}} {...rest}>{children}</div>;
 }
 function CardHead({children,bg="#111"}) {
   return <div style={{background:bg,padding:"8px 14px"}}><div style={{fontSize:11,fontWeight:800,color:"#fff",letterSpacing:1,textTransform:"uppercase"}}>{children}</div></div>;
