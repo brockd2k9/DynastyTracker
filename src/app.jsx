@@ -777,7 +777,7 @@ function HistoryTab({history, setHistory, saveToDb, commUnlocked, entries, setEn
         <div style={{background:"#111",padding:"10px 16px",display:"flex",justifyContent:"space-between",alignItems:"center"}}>
           <div>
             <span style={{fontSize:13,fontWeight:900,color:"#fff",letterSpacing:1}}>CURRENT SEASON</span>
-            <span style={{fontSize:11,color:"#888",marginLeft:10}}>{season&&week?`S${season} · Week ${week}`:""}</span>
+            <span style={{fontSize:11,color:"#888",marginLeft:10}}>{season&&week!==undefined&&week!==null?`S${season} · Week ${week}`:""}</span>
           </div>
           <div style={{display:"flex",gap:8}}>
             {!liveEdit&&<button onClick={()=>{setLiveEdit(true);setLiveData(JSON.parse(JSON.stringify(entries)));}} style={{padding:"4px 12px",background:"#1a3a6b",color:"#fff",border:"none",borderRadius:2,cursor:"pointer",fontSize:11,fontWeight:800,fontFamily:ff}}>✏️ Edit</button>}
@@ -4166,7 +4166,7 @@ export default function App() {
         if (migratedSetup) setSetup(migratedSetup);
         if (row.season) setSeason(row.season);
         if (row.setup?.currentYear) setYear(row.setup.currentYear);
-        if (row.week) setWeek(row.week);
+        if (row.week !== undefined && row.week !== null) setWeek(row.week);
         if (migratedEntries) { if (migratedEntries.length) setEntries(migratedEntries); }
         if (row.history) { if (row.history.length) setHistory(row.history); }
         if (row.post_season_inputs) setPSI(row.post_season_inputs);
