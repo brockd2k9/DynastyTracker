@@ -140,8 +140,19 @@ const FRESH_PSI = (entries) => ({
   maxPrestige:[],
 });
 
-// schedule shape: { week: { teamName: "Opponent" | "CPU" | "BYE" } }
-// e.g. { 1: { Troy: "Georgia Southern", "Georgia Southern": "Troy", Toledo: "CPU", UNLV: "BYE" } }
+// schedule shape: { week: { teamName: "Opponent" | "CPU" | "CPU:<name>" | "BYE" } }
+// e.g. { 1: { Troy: "Georgia Southern", "Georgia Southern": "Troy", Toledo: "CPU:Ohio", UNLV: "BYE" } }
+
+// A CPU opponent is either the bare literal "CPU" (no name captured) or "CPU:<name>" (name parsed/entered).
+function isCPUOpp(v) { return v==="CPU" || (typeof v==="string" && v.startsWith("CPU:")); }
+// Raw parsed/typed CPU team name, or "" if none was captured.
+function cpuOppName(v) { return (typeof v==="string" && v.startsWith("CPU:")) ? v.slice(4) : ""; }
+// Display text for any opponent value: dynasty team name, "BYE", "<name> (CPU)", or plain "CPU".
+function formatOpp(v) {
+  if (v==="BYE") return "BYE";
+  if (isCPUOpp(v)) { const name=cpuOppName(v); return name ? `${name} (CPU)` : "CPU"; }
+  return v || "";
+}
 
 function calcTotal(t) {
   if (t.historicalTotal !== undefined) return t.historicalTotal;
@@ -336,7 +347,7 @@ function WeekMatchupsCard({schedule,week,sorted,leagueName,season,setActiveArtic
   const [generating,setGenerating] = useState(false);
 
   const games = buildGamesList(schedule, week);
-  const confGames = games.filter(g => g.opp !== "BYE" && g.opp !== "CPU");
+  const confGames = games.filter(g => g.opp !== "BYE" && !isCPUOpp(g.opp));
   const gameOfWeek = pickGOTW(confGames, sorted);
 
   const generateGOTWPreview = async () => {
@@ -435,8 +446,8 @@ function WeekMatchupsCard({schedule,week,sorted,leagueName,season,setActiveArtic
                 {isGOTW&&<span style={{fontSize:10,flexShrink:0}}>🏆</span>}
                 {opp==="BYE"
                   ?<><span style={{fontSize:13,fontWeight:600,color:"#888",flex:1,minWidth:0,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{team}</span><span style={{fontSize:11,color:"#aaa",background:"#f5f5f5",borderRadius:2,padding:"2px 8px",flexShrink:0}}>BYE</span></>
-                  :opp==="CPU"
-                  ?<><span style={{fontSize:13,fontWeight:700,color:"#111",flex:1,minWidth:0,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{team}</span><span style={{fontSize:10,fontWeight:800,color:"#bbb",padding:"0 8px",flexShrink:0}}>VS</span><span style={{fontSize:13,fontWeight:600,color:"#888",flex:1,minWidth:0,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>CPU</span></>
+                  :isCPUOpp(opp)
+                  ?<><span style={{fontSize:13,fontWeight:700,color:"#111",flex:1,minWidth:0,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{team}</span><span style={{fontSize:10,fontWeight:800,color:"#bbb",padding:"0 8px",flexShrink:0}}>VS</span><span style={{fontSize:13,fontWeight:600,color:"#888",flex:1,minWidth:0,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{formatOpp(opp)}</span></>
                   :<><span style={{fontSize:13,fontWeight:isGOTW?800:700,color:"#111",flex:1,minWidth:0,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap",textAlign:"right"}}>{team}</span><div style={{padding:"0 10px",textAlign:"center",flexShrink:0}}><span style={{fontSize:10,fontWeight:900,color:isGOTW?"#1a3a6b":"#bbb",letterSpacing:1}}>VS</span></div><span style={{fontSize:13,fontWeight:isGOTW?800:700,color:"#111",flex:1,minWidth:0,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{opp}</span></>
                 }
               </div>
@@ -500,9 +511,9 @@ function SchedulePanel({entries,schedule,setSchedule}) {
           ns[w] = {...(ns[w]||{})};
           Object.entries(matchups).forEach(([team, opp]) => {
             const matchedTeam = teamNames.find(t => t.toLowerCase() === team.toLowerCase()) || team;
-            const matchedOpp = opp === "CPU" || opp === "BYE" ? opp : (teamNames.find(t => t.toLowerCase() === opp.toLowerCase()) || opp);
+            const matchedOpp = (opp === "BYE" || isCPUOpp(opp)) ? opp : (teamNames.find(t => t.toLowerCase() === opp.toLowerCase()) || opp);
             if (teamNames.includes(matchedTeam)) { ns[w][matchedTeam] = matchedOpp; filled++; }
-            if (matchedOpp !== "CPU" && matchedOpp !== "BYE" && teamNames.includes(matchedOpp)) ns[w][matchedOpp] = matchedTeam;
+            if (!isCPUOpp(matchedOpp) && matchedOpp !== "BYE" && teamNames.includes(matchedOpp)) ns[w][matchedOpp] = matchedTeam;
           });
         });
         return ns;
@@ -564,8 +575,8 @@ function SchedulePanel({entries,schedule,setSchedule}) {
     });
   }
 
-  const isCPUopp=(v)=>v==="CPU"||v?.startsWith("CPU:");
-  const getCPUTeam=(v)=>v?.startsWith("CPU:")?v.slice(4):"";
+  const isCPUopp=isCPUOpp;
+  const getCPUTeam=cpuOppName;
   const getOpp=(wk,team)=>schedule[wk]?.[team]||"";
   const countGames=team=>WEEKS.filter(w=>schedule[w]?.[team]&&schedule[w][team]!=="").length;
   const confCount=team=>WEEKS.filter(w=>schedule[w]?.[team]&&!isCPUopp(schedule[w][team])&&schedule[w][team]!=="BYE").length;
@@ -627,7 +638,7 @@ function SchedulePanel({entries,schedule,setSchedule}) {
                 try{
                   const b64=await new Promise((res,rej)=>{const r=new FileReader();r.onload=()=>res(r.result.split(",")[1]);r.onerror=rej;r.readAsDataURL(file);});
                   const teamsText=teamNames.length>0?`\n\nValid dynasty team names: ${teamNames.join(", ")}`:"";
-                  const prompt=`You are parsing a College Football 27 dynasty schedule screenshot. Extract every visible week and its matchups. For each week, identify every dynasty team and their opponent. If the opponent is another dynasty team use their exact name. If the opponent is a non-dynasty CPU team write "CPU". If it is a bye week write "BYE". Return ONLY valid JSON in exactly this format with no extra text or markdown: {"1":{"TeamA":"TeamB","TeamB":"TeamA"},"2":{"TeamA":"CPU"},"3":{"TeamA":"BYE"}} Use only week numbers as keys. Only include weeks and teams visible in the image. Match all team names to the closest entry in the teams list.${teamsText}`;
+                  const prompt=`You are parsing a College Football 27 dynasty schedule screenshot. Extract every visible week and its matchups. For each week, identify every dynasty team and their opponent. If the opponent is another dynasty team use their exact name. If the opponent is a non-dynasty CPU-controlled team, write its team name prefixed with "CPU:" — for example "CPU:Florida State" or "CPU:Ohio". Always include the real school/team name if it is visible anywhere in the image; only write the bare literal "CPU" (no colon, no name) if no opponent name is visible at all for that game. If it is a bye week write "BYE". Return ONLY valid JSON in exactly this format with no extra text or markdown: {"1":{"TeamA":"TeamB","TeamB":"TeamA"},"2":{"TeamA":"CPU:Florida State"},"3":{"TeamA":"BYE"}} Use only week numbers as keys. Only include weeks and teams visible in the image. Match all dynasty team names to the closest entry in the teams list — never match a CPU opponent's name to an entry in the teams list.${teamsText}`;
                   const rawText=await callClaudeVision(b64,file.type||"image/jpeg",prompt);
                   const cleaned=rawText.replace(/^```(?:json)?\s*/i,"").replace(/\s*```$/,"").trim();
                   const jsonStr=cleaned.match(/\{[\s\S]*\}/)?.[0]??cleaned;
@@ -640,9 +651,9 @@ function SchedulePanel({entries,schedule,setSchedule}) {
                       ns[w]={...(ns[w]||{})};
                       Object.entries(matchups).forEach(([team,opp])=>{
                         const mt=teamNames.find(t=>t.toLowerCase()===team.toLowerCase())||team;
-                        const mo=opp==="CPU"||opp==="BYE"?opp:(teamNames.find(t=>t.toLowerCase()===opp.toLowerCase())||opp);
+                        const mo=(opp==="BYE"||isCPUOpp(opp))?opp:(teamNames.find(t=>t.toLowerCase()===opp.toLowerCase())||opp);
                         if(teamNames.includes(mt)){ns[w][mt]=mo;filled++;}
-                        if(mo!=="CPU"&&mo!=="BYE"&&teamNames.includes(mo))ns[w][mo]=mt;
+                        if(!isCPUOpp(mo)&&mo!=="BYE"&&teamNames.includes(mo))ns[w][mo]=mt;
                       });
                     });
                     return ns;
@@ -739,7 +750,7 @@ function SchedulePanel({entries,schedule,setSchedule}) {
                     {WEEKS.map(w=>{
                       const o=schedule[w]?.[team]||"";
                       return(<td key={w} style={{padding:"7px 8px",textAlign:"center",whiteSpace:"nowrap"}}>
-                        {o==="BYE"?<span style={{fontSize:10,color:"#aaa"}}>BYE</span>:isCPUopp(o)?<span style={{fontSize:10,color:"#888",fontWeight:600}} title={getCPUTeam(o)||"CPU"}>{getCPUTeam(o)||"CPU"}</span>:o?<span style={{fontSize:10,color:"#111",fontWeight:500}}>{o.split(" ")[0]}</span>:<span style={{color:"#ddd"}}>—</span>}
+                        {o==="BYE"?<span style={{fontSize:10,color:"#aaa"}}>BYE</span>:isCPUopp(o)?<span style={{fontSize:10,color:"#888",fontWeight:600}} title={formatOpp(o)}>{getCPUTeam(o)?`${getCPUTeam(o).split(" ")[0]} (CPU)`:"CPU"}</span>:o?<span style={{fontSize:10,color:"#111",fontWeight:500}}>{o.split(" ")[0]}</span>:<span style={{color:"#ddd"}}>—</span>}
                       </td>);
                     })}
                   </tr>
@@ -1150,7 +1161,7 @@ function ScheduleTab({schedule,entries,week,season}) {
   }
 
   function MatchupRow({home, away, w}) {
-    const isCPU = away==="CPU"||away==="BYE";
+    const isCPU = isCPUOpp(away)||away==="BYE";
     const result = !isCPU ? getGameResult(home, away, w) : null;
     const played = !!result;
     const winHome = result?.winner===home, winAway = result?.winner===away;
@@ -1188,7 +1199,7 @@ function ScheduleTab({schedule,entries,week,season}) {
           {/* Away side */}
           <div style={{flex:1,display:"flex",alignItems:"center",gap:5,minWidth:0}}>
             {played&&<span style={{fontSize:10,fontWeight:800,padding:"1px 5px",borderRadius:2,background:winAway?"#e8f5e9":"#fff0f0",color:winAway?"#007a00":RED,flexShrink:0}}>{winAway?"W":"L"}</span>}
-            <span style={{fontSize:13,fontWeight:played?(winAway?800:500):700,color:isCPU?"#aaa":played?(winAway?"#111":"#999"):"#111",overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{away}</span>
+            <span style={{fontSize:13,fontWeight:played?(winAway?800:500):700,color:isCPU?"#aaa":played?(winAway?"#111":"#999"):"#111",overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{formatOpp(away)}</span>
           </div>
 
           {played&&<span style={{fontSize:11,color:"#ccc",flexShrink:0}}>{isOpen?"▲":"▼"}</span>}
@@ -1269,7 +1280,7 @@ function ScheduleTab({schedule,entries,week,season}) {
                     </div>
                     <div style={{flex:1,display:"flex",alignItems:"center",gap:8}}>
                       {played&&<span style={{fontSize:10,fontWeight:800,padding:"2px 6px",borderRadius:2,background:won?"#e8f5e9":"#fff0f0",color:won?"#007a00":RED,flexShrink:0}}>{won?"W":"L"}</span>}
-                      <span style={{fontSize:13,fontWeight:700,color:opp==="CPU"||opp==="BYE"?"#aaa":"#111"}}>{opp==="BYE"?"BYE WEEK":opp}</span>
+                      <span style={{fontSize:13,fontWeight:700,color:isCPUOpp(opp)||opp==="BYE"?"#aaa":"#111"}}>{opp==="BYE"?"BYE WEEK":formatOpp(opp)}</span>
                     </div>
                     {played&&(myScore!=null||theirScore!=null)&&(
                       <div style={{fontSize:14,fontWeight:900,color:"#111",flexShrink:0}}>
@@ -1334,7 +1345,7 @@ function LeagueRecordBook({history,currentEntries,season,year,permanentUsers,set
     const getUserLogs=(name)=>{const prof=recs[name];if(!prof)return[];const logs=[];prof.seasons.filter(s=>!s.isHistorical&&(filterYear==null||s.year===filterYear)).forEach(s=>{(s.weekLog||[]).forEach(w=>logs.push({...w,season:s.seasonNum,year:s.year,teamName:s.teamName}));});if(!filterYear&&prof.cur)(prof.cur.weekLog||[]).forEach(w=>logs.push({...w,season,year,teamName:prof.cur.teamName}));return logs;};
     const getWinStreakAllTime=(name)=>{const logs=getUserLogs(name);let max=0,cur=0,startIdx=0,bestStart=0,bestEnd=0;logs.forEach((w,i)=>{if(w.result==="win"){if(cur===0)startIdx=i;cur++;if(cur>max){max=cur;bestStart=startIdx;bestEnd=i;}}else cur=0;});if(!max)return null;const span=[...new Set(logs.slice(bestStart,bestEnd+1).map(w=>w.year))];return{len:max,years:span.join("–"),teamName:logs[bestStart]?.teamName||""};};
     const getWinStreakSeason=(name)=>{const prof=recs[name];if(!prof)return null;let best=null;const allS=[...prof.seasons.filter(s=>!s.isHistorical&&(filterYear==null||s.year===filterYear))];if(!filterYear&&prof.cur)allS.push({...prof.cur,year,seasonNum:season,isHistorical:false});allS.forEach(s=>{let cur=0,max=0;(s.weekLog||[]).forEach(w=>{if(w.result==="win"){cur++;if(cur>max)max=cur;}else cur=0;});if(max>0&&(!best||max>best.len))best={len:max,year:s.year,teamName:s.teamName};});return best;};
-    const isUvU=(w)=>w.opponent&&w.opponent!=="CPU"&&w.opponent!=="BYE"&&w.opponent!=="Unknown"&&w.opponent!=="";
+    const isUvU=(w)=>w.opponent&&!isCPUOpp(w.opponent)&&w.opponent!=="BYE"&&w.opponent!=="Unknown"&&w.opponent!=="";
     let bestSeason=null,worstSeason=null,mostSeasonLosses=null;
     e.forEach(([name,prof])=>{const allS=[...prof.seasons.filter(s=>!s.isHistorical&&(filterYear==null||s.year===filterYear))];if(!filterYear&&prof.cur)allS.push({...prof.cur,year,seasonNum:season,isHistorical:false});allS.forEach(s=>{const uvuW=(s.weekLog||[]).filter(w=>isUvU(w)&&w.result==="win").length;const uvuL=(s.weekLog||[]).filter(w=>isUvU(w)&&w.result==="loss").length;if(uvuW+uvuL===0)return;const pct=uvuW/(uvuW+uvuL);if(!bestSeason||pct>bestSeason.pct||(pct===bestSeason.pct&&uvuW>bestSeason.w))bestSeason={name,w:uvuW,l:uvuL,pct,year:s.year,teamName:s.teamName};if(!worstSeason||pct<worstSeason.pct||(pct===worstSeason.pct&&uvuL>worstSeason.l))worstSeason={name,w:uvuW,l:uvuL,pct,year:s.year,teamName:s.teamName};const totL=(s.weekLog||[]).filter(w=>w.result==="loss").length;if(!mostSeasonLosses||totL>mostSeasonLosses.l)mostSeasonLosses={name,l:totL,year:s.year,teamName:s.teamName};});});
     let mostH2HWins=null;e.forEach(([name,prof])=>{Object.entries(prof.h2hMerged).forEach(([opp,rec])=>{if(!mostH2HWins||rec.wins>mostH2HWins.wins)mostH2HWins={name,opp,wins:rec.wins};});});
@@ -1905,7 +1916,7 @@ function DynastyRedzone({setup,entries,setTab,autoLiveStatuses,autoEmbedUrls,sch
     const s = streamLinks[key];
     const embedUrl = (autoEmbedUrls||{})[key] || getEmbedUrl(s.url);
     const opponent = (schedule||{})[week]?.[r.teamName];
-    const matchup = opponent && opponent !== "BYE" && opponent !== "CPU" ? `${r.teamName} vs ${opponent}` : r.teamName;
+    const matchup = opponent && opponent !== "BYE" ? `${r.teamName} vs ${formatOpp(opponent)}` : r.teamName;
     return { key, userName: r.userName, teamName: r.teamName, url: s.url, embedUrl, platform: getPlatform(s.url), matchup };
   });
   const [activeIdx, setActiveIdx] = useState(0);
@@ -3155,8 +3166,8 @@ function EnterResultsPanel({entries,weekResults,setWeekResults,week,setWeek,appl
   const thisWeekSchedule = schedule?.[entryWeek]||{};
 
   // Build matchup pairs from schedule
-  const isCPUval=(v)=>v==="CPU"||v?.startsWith("CPU:");
-  const getCPUName=(v)=>v?.startsWith("CPU:")?v.slice(4):"CPU";
+  const isCPUval=isCPUOpp;
+  const getCPUName=(v)=>cpuOppName(v)||"CPU";
   const confPairs=[], cpuTeams=[], byeTeams=[];
   const seen=new Set();
   for(const [team,opp] of Object.entries(thisWeekSchedule)){
@@ -3347,8 +3358,8 @@ team1.defense = yards the OPPONENT gained (what team1 allowed). Return only JSON
                     <div style={{fontSize:11,fontWeight:800,color:"#bbb",flexShrink:0}}>VS</div>
                     {/* CPU side */}
                     <div style={{flex:1,minWidth:100,textAlign:"right"}}>
-                      <div style={{fontSize:13,fontWeight:900,color:wr.result==="loss"?"#c00":wr.result==="win"?"#aaa":"#888"}}>{displayCPU}</div>
-                      <div style={{fontSize:10,color:"#ccc",textTransform:"uppercase"}}>CPU</div>
+                      <div style={{fontSize:13,fontWeight:900,color:wr.result==="loss"?"#c00":wr.result==="win"?"#aaa":"#888"}}>{displayCPU}{displayCPU!=="CPU"?" (CPU)":""}</div>
+                      <div style={{fontSize:10,color:"#ccc",textTransform:"uppercase"}}>{displayCPU==="CPU"?"CPU":"Computer"}</div>
                       {cpuTeamData&&<div style={{fontSize:20,fontWeight:900,color:wr.result==="loss"?"#c00":"#555",marginTop:2}}>{cpuTeamData.score}</div>}
                     </div>
                     {/* Upload button */}
@@ -3787,7 +3798,7 @@ function ContentHub({sorted,entries,week,season,year,leagueName,history,leader,a
     const c1=teamToCoach[team]; const c2=teamToCoach[opp];
     const t1=c1?`${c1} (${team})`:team; const t2=c2?`${c2} (${opp})`:opp;
     if(opp==="BYE")return `${t1}: BYE`;
-    if(opp==="CPU")return `${t1} vs CPU (non-conf)`;
+    if(isCPUOpp(opp))return `${t1} vs ${formatOpp(opp)} (non-conf)`;
     return `${t1} vs ${t2}`;
   };
   const thisWeekMatchups = schedule[week] ? (() => {
@@ -3811,7 +3822,7 @@ function ContentHub({sorted,entries,week,season,year,leagueName,history,leader,a
   const upcomingSchedule = [week,week+1,week+2].map(w=>{
     if(!schedule[w])return null;
     const seen=new Set();const games=[];
-    Object.entries(schedule[w]).forEach(([team,opp])=>{const key=[team,opp].sort().join("vs");if(!seen.has(key)){seen.add(key);games.push(opp==="BYE"?`${team}:BYE`:opp==="CPU"?`${team} vs CPU`:`${team} vs ${opp}`);}});
+    Object.entries(schedule[w]).forEach(([team,opp])=>{const key=[team,opp].sort().join("vs");if(!seen.has(key)){seen.add(key);games.push(opp==="BYE"?`${team}:BYE`:isCPUOpp(opp)?`${team} vs ${formatOpp(opp)}`:`${team} vs ${opp}`);}});
     return `Week ${w}: ${games.join(", ")}`;
   }).filter(Boolean).join("\n");
 
@@ -4411,7 +4422,7 @@ export default function App() {
         let effectiveResult = r?.result;
         let effectiveR25 = r?.ranked25||false;
         let effectiveR10 = r?.ranked10||false;
-        if (!effectiveResult && opp && opp!=="CPU" && opp!=="BYE" && resultsMap[opp]) {
+        if (!effectiveResult && opp && !isCPUOpp(opp) && opp!=="BYE" && resultsMap[opp]) {
           // Mirror opponent result
           const oppResult = resultsMap[opp].result;
           effectiveResult = oppResult==="win"?"loss":oppResult==="loss"?"win":undefined;
@@ -4423,12 +4434,12 @@ export default function App() {
         const log={week:targetWeek,result:effectiveResult,ranked25:effectiveR25,ranked10:effectiveR10,pts:pts+bonus,opponent:opp||"Unknown"};
         // Update H2H if opponent is a dynasty member
         const h2h={...entry.h2h||{}};
-        if(opp&&opp!=="CPU"&&opp!=="BYE"){
+        if(opp&&!isCPUOpp(opp)&&opp!=="BYE"){
           if(!h2h[opp])h2h[opp]={wins:0,losses:0};
           if(effectiveResult==="win")h2h[opp].wins++;
           else if(effectiveResult==="loss")h2h[opp].losses++;
         }
-        const isConfGame=opp&&opp!=="CPU"&&opp!=="BYE"&&opp!=="Unknown"&&teamNames.includes(opp);
+        const isConfGame=opp&&!isCPUOpp(opp)&&opp!=="BYE"&&opp!=="Unknown"&&teamNames.includes(opp);
         return{...entry,wins:effectiveResult==="win"?entry.wins+1:entry.wins,losses:effectiveResult==="loss"?entry.losses+1:entry.losses,confWins:isConfGame&&effectiveResult==="win"?(entry.confWins||0)+1:(entry.confWins||0),confLosses:isConfGame&&effectiveResult==="loss"?(entry.confLosses||0)+1:(entry.confLosses||0),gamePts:entry.gamePts+pts,rankedBonusPts:entry.rankedBonusPts+bonus,weekLog:[...(entry.weekLog||[]),log],h2h};
       });
     });
@@ -4447,8 +4458,8 @@ export default function App() {
       const opp=thisWeekSchedule[entry.teamName]||r.opponent;
       const log={week:targetWeek,result:r.result,ranked25:r.ranked25,ranked10:r.ranked10,pts:pts+bonus,opponent:opp,stats:r.stats};
       const h2h={...entry.h2h||{}};
-      if(opp&&!["CPU","BYE","Unknown"].includes(opp)){if(!h2h[opp])h2h[opp]={wins:0,losses:0};if(r.result==="win")h2h[opp].wins++;else if(r.result==="loss")h2h[opp].losses++;}
-      const isConfGame=opp&&!["CPU","BYE","Unknown"].includes(opp)&&teamNames.includes(opp);
+      if(opp&&!isCPUOpp(opp)&&!["BYE","Unknown"].includes(opp)){if(!h2h[opp])h2h[opp]={wins:0,losses:0};if(r.result==="win")h2h[opp].wins++;else if(r.result==="loss")h2h[opp].losses++;}
+      const isConfGame=opp&&!isCPUOpp(opp)&&!["BYE","Unknown"].includes(opp)&&teamNames.includes(opp);
       return{...entry,wins:r.result==="win"?entry.wins+1:entry.wins,losses:r.result==="loss"?entry.losses+1:entry.losses,confWins:isConfGame&&r.result==="win"?(entry.confWins||0)+1:(entry.confWins||0),confLosses:isConfGame&&r.result==="loss"?(entry.confLosses||0)+1:(entry.confLosses||0),gamePts:entry.gamePts+pts,rankedBonusPts:entry.rankedBonusPts+bonus,weekLog:[...(entry.weekLog||[]),log],h2h};
     }));
     setWeekResults(prev=>prev.map(r=>({...r,result:"none",ranked25:false,ranked10:false})));
