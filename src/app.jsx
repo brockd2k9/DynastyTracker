@@ -332,7 +332,7 @@ function pickGOTW(confGames, sorted) {
   }, null);
 }
 
-function WeekMatchupsCard({schedule,week,sorted,leagueName,season,setActiveArticle,articles,setArticles}) {
+function WeekMatchupsCard({schedule,week,sorted,leagueName,season,setActiveArticle,articles,setArticles,commUnlocked}) {
   const [generating,setGenerating] = useState(false);
 
   const games = buildGamesList(schedule, week);
@@ -396,7 +396,7 @@ function WeekMatchupsCard({schedule,week,sorted,leagueName,season,setActiveArtic
             </div>
             {existingGOTW
               ? <button onClick={()=>setActiveArticle(existingGOTW)} style={{background:"rgba(255,255,255,0.15)",border:"1px solid rgba(255,255,255,0.3)",color:"#fff",borderRadius:2,padding:"5px 12px",cursor:"pointer",fontSize:11,fontWeight:700,fontFamily:"'Helvetica Neue',Arial,sans-serif",textTransform:"uppercase"}}>Read Preview →</button>
-              : <button onClick={generateGOTWPreview} disabled={generating} style={{background:generating?"rgba(255,255,255,0.1)":"rgba(255,255,255,0.2)",border:"1px solid rgba(255,255,255,0.4)",color:"#fff",borderRadius:2,padding:"5px 12px",cursor:generating?"not-allowed":"pointer",fontSize:11,fontWeight:700,fontFamily:"'Helvetica Neue',Arial,sans-serif",textTransform:"uppercase"}}>{generating?"Writing...":"Generate Preview"}</button>
+              : commUnlocked?<button onClick={generateGOTWPreview} disabled={generating} style={{background:generating?"rgba(255,255,255,0.1)":"rgba(255,255,255,0.2)",border:"1px solid rgba(255,255,255,0.4)",color:"#fff",borderRadius:2,padding:"5px 12px",cursor:generating?"not-allowed":"pointer",fontSize:11,fontWeight:700,fontFamily:"'Helvetica Neue',Arial,sans-serif",textTransform:"uppercase"}}>{generating?"Writing...":"Generate Preview"}</button>:null
             }
           </div>
           <div style={{padding:"14px 16px"}}>
@@ -4627,7 +4627,7 @@ export default function App() {
             <FeaturedCarousel articles={articles} setActiveArticle={setActiveArticle} RED={RED} ff={ff}/>
 
             {/* This week's matchups */}
-            {schedule&&schedule[week]&&Object.keys(schedule[week]).length>0&&<WeekMatchupsCard schedule={schedule} week={week} sorted={sorted} leagueName={leagueName} season={season} setActiveArticle={setActiveArticle} articles={articles} setArticles={setArticles}/>}
+            {schedule&&schedule[week]&&Object.keys(schedule[week]).length>0&&<WeekMatchupsCard schedule={schedule} week={week} sorted={sorted} leagueName={leagueName} season={season} setActiveArticle={setActiveArticle} articles={articles} setArticles={setArticles} commUnlocked={commUnlocked}/>}
 
             {/* Current standings summary */}
             <Card style={{overflow:"hidden"}}>
@@ -4670,7 +4670,7 @@ export default function App() {
           </>)}
 
           {tab==="Standings"&&(<>
-            {schedule&&schedule[week]&&Object.keys(schedule[week]).length>0&&<WeekMatchupsCard schedule={schedule} week={week} sorted={sorted} leagueName={leagueName} season={season} setActiveArticle={setActiveArticle} articles={articles} setArticles={setArticles}/>}
+            {schedule&&schedule[week]&&Object.keys(schedule[week]).length>0&&<WeekMatchupsCard schedule={schedule} week={week} sorted={sorted} leagueName={leagueName} season={season} setActiveArticle={setActiveArticle} articles={articles} setArticles={setArticles} commUnlocked={commUnlocked}/>}
 
             {/* Mobile: latest article teaser */}
             {isMobile&&articles.length>0&&(
