@@ -4391,7 +4391,8 @@ export default function App() {
   const [activeArticle,setActiveArticle] = useState(null);
   const [isEditingArticle,setIsEditingArticle] = useState(false);
   const [articleEditText,setArticleEditText] = useState("");
-  useEffect(()=>{setIsEditingArticle(false);},[activeArticle?.id]);
+  const [shareCopied,setShareCopied] = useState(false);
+  useEffect(()=>{setIsEditingArticle(false);setShareCopied(false);},[activeArticle?.id]);
   function saveArticleEdit() {
     const updated = articles.map(a=>a.id===activeArticle.id?{...a,text:articleEditText}:a);
     setArticles(updated);
@@ -4399,6 +4400,33 @@ export default function App() {
     setActiveArticle(prev=>prev?{...prev,text:articleEditText}:prev);
     setIsEditingArticle(false);
   }
+  async function shareArticle(article) {
+    const shareUrl = `${window.location.origin}/a/${article.id}`;
+    const headline = articleHeadline(article.text);
+    if (navigator.share) {
+      try { await navigator.share({title:headline, url:shareUrl}); } catch(e) { /* user dismissed the share sheet */ }
+      return;
+    }
+    try {
+      await navigator.clipboard.writeText(shareUrl);
+      setShareCopied(true);
+      setTimeout(()=>setShareCopied(false),2000);
+    } catch(e) {
+      window.prompt("Copy this link to share:", shareUrl);
+    }
+  }
+  // Deep link: /?article=<id> opens that article directly (used by the /a/:id share-preview page)
+  const didAutoOpenArticle = useRef(false);
+  useEffect(()=>{
+    if (didAutoOpenArticle.current) return;
+    const targetId = new URLSearchParams(window.location.search).get("article");
+    if (!targetId) { didAutoOpenArticle.current = true; return; }
+    if (!articles.length) return;
+    const found = articles.find(a=>String(a.id)===targetId);
+    if (found) setActiveArticle(found);
+    didAutoOpenArticle.current = true;
+    window.history.replaceState({}, "", window.location.pathname);
+  },[articles]);
   const [dbLoading,setDbLoading] = useState(true);
   const [dbError,setDbError] = useState(null);
   const [lastSaved,setLastSaved] = useState(null);
@@ -5051,6 +5079,7 @@ export default function App() {
               <div style={{fontSize:11,color:"#aaa",fontWeight:600,textTransform:"uppercase",letterSpacing:1}}>Dynasty Central</div>
             </div>
             <div style={{display:"flex",gap:8,alignItems:"center"}}>
+              {!isEditingArticle&&<button onClick={()=>shareArticle(activeArticle)} style={{background:"transparent",border:"1px solid #444",color:"#aaa",borderRadius:2,padding:"5px 12px",cursor:"pointer",fontSize:13,fontFamily:ff}}>{shareCopied?"✓ Link Copied":"⤴ Share"}</button>}
               {commUnlocked&&!isEditingArticle&&<button onClick={()=>{setArticleEditText(activeArticle.text);setIsEditingArticle(true);}} style={{background:"transparent",border:"1px solid #444",color:"#aaa",borderRadius:2,padding:"5px 12px",cursor:"pointer",fontSize:13,fontFamily:ff}}>✎ Edit</button>}
               <button onClick={()=>setActiveArticle(null)} style={{background:"transparent",border:"1px solid #444",color:"#aaa",borderRadius:2,padding:"5px 12px",cursor:"pointer",fontSize:13,fontFamily:ff}}>✕ Close</button>
             </div>

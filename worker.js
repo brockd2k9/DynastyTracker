@@ -6,9 +6,77 @@ const MAX_OUTPUT_TOKENS_TEXT   = 1500;  // article generation cap
 const MAX_OUTPUT_TOKENS_VISION = 800;   // box score scan cap
 const MAX_IMAGE_BYTES  = 2_000_000; // reject images over ~2MB base64
 
+// ── Article sharing (GroupMe/Discord/iMessage link unfurling) ──────────────
+// These apps fetch the raw URL server-side and read <meta property="og:..">
+// tags before any JS runs, so the share target has to be rendered here, not
+// in the React app. /a/:id serves that landing page (thumbnail + headline,
+// then redirects real visitors into the app); /a/:id/image decodes the
+// article's stored base64 image into a real fetchable URL, since og:image
+// needs an actual URL — a data: URI won't unfurl in any of these apps.
+const SUPA_URL = "https://uyaqmdljwwslskoqxvpn.supabase.co";
+const SUPA_KEY = "sb_publishable_GNVG6TW43VXjW7IhWcBtmA_L_mMok1C";
+
+async function fetchArticleById(id) {
+  const r = await fetch(`${SUPA_URL}/rest/v1/dynasty_state?id=eq.main&select=articles`, {
+    headers: { apikey: SUPA_KEY, Authorization: `Bearer ${SUPA_KEY}` },
+  });
+  if (!r.ok) return null;
+  const rows = await r.json();
+  const articles = rows?.[0]?.articles || [];
+  return articles.find(a => String(a.id) === String(id)) || null;
+}
+
+function articleHeadline(text) {
+  return (text||"").split("\n").map(l=>l.trim()).find(l=>l.length>0) || (text||"").slice(0,80) || "";
+}
+
+function escapeHtml(s) {
+  return String(s||"").replace(/&/g,"&amp;").replace(/</g,"&lt;").replace(/>/g,"&gt;").replace(/"/g,"&quot;");
+}
+
 export default {
   async fetch(request, env) {
     const url = new URL(request.url);
+
+    const shareMatch = url.pathname.match(/^\/a\/([^/]+)$/);
+    if (shareMatch && request.method === "GET") {
+      const article = await fetchArticleById(shareMatch[1]);
+      if (!article) return new Response("Article not found", { status: 404 });
+      const headline = escapeHtml(articleHeadline(article.text));
+      const lines = (article.text||"").split("\n").map(l=>l.trim()).filter(Boolean);
+      const desc = escapeHtml(lines[1] || `${article.label||"Dynasty Central"} · ${article.reporter||""}`);
+      const imageUrl = article.imageUrl ? `${url.origin}/a/${shareMatch[1]}/image` : `${url.origin}/jackedupdynastywhite.png`;
+      const pageUrl = `${url.origin}/a/${shareMatch[1]}`;
+      const appUrl = `${url.origin}/?article=${encodeURIComponent(shareMatch[1])}`;
+      const html = `<!DOCTYPE html><html><head><meta charset="UTF-8">
+<title>${headline}</title>
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<meta property="og:title" content="${headline}">
+<meta property="og:description" content="${desc}">
+<meta property="og:image" content="${imageUrl}">
+<meta property="og:type" content="article">
+<meta property="og:url" content="${pageUrl}">
+<meta name="twitter:card" content="summary_large_image">
+<meta name="twitter:title" content="${headline}">
+<meta name="twitter:description" content="${desc}">
+<meta name="twitter:image" content="${imageUrl}">
+<meta http-equiv="refresh" content="0; url=${appUrl}">
+</head><body>
+<script>location.replace(${JSON.stringify(appUrl)});</script>
+<p>Redirecting to <a href="${appUrl}">${headline}</a>…</p>
+</body></html>`;
+      return new Response(html, { headers: { "Content-Type": "text/html; charset=UTF-8" } });
+    }
+
+    const imgMatch = url.pathname.match(/^\/a\/([^/]+)\/image$/);
+    if (imgMatch && request.method === "GET") {
+      const article = await fetchArticleById(imgMatch[1]);
+      const dataUri = article?.imageUrl || "";
+      const parsed = dataUri.match(/^data:([^;]+);base64,(.*)$/s);
+      if (!parsed) return new Response("Not found", { status: 404 });
+      const bytes = Uint8Array.from(atob(parsed[2]), c => c.charCodeAt(0));
+      return new Response(bytes, { headers: { "Content-Type": parsed[1], "Cache-Control": "public, max-age=31536000, immutable" } });
+    }
 
     if (url.pathname === "/.netlify/functions/claude" && request.method === "POST") {
       try {
