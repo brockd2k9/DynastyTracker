@@ -4,7 +4,7 @@
 const MAX_INPUT_CHARS  = 24000;   // ~6,000 tokens — hard cap on prompt length
 const MAX_OUTPUT_TOKENS_TEXT   = 1500;  // article generation cap
 const MAX_OUTPUT_TOKENS_VISION = 800;   // box score scan cap
-const MAX_IMAGE_BYTES  = 1_000_000; // reject images over ~1MB base64
+const MAX_IMAGE_BYTES  = 2_000_000; // reject images over ~2MB base64
 
 export default {
   async fetch(request, env) {
