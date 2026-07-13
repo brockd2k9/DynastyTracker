@@ -4,6 +4,27 @@ const CORS_HEADERS = {
   "Access-Control-Allow-Headers": "Content-Type",
 };
 
+// Extract the first balanced {...} object from text, ignoring braces inside quoted strings.
+// More robust than a greedy regex when the model adds stray commentary containing "}" characters.
+function extractJsonObject(text) {
+  const start = text.indexOf("{");
+  if (start === -1) return text;
+  let depth = 0, inStr = false, esc = false;
+  for (let i = start; i < text.length; i++) {
+    const c = text[i];
+    if (inStr) {
+      if (esc) esc = false;
+      else if (c === "\\") esc = true;
+      else if (c === '"') inStr = false;
+      continue;
+    }
+    if (c === '"') { inStr = true; continue; }
+    if (c === "{") depth++;
+    else if (c === "}") { depth--; if (depth === 0) return text.slice(start, i + 1); }
+  }
+  return text.slice(start);
+}
+
 const SCOREBOARD_SYSTEM =
   "You are parsing a College Football 27 video game screenshot. The screenshot may show " +
   "either a live scoreboard or a post-game box score screen. " +
@@ -21,16 +42,16 @@ const SCOREBOARD_SYSTEM =
   "home_team is the team on the left or listed as home; away_team is on the right or listed as away.";
 
 const SCHEDULE_SYSTEM =
-  "You are parsing a College Football 27 video game dynasty schedule screenshot. " +
-  "The valid dynasty team names are provided in the teams array. " +
-  "Extract every visible week and its matchups. For each week, identify every dynasty team " +
-  "and their opponent. If the opponent is another dynasty team, use their exact name from " +
-  "the teams list. If the opponent is a non-dynasty CPU-controlled team, write 'CPU'. " +
-  "If it is a bye week, write 'BYE'. " +
-  "Return ONLY valid JSON in exactly this format with no extra text or markdown: " +
-  "{\"1\":{\"TeamA\":\"TeamB\",\"TeamB\":\"TeamA\"},\"2\":{\"TeamA\":\"CPU\"},\"3\":{\"TeamA\":\"BYE\"}} " +
-  "Use only week numbers as keys (integers as strings). Only include weeks and teams " +
-  "visible in the image. Match all team names to the closest entry in the teams list.";
+  "You are transcribing a College Football 27 video game dynasty schedule screenshot. " +
+  "Do not try to judge which teams are user-controlled dynasty teams vs CPU-controlled teams " +
+  "— that decision is made separately, outside of this task. Just transcribe exactly what is " +
+  "shown. For every matchup visible in the image, write down both team names exactly as " +
+  "displayed (verbatim — do not abbreviate, expand, or normalize any name). " +
+  "If a team has a bye week (no opponent shown), use 'BYE' for that entry. " +
+  "Respond with ONLY the JSON object below and nothing else — no explanation, no reasoning, " +
+  "no markdown fences: " +
+  "{\"1\":{\"TeamA\":\"TeamB\",\"TeamB\":\"TeamA\"},\"3\":{\"TeamC\":\"BYE\"}} " +
+  "Use only week numbers as keys (integers as strings). Only include weeks and teams visible in the image.";
 
 export default {
   async fetch(request, env) {
@@ -67,7 +88,7 @@ export default {
     const systemPrompt = isSchedule ? SCHEDULE_SYSTEM : SCOREBOARD_SYSTEM;
     const teamsText = teams.length > 0 ? `\n\nValid team names: ${teams.join(", ")}` : "";
     const userText = isSchedule
-      ? `Parse this schedule screenshot and return JSON.${teamsText}`
+      ? `Transcribe this schedule screenshot and return JSON.`
       : `Parse this scoreboard screenshot and return JSON.${teamsText}`;
     const maxTokens = isSchedule ? 2000 : 512;
 
@@ -105,8 +126,8 @@ export default {
     // Strip markdown code fences if present
     const cleaned = rawText.replace(/^```(?:json)?\s*/i, "").replace(/\s*```$/, "").trim();
 
-    // For schedule, extract just the outermost JSON object in case of extra text
-    const toparse = isSchedule ? (cleaned.match(/\{[\s\S]*\}/)?.[0] ?? cleaned) : cleaned;
+    // For schedule, extract just the outermost balanced JSON object in case of extra text
+    const toparse = isSchedule ? extractJsonObject(cleaned) : cleaned;
 
     let parsed;
     try {

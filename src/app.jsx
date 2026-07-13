@@ -175,6 +175,50 @@ function extractJsonObject(text) {
   return text.slice(start);
 }
 
+// ── Team name matching for schedule scans ────────────────────────────────
+// The vision model reliably transcribes team names but is unreliable at judging
+// "is this abbreviation the same school as my roster entry" (e.g. "Washington State"
+// in-game vs "Washington St" on the roster) — so that decision is made here in plain,
+// testable JS instead of leaving it to model judgment.
+function normalizeTeamWords(s) {
+  return (s || "")
+    .normalize("NFD").replace(/[̀-ͯ]/g, "") // strip diacritics
+    .toLowerCase()
+    .replace(/['‘’ʼʻ`´]/g, "") // strip apostrophe variants (e.g. Hawai'i)
+    .replace(/[^a-z0-9\s]/g, " ")
+    .replace(/\bstate\b/g, "st")
+    .split(/\s+/)
+    .filter(Boolean);
+}
+function teamWordsMatch(a, b) {
+  if (a === b) return true;
+  return a.length >= 3 && b.length >= 3 && (a.startsWith(b) || b.startsWith(a));
+}
+function teamWordCoverage(rawWords, rosterWords) {
+  if (!rawWords.length || !rosterWords.length) return 0;
+  let ri = 0, matched = 0;
+  for (const rw of rosterWords) {
+    let found = false;
+    for (let i = ri; i < rawWords.length; i++) {
+      if (teamWordsMatch(rw, rawWords[i])) { ri = i + 1; found = true; matched++; break; }
+    }
+    if (!found) return 0;
+  }
+  return matched / rosterWords.length;
+}
+// Returns the matching roster team name, or null if rawName doesn't correspond to any dynasty team
+// (i.e. it's a non-dynasty CPU opponent). Requires full word coverage in either direction.
+function matchDynastyTeam(rawName, teamNames) {
+  const rawWords = normalizeTeamWords(rawName);
+  let best = null, bestScore = 0;
+  for (const t of teamNames) {
+    const rosterWords = normalizeTeamWords(t);
+    const score = Math.max(teamWordCoverage(rawWords, rosterWords), teamWordCoverage(rosterWords, rawWords));
+    if (score > bestScore) { bestScore = score; best = t; }
+  }
+  return bestScore >= 1.0 ? best : null;
+}
+
 function calcTotal(t) {
   if (t.historicalTotal !== undefined) return t.historicalTotal;
   return (t.gamePts||0)+(t.rankedBonusPts||0)+(t.confStandPts||0)+(t.confChampPts||0)+(t.bowlPts||0)+(t.recruitingPts||0)+(t.prestigePts||0)+(t.heismanPts||0);
@@ -530,11 +574,12 @@ function SchedulePanel({entries,schedule,setSchedule}) {
           const w = parseInt(wk);
           if (w < 1 || w > 12) return;
           ns[w] = {...(ns[w]||{})};
-          Object.entries(matchups).forEach(([team, opp]) => {
-            const matchedTeam = teamNames.find(t => t.toLowerCase() === team.toLowerCase()) || team;
-            const matchedOpp = (opp === "BYE" || isCPUOpp(opp)) ? opp : (teamNames.find(t => t.toLowerCase() === opp.toLowerCase()) || opp);
-            if (teamNames.includes(matchedTeam)) { ns[w][matchedTeam] = matchedOpp; filled++; }
-            if (!isCPUOpp(matchedOpp) && matchedOpp !== "BYE" && teamNames.includes(matchedOpp)) ns[w][matchedOpp] = matchedTeam;
+          Object.entries(matchups).forEach(([rawTeam, rawOpp]) => {
+            const matchedTeam = matchDynastyTeam(rawTeam, teamNames);
+            if (!matchedTeam) return;
+            const matchedOpp = rawOpp === "BYE" ? "BYE" : (matchDynastyTeam(rawOpp, teamNames) || ("CPU:" + rawOpp));
+            ns[w][matchedTeam] = matchedOpp; filled++;
+            if (!isCPUOpp(matchedOpp) && matchedOpp !== "BYE") ns[w][matchedOpp] = matchedTeam;
           });
         });
         return ns;
@@ -658,8 +703,7 @@ function SchedulePanel({entries,schedule,setSchedule}) {
                 setWeekParsing(true); setWeekParseResult("");
                 try{
                   const b64=await new Promise((res,rej)=>{const r=new FileReader();r.onload=()=>res(r.result.split(",")[1]);r.onerror=rej;r.readAsDataURL(file);});
-                  const teamsText=teamNames.length>0?`\n\nValid dynasty team names: ${teamNames.join(", ")}`:"";
-                  const prompt=`You are parsing a College Football 27 dynasty schedule screenshot. Extract every visible week and its matchups. For each week, identify every dynasty team and their opponent. If the opponent is another dynasty team use their exact name. If the opponent is a non-dynasty CPU team write "CPU". If it is a bye week write "BYE". Return ONLY valid JSON in exactly this format with no extra text or markdown: {"1":{"TeamA":"TeamB","TeamB":"TeamA"},"2":{"TeamA":"CPU"},"3":{"TeamA":"BYE"}} Use only week numbers as keys. Only include weeks and teams visible in the image. Match all team names to the closest entry in the teams list.${teamsText}`;
+                  const prompt=`You are transcribing a College Football 27 dynasty schedule screenshot. Do not try to judge which teams are user-controlled vs CPU-controlled — just transcribe exactly what is shown. For every matchup visible in the image, write down both team names exactly as displayed (verbatim — do not abbreviate, expand, or normalize any name). If a team has a bye week (no opponent shown), use "BYE" for that entry. Respond with ONLY the JSON object below and nothing else — no explanation, no reasoning, no markdown fences: {"1":{"TeamA":"TeamB","TeamB":"TeamA"},"3":{"TeamC":"BYE"}} Use only week numbers as keys (integers as strings). Only include weeks and teams visible in the image.`;
                   const rawText=await callClaudeVision(b64,file.type||"image/jpeg",prompt);
                   const cleaned=rawText.replace(/^```(?:json)?\s*/i,"").replace(/\s*```$/,"").trim();
                   const jsonStr=extractJsonObject(cleaned);
@@ -670,11 +714,12 @@ function SchedulePanel({entries,schedule,setSchedule}) {
                     Object.entries(parsed).forEach(([wk,matchups])=>{
                       const w=parseInt(wk);
                       ns[w]={...(ns[w]||{})};
-                      Object.entries(matchups).forEach(([team,opp])=>{
-                        const mt=teamNames.find(t=>t.toLowerCase()===team.toLowerCase())||team;
-                        const mo=(opp==="BYE"||isCPUOpp(opp))?opp:(teamNames.find(t=>t.toLowerCase()===opp.toLowerCase())||opp);
-                        if(teamNames.includes(mt)){ns[w][mt]=mo;filled++;}
-                        if(!isCPUOpp(mo)&&mo!=="BYE"&&teamNames.includes(mo))ns[w][mo]=mt;
+                      Object.entries(matchups).forEach(([rawTeam,rawOpp])=>{
+                        const mt=matchDynastyTeam(rawTeam,teamNames);
+                        if(!mt)return; // not one of our dynasty teams — skip rather than corrupt the schedule
+                        const mo=rawOpp==="BYE"?"BYE":(matchDynastyTeam(rawOpp,teamNames)||("CPU:"+rawOpp));
+                        ns[w][mt]=mo; filled++;
+                        if(!isCPUOpp(mo)&&mo!=="BYE")ns[w][mo]=mt;
                       });
                     });
                     return ns;
