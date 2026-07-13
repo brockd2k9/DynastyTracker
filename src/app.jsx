@@ -1284,14 +1284,13 @@ function ScheduleTab({schedule,entries,week,season,setupRows}) {
     );
   }
 
-  // Per-team schedule with result lookup
+  // Per-team schedule with result lookup — a week with no entry for this team is an implicit bye
   function getTeamSchedule(teamName) {
     return weeks.map(w=>{
-      const opp=schedule[w]?.[teamName];
-      if(!opp)return null;
+      const opp=schedule[w]?.[teamName]||"BYE";
       const log=resultLookup[teamName]?.[w]||null;
       return{week:w,opp,log};
-    }).filter(Boolean);
+    });
   }
 
   if(!weeks.length) return <Card style={{padding:20,textAlign:"center",color:"#888",fontSize:13}}>No schedule set up yet. Add matchups in Commissioner Mode.</Card>;
