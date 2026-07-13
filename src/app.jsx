@@ -71,8 +71,7 @@ const FIXED_CATS = [
 const START_YEAR = 2024;
 const PASS = "RatedRKO99";
 const MODEL = "claude-sonnet-4-6";
-const ANTHROPIC_URL = "https://api.anthropic.com/v1/messages";
-const ANTHROPIC_HEADERS = (key) => ({"Content-Type":"application/json","x-api-key":key,"anthropic-version":"2023-06-01","anthropic-dangerous-direct-browser-access":"true"});
+const WORKER_PROXY = "/.netlify/functions/claude";
 
 // sonnet-4-6 pricing: $3/MTok input, $15/MTok output
 const COST_PER_INPUT_TOKEN = 3 / 1_000_000;
@@ -187,23 +186,18 @@ function articleHeadline(text) {
 
 async function callClaudeVision(imageBase64, mediaType, prompt) {
   if (_claudeInFlight) { console.warn("[callClaudeVision] Call already in flight — skipped"); return ""; }
-  const apiKey = import.meta.env.VITE_ANTHROPIC_KEY;
-  if (!apiKey) throw new Error("API key not configured — add VITE_ANTHROPIC_KEY to GitHub repo secrets.");
   const safePrompt = _checkSafeguards(prompt);
   _claudeInFlight = true;
   _sessionCallCount++;
   try {
-    const r = await fetch(ANTHROPIC_URL, {
+    const r = await fetch(WORKER_PROXY, {
       method:"POST",
-      headers:ANTHROPIC_HEADERS(apiKey),
-      body:JSON.stringify({model:MODEL,max_tokens:1024,messages:[{role:"user",content:[
-        {type:"image",source:{type:"base64",media_type:mediaType,data:imageBase64}},
-        {type:"text",text:safePrompt}
-      ]}]}),
+      headers:{"Content-Type":"application/json"},
+      body:JSON.stringify({prompt:safePrompt, max_tokens:1024, image:{data:imageBase64, media_type:mediaType}}),
     });
-    if (!r.ok){const e=await r.json().catch(()=>({}));throw new Error(e?.error?.message||`API error ${r.status}`);}
+    if (!r.ok){const e=await r.json().catch(()=>({}));throw new Error(e?.error||`API error ${r.status}`);}
     const data = await r.json();
-    const outputText = data.content?.[0]?.text||"";
+    const outputText = data.text||"";
     _logCost("Vision/scorecard scan", _estimateTokens(safePrompt) + 300, _estimateTokens(outputText));
     return outputText;
   } finally {
@@ -214,27 +208,22 @@ async function callClaudeVision(imageBase64, mediaType, prompt) {
 
 async function callClaude(prompt) {
   if (_claudeInFlight) { console.warn("[callClaude] Call already in flight — skipped"); return ""; }
-  const apiKey = import.meta.env.VITE_ANTHROPIC_KEY;
-  if (!apiKey) throw new Error("API key not configured — add VITE_ANTHROPIC_KEY to GitHub repo secrets.");
   const safePrompt = _checkSafeguards(prompt);
   _claudeInFlight = true;
   _sessionCallCount++;
   try {
     const timeoutId = { ref: null };
     const timeout = new Promise((_,reject)=>{ timeoutId.ref = setTimeout(()=>reject(new Error("Request timed out after 45s")),45000); });
-    const req = fetch(ANTHROPIC_URL, {
+    const req = fetch(WORKER_PROXY, {
       method:"POST",
-      headers:ANTHROPIC_HEADERS(apiKey),
-      body:JSON.stringify({model:MODEL,max_tokens:4096,messages:[{role:"user",content:safePrompt}]}),
+      headers:{"Content-Type":"application/json"},
+      body:JSON.stringify({prompt:safePrompt, max_tokens:4096}),
     });
     const r = await Promise.race([req, timeout]);
     clearTimeout(timeoutId.ref);
-    if (!r.ok) {
-      const err = await r.json().catch(()=>({}));
-      throw new Error(err?.error?.message || `API error ${r.status}`);
-    }
+    if (!r.ok) {const err=await r.json().catch(()=>({}));throw new Error(err?.error||`API error ${r.status}`);}
     const d = await r.json();
-    const outputText = d.content?.[0]?.text || "No content returned.";
+    const outputText = d.text || "No content returned.";
     _logCost("Article/text generation", _estimateTokens(safePrompt), _estimateTokens(outputText));
     return outputText;
   } finally {

@@ -8,7 +8,6 @@ export default {
         const body = await request.json();
         const { prompt, max_tokens = 1200, image } = body;
 
-        // Try both variable names in case user set it differently in Cloudflare
         const apiKey = env.VITE_ANTHROPIC_KEY || env.ANTHROPIC_KEY || env.ANTHROPIC_API_KEY;
 
         if (!apiKey) {
@@ -30,7 +29,7 @@ export default {
             "anthropic-version": "2023-06-01",
           },
           body: JSON.stringify({
-            model: "claude-haiku-4-5-20251001",
+            model: "claude-sonnet-4-6",
             max_tokens,
             messages,
           }),
