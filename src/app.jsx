@@ -4247,7 +4247,7 @@ export default function App() {
         if (migratedSetup) setSetup(migratedSetup);
         if (row.season) setSeason(row.season);
         if (row.setup?.currentYear) setYear(row.setup.currentYear);
-        if (row.week) setWeek(row.week);
+        if (row.week != null) setWeek(row.week);
         if (migratedEntries) { if (migratedEntries.length) setEntries(migratedEntries); }
         if (row.history) { if (row.history.length) setHistory(row.history); }
         if (row.post_season_inputs) setPSI(row.post_season_inputs);
