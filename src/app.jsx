@@ -458,6 +458,9 @@ function SchedulePanel({entries,schedule,setSchedule}) {
   const [schedImgPreview,setSchedImgPreview] = useState(null);
   const [schedParsing,setSchedParsing] = useState(false);
   const [schedResult,setSchedResult] = useState("");
+  const [weekParsing,setWeekParsing] = useState(false);
+  const [weekParseResult,setWeekParseResult] = useState("");
+  const weekFileRef = useRef(null);
   const teamNames = (entries||[]).map(e=>e.teamName);
   const WEEKS = Array.from({length:14},(_,i)=>i);
   const POST_SEASON_LABELS = {14:"Conf. Champ",15:"Bowl Games",16:"Playoffs R1",17:"Playoffs R2",18:"Playoffs R3",19:"Natl. Champ"};
@@ -614,7 +617,45 @@ function SchedulePanel({entries,schedule,setSchedule}) {
           })}
         </div>
         <div style={{background:"#f9f9f9",border:"1px solid #eee",borderRadius:3,padding:14,marginBottom:14}}>
-          <div style={{fontSize:12,fontWeight:800,color:"#111",marginBottom:10,textTransform:"uppercase",letterSpacing:0.5}}>{POST_SEASON_LABELS[editWeek]||`Week ${editWeek}`} Matchups</div>
+          <div style={{display:"flex",alignItems:"center",gap:10,marginBottom:10,flexWrap:"wrap"}}>
+            <div style={{fontSize:12,fontWeight:800,color:"#111",textTransform:"uppercase",letterSpacing:0.5,flex:1}}>{POST_SEASON_LABELS[editWeek]||`Week ${editWeek}`} Matchups</div>
+            <label style={{background:weekParsing?"#ccc":RED,color:"#fff",fontSize:11,fontWeight:700,padding:"6px 12px",borderRadius:2,cursor:weekParsing?"wait":"pointer",fontFamily:ff,textTransform:"uppercase",letterSpacing:0.5,whiteSpace:"nowrap",opacity:weekParsing?0.7:1}}>
+              {weekParsing?"Scanning...":"📷 Scan Schedule"}
+              <input ref={weekFileRef} type="file" accept="image/*" style={{display:"none"}} disabled={weekParsing} onChange={async e=>{
+                const file=e.target.files?.[0]; if(!file)return;
+                setWeekParsing(true); setWeekParseResult("");
+                try{
+                  const b64=await new Promise((res,rej)=>{const r=new FileReader();r.onload=()=>res(r.result.split(",")[1]);r.onerror=rej;r.readAsDataURL(file);});
+                  const resp=await fetch("https://dynasty-api.brockdrury.workers.dev/api/parse-screenshot",{
+                    method:"POST",headers:{"Content-Type":"application/json"},
+                    body:JSON.stringify({image:b64,mediaType:file.type||"image/jpeg",teams:teamNames,type:"schedule"}),
+                  });
+                  if(!resp.ok){const err=await resp.json().catch(()=>({}));throw new Error(err?.error||`API error ${resp.status}`);}
+                  const parsed=await resp.json();
+                  let filled=0;
+                  setSchedule(prev=>{
+                    const ns={...prev};
+                    Object.entries(parsed).forEach(([wk,matchups])=>{
+                      const w=parseInt(wk);
+                      ns[w]={...(ns[w]||{})};
+                      Object.entries(matchups).forEach(([team,opp])=>{
+                        const mt=teamNames.find(t=>t.toLowerCase()===team.toLowerCase())||team;
+                        const mo=opp==="CPU"||opp==="BYE"?opp:(teamNames.find(t=>t.toLowerCase()===opp.toLowerCase())||opp);
+                        if(teamNames.includes(mt)){ns[w][mt]=mo;filled++;}
+                        if(mo!=="CPU"&&mo!=="BYE"&&teamNames.includes(mo))ns[w][mo]=mt;
+                      });
+                    });
+                    return ns;
+                  });
+                  const weeks=Object.keys(parsed);
+                  if(weeks.length===1)setEditWeek(parseInt(weeks[0]));
+                  setWeekParseResult(`✅ Filled ${filled} matchups for week${weeks.length>1?"s":""}${weeks.length>1?" "+weeks.join(", "):""}.`);
+                }catch(err){setWeekParseResult("❌ "+err.message);}
+                finally{setWeekParsing(false);if(weekFileRef.current)weekFileRef.current.value="";}
+              }}/>
+            </label>
+          </div>
+          {weekParseResult&&<div style={{marginBottom:10,padding:"6px 10px",borderRadius:2,fontSize:12,background:"#f7f7f7",borderLeft:`3px solid ${weekParseResult.startsWith("✅")?"#007a00":RED}`,color:"#111"}}>{weekParseResult}</div>}
           <div style={{display:"flex",flexDirection:"column",gap:6}}>
             {teamNames.map(team=>{
               const opp=getOpp(editWeek,team);
