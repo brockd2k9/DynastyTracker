@@ -3168,7 +3168,8 @@ function EnterResultsPanel({entries,weekResults,setWeekResults,week,setWeek,appl
   }
   // Teams with no schedule entry (if schedule not fully set)
   const scheduledNames=new Set([...Object.keys(thisWeekSchedule),...byeTeams,...cpuTeams.map(c=>c.teamName),...confPairs.flat()]);
-  const unscheduled=entries.filter(e=>!scheduledNames.has(e.teamName)).map(e=>({teamName:e.teamName,cpuName:"CPU"}));
+  entries.filter(e=>!scheduledNames.has(e.teamName)).forEach(e=>byeTeams.push(e.teamName));
+  const unscheduled=[];
 
   async function handleBoxScoreUpload(t1Name,t2Name,e){
     const file=e.target.files?.[0]; if(!file) return;
