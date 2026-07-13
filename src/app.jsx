@@ -459,7 +459,7 @@ function SchedulePanel({entries,schedule,setSchedule}) {
   const [schedParsing,setSchedParsing] = useState(false);
   const [schedResult,setSchedResult] = useState("");
   const teamNames = (entries||[]).map(e=>e.teamName);
-  const WEEKS = Array.from({length:13},(_,i)=>i);
+  const WEEKS = Array.from({length:14},(_,i)=>i);
   const OPPONENTS = ["BYE","CPU",...teamNames];
   const SUPA_URL2 = "https://uyaqmdljwwslskoqxvpn.supabase.co";
   const SUPA_KEY2 = "sb_publishable_GNVG6TW43VXjW7IhWcBtmA_L_mMok1C";
@@ -574,7 +574,7 @@ function SchedulePanel({entries,schedule,setSchedule}) {
     <div style={{display:"flex",flexDirection:"column",gap:16}}>
       <Card style={{padding:16}}>
         <SL>Import Schedule from Screenshot</SL>
-        <p style={{fontSize:13,color:"#888",marginBottom:12,lineHeight:1.5}}>Take a screenshot of your dynasty schedule screen and Claude will read all 13 weeks automatically (including Week 0).</p>
+        <p style={{fontSize:13,color:"#888",marginBottom:12,lineHeight:1.5}}>Take a screenshot of your dynasty schedule screen and Claude will read all 14 weeks automatically (including Week 0).</p>
         <input type="file" accept="image/*" onChange={handleSchedImage} style={{color:"#111",fontSize:13,marginBottom:12,display:"block"}}/>
         {schedImgPreview&&<img src={schedImgPreview} alt="schedule preview" style={{maxWidth:"100%",maxHeight:180,borderRadius:2,border:"1px solid #ddd",marginBottom:12,display:"block"}}/>}
         <button onClick={parseScheduleImage} disabled={!schedImg||schedParsing} style={{background:schedImg&&!schedParsing?RED:"#ccc",color:"#fff",border:"none",borderRadius:2,padding:"9px 18px",cursor:schedImg&&!schedParsing?"pointer":"not-allowed",fontFamily:ff,fontSize:13,fontWeight:800,textTransform:"uppercase"}}>{schedParsing?"Reading Schedule...":"Parse Schedule →"}</button>
