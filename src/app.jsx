@@ -483,12 +483,17 @@ function pickGOTW(confGames, sorted) {
   }, null);
 }
 
-function WeekMatchupsCard({schedule,week,sorted,leagueName,season,setActiveArticle,articles,setArticles,commUnlocked}) {
+function WeekMatchupsCard({schedule,week,sorted,leagueName,season,setActiveArticle,articles,setArticles,commUnlocked,setupRows}) {
   const [generating,setGenerating] = useState(false);
 
   const games = buildGamesList(schedule, week);
   const confGames = games.filter(g => g.opp !== "BYE" && !isCPUOpp(g.opp));
   const gameOfWeek = pickGOTW(confGames, sorted);
+  const logoFor = teamName => {
+    const entry = sorted.find(t=>t.teamName===teamName);
+    if(!entry) return null;
+    return getPlayerImages(setupRows, entry.userId, entry.userName).teamLogo;
+  };
 
   const generateGOTWPreview = async () => {
     if(!gameOfWeek) return;
@@ -553,6 +558,7 @@ function WeekMatchupsCard({schedule,week,sorted,leagueName,season,setActiveArtic
           <div style={{padding:"14px 16px"}}>
             <div style={{display:"flex",alignItems:"center",gap:0,width:"100%",boxSizing:"border-box"}}>
               <div style={{flex:1,textAlign:"center",minWidth:0,overflow:"hidden"}}>
+                {logoFor(gameOfWeek.team1)&&<img src={logoFor(gameOfWeek.team1)} alt="" style={{height:36,width:"auto",maxWidth:"100%",objectFit:"contain",marginBottom:6}} onError={e=>{e.target.style.display="none";}}/>}
                 <div style={{fontSize:18,fontWeight:900,color:"#111",wordBreak:"break-word",lineHeight:1.2}}>{gameOfWeek.team1}</div>
                 <div style={{fontSize:11,color:"#888",marginTop:3}}>#{gameOfWeek.rank1} in Dynasty</div>
                 <div style={{fontSize:12,color:"#555",marginTop:2}}>{sorted.find(t=>t.teamName===gameOfWeek.team1)?.wins||0}W-{sorted.find(t=>t.teamName===gameOfWeek.team1)?.losses||0}L</div>
@@ -562,6 +568,7 @@ function WeekMatchupsCard({schedule,week,sorted,leagueName,season,setActiveArtic
                 <div style={{fontSize:10,color:"#aaa",marginTop:4,fontWeight:600}}>Conf</div>
               </div>
               <div style={{flex:1,textAlign:"center",minWidth:0,overflow:"hidden"}}>
+                {logoFor(gameOfWeek.team2)&&<img src={logoFor(gameOfWeek.team2)} alt="" style={{height:36,width:"auto",maxWidth:"100%",objectFit:"contain",marginBottom:6}} onError={e=>{e.target.style.display="none";}}/>}
                 <div style={{fontSize:18,fontWeight:900,color:"#111",wordBreak:"break-word",lineHeight:1.2}}>{gameOfWeek.team2}</div>
                 <div style={{fontSize:11,color:"#888",marginTop:3}}>#{gameOfWeek.rank2} in Dynasty</div>
                 <div style={{fontSize:12,color:"#555",marginTop:2}}>{sorted.find(t=>t.teamName===gameOfWeek.team2)?.wins||0}W-{sorted.find(t=>t.teamName===gameOfWeek.team2)?.losses||0}L</div>
@@ -588,7 +595,17 @@ function WeekMatchupsCard({schedule,week,sorted,leagueName,season,setActiveArtic
                   ?<><span style={{fontSize:13,fontWeight:600,color:"#888",flex:1,minWidth:0,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{team}</span><span style={{fontSize:11,color:"#aaa",background:"#f5f5f5",borderRadius:2,padding:"2px 8px",flexShrink:0}}>BYE</span></>
                   :isCPUOpp(opp)
                   ?<><span style={{fontSize:13,fontWeight:700,color:"#111",flex:1,minWidth:0,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{team}</span><span style={{fontSize:10,fontWeight:800,color:"#bbb",padding:"0 8px",flexShrink:0}}>VS</span><span style={{fontSize:13,fontWeight:600,color:"#888",flex:1,minWidth:0,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{formatOpp(opp)}</span></>
-                  :<><span style={{fontSize:13,fontWeight:isGOTW?800:700,color:"#111",flex:1,minWidth:0,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap",textAlign:"right"}}>{team}</span><div style={{padding:"0 10px",textAlign:"center",flexShrink:0}}><span style={{fontSize:10,fontWeight:900,color:isGOTW?"#1a3a6b":"#bbb",letterSpacing:1}}>VS</span></div><span style={{fontSize:13,fontWeight:isGOTW?800:700,color:"#111",flex:1,minWidth:0,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{opp}</span></>
+                  :<>
+                      <span style={{flex:1,minWidth:0,display:"flex",alignItems:"center",justifyContent:"flex-end",gap:6,overflow:"hidden"}}>
+                        <span style={{fontSize:13,fontWeight:isGOTW?800:700,color:"#111",overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap",textAlign:"right"}}>{team}</span>
+                        {logoFor(team)&&<img src={logoFor(team)} alt="" style={{height:20,width:20,objectFit:"contain",flexShrink:0}} onError={e=>{e.target.style.display="none";}}/>}
+                      </span>
+                      <div style={{padding:"0 10px",textAlign:"center",flexShrink:0}}><span style={{fontSize:10,fontWeight:900,color:isGOTW?"#1a3a6b":"#bbb",letterSpacing:1}}>VS</span></div>
+                      <span style={{flex:1,minWidth:0,display:"flex",alignItems:"center",gap:6,overflow:"hidden"}}>
+                        {logoFor(opp)&&<img src={logoFor(opp)} alt="" style={{height:20,width:20,objectFit:"contain",flexShrink:0}} onError={e=>{e.target.style.display="none";}}/>}
+                        <span style={{fontSize:13,fontWeight:isGOTW?800:700,color:"#111",overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{opp}</span>
+                      </span>
+                    </>
                 }
               </div>
             );
@@ -4949,7 +4966,7 @@ export default function App() {
             <FeaturedCarousel articles={articles} setActiveArticle={setActiveArticle} RED={RED} ff={ff}/>
 
             {/* This week's matchups */}
-            {schedule&&schedule[week]&&Object.keys(schedule[week]).length>0&&<WeekMatchupsCard schedule={schedule} week={week} sorted={sorted} leagueName={leagueName} season={season} setActiveArticle={setActiveArticle} articles={articles} setArticles={setArticles} commUnlocked={commUnlocked}/>}
+            {schedule&&schedule[week]&&Object.keys(schedule[week]).length>0&&<WeekMatchupsCard schedule={schedule} week={week} sorted={sorted} leagueName={leagueName} season={season} setActiveArticle={setActiveArticle} articles={articles} setArticles={setArticles} commUnlocked={commUnlocked} setupRows={setup?.rows}/>}
 
             {/* Current standings summary */}
             <Card style={{overflow:"hidden"}}>
@@ -4992,7 +5009,7 @@ export default function App() {
           </>)}
 
           {tab==="Standings"&&(<>
-            {schedule&&schedule[week]&&Object.keys(schedule[week]).length>0&&<WeekMatchupsCard schedule={schedule} week={week} sorted={sorted} leagueName={leagueName} season={season} setActiveArticle={setActiveArticle} articles={articles} setArticles={setArticles} commUnlocked={commUnlocked}/>}
+            {schedule&&schedule[week]&&Object.keys(schedule[week]).length>0&&<WeekMatchupsCard schedule={schedule} week={week} sorted={sorted} leagueName={leagueName} season={season} setActiveArticle={setActiveArticle} articles={articles} setArticles={setArticles} commUnlocked={commUnlocked} setupRows={setup?.rows}/>}
 
             {/* Mobile: latest article teaser */}
             {isMobile&&articles.length>0&&(
