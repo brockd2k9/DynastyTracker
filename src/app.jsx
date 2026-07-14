@@ -1773,11 +1773,13 @@ function ProfileTab({history,setupRows,currentEntries,season,year,permanentUsers
     const bowlAppearances=bowlWins+bowlLosses;
     const careerTop25Wins=seasons.reduce((a,s)=>a+(s.top25Wins||0),0)+allWeekLogs.filter(w=>w.result==="win"&&w.ranked25&&!w.ranked10).length;
     const careerTop10Wins=seasons.reduce((a,s)=>a+(s.top10Wins||0),0)+allWeekLogs.filter(w=>w.result==="win"&&w.ranked10).length;
+    const forfeitWins=allWeekLogs.filter(w=>w.forfeit&&w.result==="win").length;
+    const forfeitLosses=allWeekLogs.filter(w=>w.forfeit&&w.result==="loss").length;
     // H2H - merge across all seasons + current
     const h2hMerged={};
     [...seasons.map(s=>s.h2h||{}),(cur?.h2h||{})].forEach(h2h=>{Object.entries(h2h).forEach(([opp,rec])=>{if(!h2hMerged[opp])h2hMerged[opp]={wins:0,losses:0};h2hMerged[opp].wins+=(rec.wins||0);h2hMerged[opp].losses+=(rec.losses||0);});});
     const ptBreakdown={game:seasons.reduce((a,s)=>a+(s.gamePts||0),0)+(cur?.gamePts||0),bonus:seasons.reduce((a,s)=>a+(s.rankedBonusPts||0),0)+(cur?.rankedBonusPts||0),conf:seasons.reduce((a,s)=>a+(s.confStandPts||0),0)+(cur?.confStandPts||0),cc:seasons.reduce((a,s)=>a+(s.confChampPts||0),0)+(cur?.confChampPts||0),bowl:seasons.reduce((a,s)=>a+(s.bowlPts||0),0)+(cur?.bowlPts||0),rec:seasons.reduce((a,s)=>a+(s.recruitingPts||0),0)+(cur?.recruitingPts||0),awards:seasons.reduce((a,s)=>a+(s.prestigePts||0)+(s.heismanPts||0),0)+((cur?.prestigePts||0)+(cur?.heismanPts||0))};
-    return{seasons,cur,totalWins,totalLosses,totalPts,championships,confTitles,heismans,nattyWins,bestFinish,longestWin,longestLoss,curStreak,curStreakType,rankedWins,top10Wins,winPct,h2hMerged,ptBreakdown,careerPlayoffWins,careerPlayoffLosses,bowlWins,bowlLosses,bowlAppearances,careerTop25Wins,careerTop10Wins};
+    return{seasons,cur,totalWins,totalLosses,totalPts,championships,confTitles,heismans,nattyWins,bestFinish,longestWin,longestLoss,curStreak,curStreakType,rankedWins,top10Wins,winPct,h2hMerged,ptBreakdown,careerPlayoffWins,careerPlayoffLosses,bowlWins,bowlLosses,bowlAppearances,careerTop25Wins,careerTop10Wins,forfeitWins,forfeitLosses};
   }
 
 
@@ -1837,6 +1839,10 @@ function ProfileTab({history,setupRows,currentEntries,season,year,permanentUsers
               <SB label="Win Streak" val={profile.longestWin+"G"} color="#007a00"/>
               <SB label="Loss Streak" val={profile.longestLoss+"G"} color={RED}/>
             </div></div>
+            {(profile.forfeitWins>0||profile.forfeitLosses>0)&&<div><SL>Forfeits</SL><div style={{display:"grid",gridTemplateColumns:isMobile?"1fr 1fr":"repeat(auto-fill,minmax(110px,1fr))",gap:8}}>
+              <SB label="Forfeit Wins" val={profile.forfeitWins} color="#b8860b"/>
+              <SB label="Forfeit Losses" val={profile.forfeitLosses} color="#b8860b"/>
+            </div></div>}
           </div>}
 
           {pTab==="h2h"&&<div>
@@ -1894,7 +1900,7 @@ function ProfileTab({history,setupRows,currentEntries,season,year,permanentUsers
                           <tbody>{s.weekLog.map((w,i)=>(
                             <tr key={i} style={{borderBottom:"1px solid #f0f0f0",background:w.result==="win"?"#f0f8f0":"#fff8f8"}}>
                               <td style={{padding:"7px 12px",textAlign:"center",color:"#888"}}>Wk {w.week}</td>
-                              <td style={{padding:"7px 12px",textAlign:"center",fontWeight:800,color:w.result==="win"?"#007a00":RED,textTransform:"uppercase"}}>{w.result}</td>
+                              <td style={{padding:"7px 12px",textAlign:"center",fontWeight:800,color:w.result==="win"?"#007a00":RED,textTransform:"uppercase"}}>{w.result}{w.forfeit&&" (F)"}</td>
                               <td style={{padding:"7px 12px",textAlign:"center",color:w.ranked10?RED:w.ranked25?"#cc7700":"#ccc"}}>{w.ranked10?"Top 10":w.ranked25?"Top 25":"Unranked"}</td>
                               <td style={{padding:"7px 12px",textAlign:"center",color:RED,fontWeight:700}}>+{w.pts}</td>
                             </tr>
@@ -1943,7 +1949,7 @@ function ProfileTab({history,setupRows,currentEntries,season,year,permanentUsers
                   <SB label="Best Season Streak" val={bestSSnLen>0?bestSSnLen+"W":"—"} color="#007a00" sub={bestSSnLen>0?`${bestSSnTeam} · ${bestSSnYear}`:""}/>
                 </div>
               </div>
-              {profile.cur?.weekLog?.length>0&&<div><SL>Current Season Game Log</SL><table style={{width:"100%",borderCollapse:"collapse",fontSize:13}}><thead><tr style={{borderBottom:`2px solid ${RED}`,background:"#f7f7f7"}}>{["Week","Result","Opponent","Opp Rank","Pts"].map(h=><th key={h} style={{padding:"7px 8px",textAlign:"center",color:"#555",fontSize:9,letterSpacing:1,textTransform:"uppercase",fontWeight:700}}>{h}</th>)}</tr></thead><tbody>{profile.cur.weekLog.map((w,i)=><tr key={i} style={{borderBottom:"1px solid #eee",background:w.result==="win"?"#f0f8f0":"#fff8f8"}}><td style={{padding:"7px 8px",textAlign:"center",color:"#888"}}>Wk {w.week}</td><td style={{padding:"7px 8px",textAlign:"center",fontWeight:800,color:w.result==="win"?"#007a00":RED,textTransform:"uppercase"}}>{w.result}</td><td style={{padding:"7px 8px",textAlign:"center",color:"#555",fontSize:11}}>{w.opponent||"—"}</td><td style={{padding:"7px 8px",textAlign:"center",color:w.ranked10?RED:w.ranked25?"#cc7700":"#ccc"}}>{w.ranked10?"Top 10":w.ranked25?"Top 25":"Unranked"}</td><td style={{padding:"7px 8px",textAlign:"center",color:RED,fontWeight:700}}>+{w.pts}</td></tr>)}</tbody></table></div>}
+              {profile.cur?.weekLog?.length>0&&<div><SL>Current Season Game Log</SL><table style={{width:"100%",borderCollapse:"collapse",fontSize:13}}><thead><tr style={{borderBottom:`2px solid ${RED}`,background:"#f7f7f7"}}>{["Week","Result","Opponent","Opp Rank","Pts"].map(h=><th key={h} style={{padding:"7px 8px",textAlign:"center",color:"#555",fontSize:9,letterSpacing:1,textTransform:"uppercase",fontWeight:700}}>{h}</th>)}</tr></thead><tbody>{profile.cur.weekLog.map((w,i)=><tr key={i} style={{borderBottom:"1px solid #eee",background:w.result==="win"?"#f0f8f0":"#fff8f8"}}><td style={{padding:"7px 8px",textAlign:"center",color:"#888"}}>Wk {w.week}</td><td style={{padding:"7px 8px",textAlign:"center",fontWeight:800,color:w.result==="win"?"#007a00":RED,textTransform:"uppercase"}}>{w.result}{w.forfeit&&" (F)"}</td><td style={{padding:"7px 8px",textAlign:"center",color:"#555",fontSize:11}}>{w.opponent||"—"}</td><td style={{padding:"7px 8px",textAlign:"center",color:w.ranked10?RED:w.ranked25?"#cc7700":"#ccc"}}>{w.ranked10?"Top 10":w.ranked25?"Top 25":"Unranked"}</td><td style={{padding:"7px 8px",textAlign:"center",color:RED,fontWeight:700}}>+{w.pts}</td></tr>)}</tbody></table></div>}
             </div>);
           })()}
 
@@ -3489,7 +3495,7 @@ function EnterResultsPanel({entries,weekResults,setWeekResults,week,setWeek,appl
   const fileRefs = useRef({});
 
   const setWR=(teamName,field,val)=>setWeekResults(prev=>prev.map(r=>r.teamName===teamName?{...r,[field]:val}:r));
-  const getWR=(teamName)=>weekResults.find(r=>r.teamName===teamName)||{result:"none",ranked25:false,ranked10:false};
+  const getWR=(teamName)=>weekResults.find(r=>r.teamName===teamName)||{result:"none",ranked25:false,ranked10:false,forfeit:false};
   const thisWeekSchedule = schedule?.[entryWeek]||{};
 
   // Build matchup pairs from schedule
@@ -3611,14 +3617,14 @@ team1.defense = yards the OPPONENT gained (what team1 allowed). Return only JSON
                   <div style={{padding:"12px 16px",display:"flex",alignItems:"center",gap:12,flexWrap:"wrap",background:winner?"#f0f8f0":"#fff"}}>
                     {/* Team 1 */}
                     <div style={{flex:1,minWidth:100}}>
-                      <div style={{fontSize:13,fontWeight:900,color:wr1.result==="win"?"#007a00":wr1.result==="loss"?"#aaa":"#111"}}>{t1}</div>
+                      <div style={{fontSize:13,fontWeight:900,color:wr1.result==="win"?"#007a00":wr1.result==="loss"?"#aaa":"#111"}}>{t1}{wr1.forfeit&&<span style={{marginLeft:6,fontSize:9,fontWeight:800,color:"#b8860b",background:"#fff8e6",border:"1px solid #b8860b44",borderRadius:2,padding:"1px 5px",verticalAlign:"middle"}}>FORFEIT</span>}</div>
                       {e1?.userName&&<div style={{fontSize:10,color:"#888"}}>{e1.userName}</div>}
                       {archivedGame&&<div style={{fontSize:20,fontWeight:900,color:wr1.result==="win"?"#007a00":"#555",marginTop:2}}>{(archivedGame.team1.name===t1?archivedGame.team1:archivedGame.team2).score}</div>}
                     </div>
                     <div style={{fontSize:11,fontWeight:800,color:"#bbb",flexShrink:0}}>VS</div>
                     {/* Team 2 */}
                     <div style={{flex:1,minWidth:100,textAlign:"right"}}>
-                      <div style={{fontSize:13,fontWeight:900,color:wr2.result==="win"?"#007a00":wr2.result==="loss"?"#aaa":"#111"}}>{t2}</div>
+                      <div style={{fontSize:13,fontWeight:900,color:wr2.result==="win"?"#007a00":wr2.result==="loss"?"#aaa":"#111"}}>{wr2.forfeit&&<span style={{marginRight:6,fontSize:9,fontWeight:800,color:"#b8860b",background:"#fff8e6",border:"1px solid #b8860b44",borderRadius:2,padding:"1px 5px",verticalAlign:"middle"}}>FORFEIT</span>}{t2}</div>
                       {e2?.userName&&<div style={{fontSize:10,color:"#888"}}>{e2.userName}</div>}
                       {archivedGame&&<div style={{fontSize:20,fontWeight:900,color:wr2.result==="win"?"#007a00":"#555",marginTop:2}}>{(archivedGame.team1.name===t2?archivedGame.team1:archivedGame.team2).score}</div>}
                     </div>
@@ -3631,14 +3637,18 @@ team1.defense = yards the OPPONENT gained (what team1 allowed). Return only JSON
                   {scanErrors[key]&&<div style={{padding:"6px 16px",fontSize:11,color:RED,background:"#fff0f0"}}>{scanErrors[key]}</div>}
                   {/* Manual override + ranked checkboxes */}
                   <div style={{padding:"8px 16px 12px",background:"#fafafa",display:"flex",flexWrap:"wrap",gap:10,alignItems:"center"}}>
-                    <div style={{display:"flex",gap:6,alignItems:"center"}}>
+                    <div style={{display:"flex",gap:6,alignItems:"center",flexWrap:"wrap"}}>
                       <span style={{fontSize:10,color:"#888",fontWeight:700,textTransform:"uppercase"}}>Override:</span>
                       {[{label:t1,win:t1,loss:t2},{label:t2,win:t2,loss:t1}].map(opt=>(
-                        <button key={opt.label} onClick={()=>{setWR(opt.win,"result","win");setWR(opt.loss,"result","loss");}} style={btnStyle(winner===opt.win)}>{opt.label} W</button>
+                        <button key={opt.label} onClick={()=>{setWR(opt.win,"result","win");setWR(opt.win,"forfeit",false);setWR(opt.loss,"result","loss");setWR(opt.loss,"forfeit",false);}} style={btnStyle(winner===opt.win&&!getWR(opt.win).forfeit)}>{opt.label} W</button>
                       ))}
-                      <button onClick={()=>{setWR(t1,"result","none");setWR(t2,"result","none");}} style={btnStyle(!winner,"#888")}>Clear</button>
+                      <button onClick={()=>{setWR(t1,"result","none");setWR(t1,"forfeit",false);setWR(t2,"result","none");setWR(t2,"forfeit",false);}} style={btnStyle(!winner,"#888")}>Clear</button>
+                      <span style={{width:1,height:16,background:"#ddd",margin:"0 2px"}}/>
+                      {[{label:t1,win:t1,loss:t2},{label:t2,win:t2,loss:t1}].map(opt=>(
+                        <button key={"f-"+opt.label} onClick={()=>{setWR(opt.win,"result","win");setWR(opt.win,"forfeit",true);setWR(opt.win,"ranked25",false);setWR(opt.win,"ranked10",false);setWR(opt.loss,"result","loss");setWR(opt.loss,"forfeit",true);}} title={`${opt.loss} couldn't play — ${opt.win} gets a forced win, no stats`} style={btnStyle(winner===opt.win&&getWR(opt.win).forfeit,"#b8860b")}>{opt.label} Win by Forfeit</button>
+                      ))}
                     </div>
-                    {winner&&<div style={{display:"flex",gap:10,marginLeft:"auto"}}>
+                    {winner&&!getWR(winner).forfeit&&<div style={{display:"flex",gap:10,marginLeft:"auto"}}>
                       <label style={{display:"flex",alignItems:"center",gap:4,fontSize:11,color:"#888",cursor:"pointer"}}>
                         <input type="checkbox" checked={getWR(winner).ranked25||false} onChange={e=>setWR(winner,"ranked25",e.target.checked)}/> vs Top 25
                       </label>
@@ -3646,6 +3656,7 @@ team1.defense = yards the OPPONENT gained (what team1 allowed). Return only JSON
                         <input type="checkbox" checked={getWR(winner).ranked10||false} onChange={e=>setWR(winner,"ranked10",e.target.checked)}/> vs Top 10
                       </label>
                     </div>}
+                    {winner&&getWR(winner).forfeit&&<div style={{marginLeft:"auto",fontSize:11,color:"#b8860b",fontWeight:700,fontStyle:"italic"}}>No box score — forfeit win/loss, no ranked bonus</div>}
                   </div>
                   {/* Archived stats preview */}
                   {archivedGame&&<div style={{padding:"4px 16px 10px",background:"#f0f8f0",fontSize:10,color:"#555",display:"grid",gridTemplateColumns:"1fr 1fr",gap:4}}>
@@ -4824,16 +4835,18 @@ export default function App() {
       let effectiveResult = r?.result;
       let effectiveR25 = r?.ranked25||false;
       let effectiveR10 = r?.ranked10||false;
+      let effectiveForfeit = r?.forfeit||false;
       if (!effectiveResult && opp && !isCPUOpp(opp) && opp!=="BYE" && resultsMap[opp]) {
         // Mirror opponent result
         const oppResult = resultsMap[opp].result;
         effectiveResult = oppResult==="win"?"loss":oppResult==="loss"?"win":undefined;
         effectiveR25 = false; effectiveR10 = false;
+        effectiveForfeit = resultsMap[opp].forfeit||false;
       }
       if(!effectiveResult)return entry;
       let pts=0,bonus=0;
       if(effectiveResult==="win"){pts=pc.win;bonus=effectiveR10?pc.top10Bonus:effectiveR25?pc.top25Bonus:0;}
-      const log={week:targetWeek,result:effectiveResult,ranked25:effectiveR25,ranked10:effectiveR10,pts:pts+bonus,opponent:opp||"Unknown"};
+      const log={week:targetWeek,result:effectiveResult,ranked25:effectiveR25,ranked10:effectiveR10,forfeit:effectiveForfeit,pts:pts+bonus,opponent:opp||"Unknown"};
       // Update H2H if opponent is a dynasty member
       const h2h={...entry.h2h||{}};
       if(opp&&!isCPUOpp(opp)&&opp!=="BYE"){
@@ -4845,7 +4858,7 @@ export default function App() {
       return{...entry,wins:effectiveResult==="win"?entry.wins+1:entry.wins,losses:effectiveResult==="loss"?entry.losses+1:entry.losses,confWins:isConfGame&&effectiveResult==="win"?(entry.confWins||0)+1:(entry.confWins||0),confLosses:isConfGame&&effectiveResult==="loss"?(entry.confLosses||0)+1:(entry.confLosses||0),gamePts:entry.gamePts+pts,rankedBonusPts:entry.rankedBonusPts+bonus,weekLog:[...(entry.weekLog||[]),log],h2h};
     });
     setEntries(nextEntries);
-    setWeekResults(prev=>prev.map(r=>({...r,result:"none",ranked25:false,ranked10:false})));
+    setWeekResults(prev=>prev.map(r=>({...r,result:"none",ranked25:false,ranked10:false,forfeit:false})));
     if(targetWeek>=week){
       const newWeek=targetWeek+1;
       setWeek(newWeek);
@@ -4870,7 +4883,7 @@ export default function App() {
       return{...entry,wins:r.result==="win"?entry.wins+1:entry.wins,losses:r.result==="loss"?entry.losses+1:entry.losses,confWins:isConfGame&&r.result==="win"?(entry.confWins||0)+1:(entry.confWins||0),confLosses:isConfGame&&r.result==="loss"?(entry.confLosses||0)+1:(entry.confLosses||0),gamePts:entry.gamePts+pts,rankedBonusPts:entry.rankedBonusPts+bonus,weekLog:[...(entry.weekLog||[]),log],h2h};
     });
     setEntries(nextEntries);
-    setWeekResults(prev=>prev.map(r=>({...r,result:"none",ranked25:false,ranked10:false})));
+    setWeekResults(prev=>prev.map(r=>({...r,result:"none",ranked25:false,ranked10:false,forfeit:false})));
     if(targetWeek>=week){
       const newWeek=targetWeek+1;
       setWeek(newWeek);
