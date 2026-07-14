@@ -532,7 +532,7 @@ function teamScoringTrend(gameArchive, year, teamName) {
   return games ? {ppgFor:(forPts/games).toFixed(1), ppgAgainst:(againstPts/games).toFixed(1), games} : null;
 }
 
-function WeekMatchupsCard({schedule,week,sorted,leagueName,season,setActiveArticle,articles,setArticles,commUnlocked,setupRows,gameArchive,year,history}) {
+function WeekMatchupsCard({schedule,week,sorted,leagueName,season,setActiveArticle,articles,setArticles,commUnlocked,setupRows,gameArchive,year,history,setTab}) {
   const [generating,setGenerating] = useState(false);
 
   const games = buildGamesList(schedule, week);
@@ -650,6 +650,7 @@ function WeekMatchupsCard({schedule,week,sorted,leagueName,season,setActiveArtic
                 )}
               </div>
             </div>
+            {setTab&&<button onClick={()=>setTab("Redzone")} style={{marginTop:12,width:"100%",background:"#111",color:"#fff",border:"none",borderRadius:2,padding:"10px 14px",cursor:"pointer",fontFamily:"'Helvetica Neue',Arial,sans-serif",fontSize:12,fontWeight:800,textTransform:"uppercase",letterSpacing:0.5,display:"flex",alignItems:"center",justifyContent:"center",gap:8}}>📺 Watch on RedZone</button>}
             {existingGOTW&&<div style={{marginTop:12,padding:"10px 14px",background:"#f0f4ff",borderRadius:2,border:"1px solid #c5d0e8",cursor:"pointer",display:"flex",justifyContent:"space-between",alignItems:"center",gap:10}} onClick={()=>setActiveArticle(existingGOTW)}>
               <span style={{fontSize:13,fontWeight:700,color:"#1a3a6b"}}>{articleHeadline(existingGOTW.text)}</span>
               <span style={{fontSize:12,color:"#1a3a6b",fontWeight:700,flexShrink:0}}>Read →</span>
@@ -5067,7 +5068,7 @@ export default function App() {
             <FeaturedCarousel articles={articles} setActiveArticle={setActiveArticle} RED={RED} ff={ff}/>
 
             {/* This week's matchups */}
-            {schedule&&schedule[week]&&Object.keys(schedule[week]).length>0&&<WeekMatchupsCard schedule={schedule} week={week} sorted={sorted} leagueName={leagueName} season={season} setActiveArticle={setActiveArticle} articles={articles} setArticles={setArticles} commUnlocked={commUnlocked} setupRows={setup?.rows} gameArchive={setup?.gameArchive} year={year} history={history}/>}
+            {schedule&&schedule[week]&&Object.keys(schedule[week]).length>0&&<WeekMatchupsCard schedule={schedule} week={week} sorted={sorted} leagueName={leagueName} season={season} setActiveArticle={setActiveArticle} articles={articles} setArticles={setArticles} commUnlocked={commUnlocked} setupRows={setup?.rows} gameArchive={setup?.gameArchive} year={year} history={history} setTab={setTab}/>}
 
             {/* Current standings summary */}
             <Card style={{overflow:"hidden"}}>
@@ -5110,7 +5111,7 @@ export default function App() {
           </>)}
 
           {tab==="Standings"&&(<>
-            {schedule&&schedule[week]&&Object.keys(schedule[week]).length>0&&<WeekMatchupsCard schedule={schedule} week={week} sorted={sorted} leagueName={leagueName} season={season} setActiveArticle={setActiveArticle} articles={articles} setArticles={setArticles} commUnlocked={commUnlocked} setupRows={setup?.rows} gameArchive={setup?.gameArchive} year={year} history={history}/>}
+            {schedule&&schedule[week]&&Object.keys(schedule[week]).length>0&&<WeekMatchupsCard schedule={schedule} week={week} sorted={sorted} leagueName={leagueName} season={season} setActiveArticle={setActiveArticle} articles={articles} setArticles={setArticles} commUnlocked={commUnlocked} setupRows={setup?.rows} gameArchive={setup?.gameArchive} year={year} history={history} setTab={setTab}/>}
 
             {/* Mobile: latest article teaser */}
             {isMobile&&articles.length>0&&(
