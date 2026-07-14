@@ -3814,6 +3814,14 @@ const REPORTERS = [
     style: "thoughtful, roster-obsessed, and transfer-portal savvy. You are ESPN's premier analyst for roster construction, depth chart trends, and portal movement. You think about teams in terms of talent accumulation, positional needs, and roster building strategy. You write with the lens of a GM evaluating a 85-man roster. You love a good portal haul story and never sleep during the December signing period.",
     bio: "Knows every portal entry before the player tweets it. Thinks in depth charts.",
   },
+  {
+    name: "Tony Vig",
+    title: "Dynasty Central Sportsbook · Betting Insider",
+    avatar: "TV",
+    color: "#0f7a3d",
+    style: "sharp, numbers-obsessed, and allergic to hedging. You set betting lines like a Vegas oddsmaker: a point spread, an over/under total, and a prop bet for every game, each backed by a number and a reason pulled from the data you're given. You call your locks 'locks' without apology, talk in units and confidence stars, and reference 'the field,' 'sharp money,' and line movement even though this is a friends-only dynasty league. You'd rather be loud and wrong than quiet and right, and you never write a pick without a number attached.",
+    bio: "Sets the lines your league mates lose money on. Never met a pick he wouldn't lay -3 units on.",
+  },
 ];
 
 // ── Content Hub Tab ───────────────────────────────────────────────────────
@@ -3996,12 +4004,35 @@ function ContentHub({sorted,entries,week,season,year,leagueName,history,leader,a
     return `Week ${w}: ${games.join(", ")}`;
   }).filter(Boolean).join("\n");
 
+  // Season data for the sportsbook writer's lines — built from whatever's accumulated so far.
+  const scoringTrendsText = (()=>{
+    const archive = (setup?.gameArchive||[]).filter(g=>g.year===Number(year));
+    if(!archive.length) return "";
+    const byTeam = {};
+    archive.forEach(g=>{
+      [[g.team1,g.team2],[g.team2,g.team1]].forEach(([t,opp])=>{
+        if(!t?.name) return;
+        if(!byTeam[t.name]) byTeam[t.name]={for:0,against:0,g:0};
+        byTeam[t.name].for+=t.score||0;
+        byTeam[t.name].against+=opp?.score||0;
+        byTeam[t.name].g++;
+      });
+    });
+    const lines = Object.entries(byTeam).map(([name,s])=>`${name}: ${(s.for/s.g).toFixed(1)} PPG scored, ${(s.against/s.g).toFixed(1)} PPG allowed (${s.g} game${s.g!==1?"s":""} of box scores)`);
+    return lines.length ? `\n\nSEASON SCORING TRENDS (from uploaded box scores so far):\n${lines.join("\n")}` : "";
+  })();
+  const recentFormText = sorted.map(t=>{
+    const log=(t.weekLog||[]).slice(-3);
+    if(!log.length) return null;
+    return `${t.teamName}: ${log.map(l=>l.result==="win"?"W":l.result==="loss"?"L":"-").join("")} last ${log.length}`;
+  }).filter(Boolean).join("\n");
+
   const reporter = REPORTERS[selectedReporter];
 
   async function generate(type) {
     if(type==="breaking"&&!breakingSubject){setGenError("Select a coach for the breaking news.");return;}
     if(type==="breaking"&&!breakingGuidance.trim()){setGenError("Add some guidance — what's the breaking news about?");return;}
-    const typeLabels = {powerrankings:"Power Rankings",preview:"Week Preview",recap:"Weekly Recap",seasonpreview:"Season Preview",hotakes:"Hot Takes",breaking:"Breaking News"};
+    const typeLabels = {powerrankings:"Power Rankings",preview:"Week Preview",recap:"Weekly Recap",seasonpreview:"Season Preview",hotakes:"Hot Takes",breaking:"Breaking News",bettinglines:"Betting Lines"};
     if(!window.confirm(`Generate ${typeLabels[type]||"article"}?\n\nThis will use the Claude API.`)) return;
     setGenerating(type);
     setGenError(null);
@@ -4031,11 +4062,13 @@ function ContentHub({sorted,entries,week,season,year,leagueName,history,leader,a
       hotakes: `${byline}Write a spicy hot takes column for Season ${season} Week ${week-1} of the "${leagueName}" dynasty.\n\nStandings:\n${standingsText}\n\nLast week's matchups:\n${lastWeekMatchups}${articleGuidance.trim()?`\n\nEDITOR'S DIRECTION: ${articleGuidance.trim()}`:""}\n\nTarget length: ${wordTarget}. Write bold, controversial hot takes. Reference real matchups and team names. Each take 2-3 sentences, provocative and specific. Number them. Write in your distinct voice.`,
 
       breaking: `${byline}Write a BREAKING NEWS article for the "${leagueName}" dynasty, Season ${season} Week ${week}.${subjectContext}\n\nSUBJECT: ${breakingSubject}${subjectRecord}\nBREAKING NEWS ANGLE: ${breakingGuidance}\n\nCurrent standings context:\n${standingsText}\n\nTarget length: ${wordTarget}. Write in a breathless breaking-news style — urgent, dramatic, with a punchy headline in ALL CAPS. Let the subject's personality and known traits color the narrative heavily. Be wild, irreverent, and entertaining. Reference their standing in the league and what this news means for the dynasty season. Make it feel like a legitimate sports scandal or bombshell dropped mid-season. Write in your distinct voice.`,
+
+      bettinglines: `${byline}Write a Week ${week} betting lines and best bets column for the "${leagueName}" dynasty, Season ${season}.\n\nCurrent standings:\n${standingsText}\n\nTHIS WEEK'S ACTUAL MATCHUPS:\n${thisWeekMatchups}${scoringTrendsText}${recentFormText?`\n\nRECENT FORM (last 3 results, most recent last):\n${recentFormText}`:""}${articleGuidance.trim()?`\n\nEDITOR'S DIRECTION: ${articleGuidance.trim()}`:""}\n\nTarget length: ${wordTarget}. For every real matchup listed above (skip BYEs), set a line: a point spread, an over/under total, and one team prop bet — justify each with the season data given, leaning on scoring trends and recent form where available and on record/dynasty points where it isn't. Close with your "Best Bets of the Week" — 2-3 locks, each with a confidence level (star rating or units). Write with total conviction, like a sportsbook, not a fan. Reference the real matchups only, never invent different ones. Write in your distinct voice.`,
     };
 
     try {
       const text = cleanArticle(await callClaude(prompts[type]));
-      const labels = {powerrankings:"📊 Power Rankings",preview:"🔭 Week Preview",recap:"📰 Weekly Recap",seasonpreview:"🏈 Season Preview",hotakes:"🔥 Hot Takes",breaking:"🚨 Breaking News"};
+      const labels = {powerrankings:"📊 Power Rankings",preview:"🔭 Week Preview",recap:"📰 Weekly Recap",seasonpreview:"🏈 Season Preview",hotakes:"🔥 Hot Takes",breaking:"🚨 Breaking News",bettinglines:"💰 Betting Lines"};
       const label = labels[type]||"📰 Article";
       const draft = {id:Date.now(),type,label,week,season,text,reporter:r.name,reporterColor:r.color,reporterAvatar:r.avatar};
       setDraftArticle(draft);
@@ -4130,7 +4163,7 @@ function ContentHub({sorted,entries,week,season,year,leagueName,history,leader,a
       <Card style={{padding:16}}>
         <SL>Generate Article</SL>
         <div style={{display:"flex",gap:8,marginBottom:14,flexWrap:"wrap"}}>
-          {[["powerrankings","📊 Power Rankings"],["preview","🔭 Week Preview"],["recap","📰 Weekly Recap"],["seasonpreview","🏈 Season Preview"],["hotakes","🔥 Hot Takes"],["breaking","🚨 Breaking News"]].map(([val,label])=>(
+          {[["powerrankings","📊 Power Rankings"],["preview","🔭 Week Preview"],["recap","📰 Weekly Recap"],["seasonpreview","🏈 Season Preview"],["hotakes","🔥 Hot Takes"],["breaking","🚨 Breaking News"],["bettinglines","💰 Betting Lines"]].map(([val,label])=>(
             <button key={val} onClick={()=>setContentType(val)} style={{padding:"8px 14px",borderRadius:2,border:"1px solid",borderColor:contentType===val?(val==="breaking"?RED:reporter.color):"#ddd",background:contentType===val?(val==="breaking"?RED:reporter.color):"#fff",color:contentType===val?"#fff":"#555",cursor:"pointer",fontSize:12,fontFamily:ff,fontWeight:700,textTransform:"uppercase"}}>{label}</button>
           ))}
         </div>
@@ -4155,7 +4188,7 @@ function ContentHub({sorted,entries,week,season,year,leagueName,history,leader,a
         {contentType!=="breaking"&&(
           <div style={{marginBottom:14}}>
             <div style={{fontSize:11,color:"#555",marginBottom:5,fontWeight:600}}>Direction <span style={{color:"#999",fontWeight:400}}>(optional — give the writer a specific angle, storyline, or focus)</span></div>
-            <textarea value={articleGuidance} onChange={e=>setArticleGuidance(e.target.value)} placeholder={contentType==="powerrankings"?"e.g. \"Focus on the surprising rise of Jelly Roll\" or \"Hammer whoever is in last place\"":contentType==="recap"?"e.g. \"Big Johnson's blowout loss was the story of the week\"":contentType==="preview"?"e.g. \"Hype up the rivalry game between Dirt McSquirt and Jeff Fisher\"":contentType==="hotakes"?"e.g. \"Go hard on the team that keeps scheduling cupcakes\"":"e.g. \"Pick Jelly Roll as a dark horse\"" } style={{width:"100%",minHeight:60,padding:"8px 10px",border:`1px solid ${reporter.color}44`,borderRadius:2,fontSize:12,fontFamily:ff,lineHeight:1.5,resize:"vertical",boxSizing:"border-box",color:"#222"}}/>
+            <textarea value={articleGuidance} onChange={e=>setArticleGuidance(e.target.value)} placeholder={contentType==="powerrankings"?"e.g. \"Focus on the surprising rise of Jelly Roll\" or \"Hammer whoever is in last place\"":contentType==="recap"?"e.g. \"Big Johnson's blowout loss was the story of the week\"":contentType==="preview"?"e.g. \"Hype up the rivalry game between Dirt McSquirt and Jeff Fisher\"":contentType==="hotakes"?"e.g. \"Go hard on the team that keeps scheduling cupcakes\"":contentType==="bettinglines"?"e.g. \"Make the rivalry game your Best Bet of the Week\" or \"Fade Jelly Roll after that blowout loss\"":"e.g. \"Pick Jelly Roll as a dark horse\"" } style={{width:"100%",minHeight:60,padding:"8px 10px",border:`1px solid ${reporter.color}44`,borderRadius:2,fontSize:12,fontFamily:ff,lineHeight:1.5,resize:"vertical",boxSizing:"border-box",color:"#222"}}/>
           </div>
         )}
 
