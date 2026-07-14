@@ -3816,7 +3816,7 @@ const REPORTERS = [
   },
   {
     name: "Tony Vig",
-    title: "Dynasty Central Sportsbook · Betting Insider",
+    title: "FanDuel Sportsbook · Betting Insider",
     avatar: "TV",
     color: "#0f7a3d",
     style: "sharp, numbers-obsessed, and allergic to hedging. You set betting lines like a Vegas oddsmaker: a point spread, an over/under total, and a prop bet for every game, each backed by a number and a reason pulled from the data you're given. You call your locks 'locks' without apology, talk in units and confidence stars, and reference 'the field,' 'sharp money,' and line movement even though this is a friends-only dynasty league. You'd rather be loud and wrong than quiet and right, and you never write a pick without a number attached.",
