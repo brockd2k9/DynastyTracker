@@ -493,8 +493,12 @@ function estimateWinProb(teamEntry, oppEntry) {
   const prob = 0.5 + (winPctA-winPctB)*0.3 + ptsEdge*0.25;
   return Math.min(0.93, Math.max(0.07, prob));
 }
+// Converts a fair win probability into a book-style American moneyline. Bakes in a standard
+// ~4.76% hold (the same vig that makes a real coin-flip game price as -110/-110, not -100/-100)
+// rather than quoting the fair number straight — a sportsbook without a hold isn't a sportsbook.
 function probToAmericanOdds(p) {
-  return p>=0.5 ? Math.round(-100*p/(1-p)) : Math.round(100*(1-p)/p);
+  const implied = Math.min(0.98, Math.max(0.02, p*1.0476));
+  return implied>=0.5 ? Math.round(-100*implied/(1-implied)) : Math.round(100*(1-implied)/implied);
 }
 function fmtOdds(n) { return n>0?`+${n}`:`${n}`; }
 
