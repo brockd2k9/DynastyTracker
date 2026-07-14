@@ -483,11 +483,30 @@ function pickGOTW(confGames, sorted) {
   }, null);
 }
 
+// Career win% for this coach across past seasons in history, or null if there's no history to draw on.
+function careerWinPct(entry, history) {
+  if (!history || !history.length) return null;
+  let wins=0, losses=0;
+  history.forEach(s=>{
+    const match = (s.finalStandings||[]).find(t=>(entry.userId&&t.userId===entry.userId)||(t.userName===entry.userName));
+    if (match) { wins += match.wins||0; losses += match.losses||0; }
+  });
+  const games = wins+losses;
+  return games ? wins/games : null;
+}
+
 // Rough win-probability estimate from record + dynasty points — no AI call, just arithmetic
-// off data already on hand, so it's instant and free to show for any matchup.
-function estimateWinProb(teamEntry, oppEntry) {
+// off data already on hand, so it's instant and free to show for any matchup. Once a team has
+// more than 3 games logged this year, this-season form is the signal; before that the in-season
+// sample is too small to mean anything, so it falls back to career win% from past seasons instead.
+function estimateWinProb(teamEntry, oppEntry, history) {
   const gamesA = (teamEntry.wins||0)+(teamEntry.losses||0), gamesB = (oppEntry.wins||0)+(oppEntry.losses||0);
-  const winPctA = gamesA ? teamEntry.wins/gamesA : 0.5, winPctB = gamesB ? oppEntry.wins/gamesB : 0.5;
+  const winPctFor = (entry, games) => {
+    if (games > 3) return entry.wins/games;
+    const career = careerWinPct(entry, history);
+    return career!=null ? career : (games ? entry.wins/games : 0.5);
+  };
+  const winPctA = winPctFor(teamEntry, gamesA), winPctB = winPctFor(oppEntry, gamesB);
   const ptsA = calcTotal(teamEntry), ptsB = calcTotal(oppEntry);
   const ptsEdge = (ptsA-ptsB)/Math.max(ptsA,ptsB,1);
   const prob = 0.5 + (winPctA-winPctB)*0.3 + ptsEdge*0.25;
@@ -513,7 +532,7 @@ function teamScoringTrend(gameArchive, year, teamName) {
   return games ? {ppgFor:(forPts/games).toFixed(1), ppgAgainst:(againstPts/games).toFixed(1), games} : null;
 }
 
-function WeekMatchupsCard({schedule,week,sorted,leagueName,season,setActiveArticle,articles,setArticles,commUnlocked,setupRows,gameArchive,year}) {
+function WeekMatchupsCard({schedule,week,sorted,leagueName,season,setActiveArticle,articles,setArticles,commUnlocked,setupRows,gameArchive,year,history}) {
   const [generating,setGenerating] = useState(false);
 
   const games = buildGamesList(schedule, week);
@@ -527,7 +546,7 @@ function WeekMatchupsCard({schedule,week,sorted,leagueName,season,setActiveArtic
 
   const gotwT1Entry = gameOfWeek && sorted.find(t=>t.teamName===gameOfWeek.team1);
   const gotwT2Entry = gameOfWeek && sorted.find(t=>t.teamName===gameOfWeek.team2);
-  const gotwProb1 = (gotwT1Entry&&gotwT2Entry) ? estimateWinProb(gotwT1Entry,gotwT2Entry) : 0.5;
+  const gotwProb1 = (gotwT1Entry&&gotwT2Entry) ? estimateWinProb(gotwT1Entry,gotwT2Entry,history) : 0.5;
   const gotwOdds1 = probToAmericanOdds(gotwProb1);
   const gotwOdds2 = probToAmericanOdds(1-gotwProb1);
   const gotwTrend1 = gameOfWeek && teamScoringTrend(gameArchive, year, gameOfWeek.team1);
@@ -5023,7 +5042,7 @@ export default function App() {
             <FeaturedCarousel articles={articles} setActiveArticle={setActiveArticle} RED={RED} ff={ff}/>
 
             {/* This week's matchups */}
-            {schedule&&schedule[week]&&Object.keys(schedule[week]).length>0&&<WeekMatchupsCard schedule={schedule} week={week} sorted={sorted} leagueName={leagueName} season={season} setActiveArticle={setActiveArticle} articles={articles} setArticles={setArticles} commUnlocked={commUnlocked} setupRows={setup?.rows} gameArchive={setup?.gameArchive} year={year}/>}
+            {schedule&&schedule[week]&&Object.keys(schedule[week]).length>0&&<WeekMatchupsCard schedule={schedule} week={week} sorted={sorted} leagueName={leagueName} season={season} setActiveArticle={setActiveArticle} articles={articles} setArticles={setArticles} commUnlocked={commUnlocked} setupRows={setup?.rows} gameArchive={setup?.gameArchive} year={year} history={history}/>}
 
             {/* Current standings summary */}
             <Card style={{overflow:"hidden"}}>
@@ -5066,7 +5085,7 @@ export default function App() {
           </>)}
 
           {tab==="Standings"&&(<>
-            {schedule&&schedule[week]&&Object.keys(schedule[week]).length>0&&<WeekMatchupsCard schedule={schedule} week={week} sorted={sorted} leagueName={leagueName} season={season} setActiveArticle={setActiveArticle} articles={articles} setArticles={setArticles} commUnlocked={commUnlocked} setupRows={setup?.rows} gameArchive={setup?.gameArchive} year={year}/>}
+            {schedule&&schedule[week]&&Object.keys(schedule[week]).length>0&&<WeekMatchupsCard schedule={schedule} week={week} sorted={sorted} leagueName={leagueName} season={season} setActiveArticle={setActiveArticle} articles={articles} setArticles={setArticles} commUnlocked={commUnlocked} setupRows={setup?.rows} gameArchive={setup?.gameArchive} year={year} history={history}/>}
 
             {/* Mobile: latest article teaser */}
             {isMobile&&articles.length>0&&(
