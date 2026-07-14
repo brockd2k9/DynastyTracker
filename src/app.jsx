@@ -3975,6 +3975,7 @@ function ContentHub({sorted,entries,week,season,year,leagueName,history,leader,a
   const [breakingGuidance,setBreakingGuidance] = useState("");
   const [articleGuidance,setArticleGuidance] = useState("");
   const [articleLength,setArticleLength] = useState("medium");
+  const [customLabel,setCustomLabel] = useState("");
   const [draftArticle,setDraftArticle] = useState(null);
   const [draftText,setDraftText] = useState("");
   const [revisionNote,setRevisionNote] = useState("");
@@ -4298,6 +4299,17 @@ function ContentHub({sorted,entries,week,season,year,leagueName,history,leader,a
         </button>
       </Card>
 
+      {/* Write your own article */}
+      <Card style={{padding:16}}>
+        <SL>Write Your Own Article</SL>
+        <div style={{fontSize:12,color:"#666",lineHeight:1.5,marginBottom:12}}>Skip the AI entirely and write something yourself — opens the same editor below with an empty page, image upload, and homepage toggle.</div>
+        <div style={{marginBottom:12}}>
+          <div style={{fontSize:11,color:"#555",marginBottom:5,fontWeight:600}}>Label <span style={{color:"#999",fontWeight:400}}>(optional — shown as the article's badge)</span></div>
+          <input value={customLabel} onChange={e=>setCustomLabel(e.target.value)} placeholder="📝 Commissioner's Note" style={{width:"100%",padding:"8px 10px",border:"1px solid #ddd",borderRadius:2,fontSize:13,fontFamily:ff,color:"#222",boxSizing:"border-box"}}/>
+        </div>
+        <button onClick={()=>{setDraftArticle({id:Date.now(),type:"custom",label:customLabel.trim()||"📝 Commissioner's Note",week,season,text:"",reporter:"Dynasty Central",reporterColor:"#111",reporterAvatar:"DC"});setDraftText("");}} style={{background:"#111",color:"#fff",border:"none",borderRadius:2,padding:"11px 22px",cursor:"pointer",fontFamily:ff,fontSize:13,fontWeight:800,textTransform:"uppercase"}}>✏️ Start Writing</button>
+      </Card>
+
       {/* League Bible */}
       <Card style={{overflow:"hidden"}}>
         <CardHead bg="#1a3a6b">League Bible</CardHead>
@@ -4385,7 +4397,7 @@ function ContentHub({sorted,entries,week,season,year,leagueName,history,leader,a
             </div>
 
             <div style={{display:"flex",gap:10,marginTop:10,alignItems:"center"}}>
-              <button onClick={()=>{publishArticle({...draftArticle,text:draftText,imageUrl:articleImage||undefined,showOnHome});setArticleImage(null);setShowOnHome(false);}} disabled={extracting||revising} style={{background:draftArticle.reporterColor||"#111",color:"#fff",border:"none",borderRadius:2,padding:"10px 20px",cursor:"pointer",fontFamily:ff,fontSize:13,fontWeight:800,textTransform:"uppercase"}}>Publish</button>
+              <button onClick={()=>{publishArticle({...draftArticle,text:draftText,imageUrl:articleImage||undefined,showOnHome});setArticleImage(null);setShowOnHome(false);}} disabled={extracting||revising||!draftText.trim()} style={{background:(extracting||revising||!draftText.trim())?"#ccc":(draftArticle.reporterColor||"#111"),color:"#fff",border:"none",borderRadius:2,padding:"10px 20px",cursor:(extracting||revising||!draftText.trim())?"not-allowed":"pointer",fontFamily:ff,fontSize:13,fontWeight:800,textTransform:"uppercase"}}>Publish</button>
               <button onClick={()=>{setDraftArticle(null);setDraftText("");setRevisionNote("");setArticleImage(null);setShowOnHome(false);}} style={{background:"#fff",color:"#666",border:"1px solid #ccc",borderRadius:2,padding:"10px 20px",cursor:"pointer",fontFamily:ff,fontSize:13,fontWeight:700,textTransform:"uppercase"}}>Discard</button>
               {(extracting||revising)&&<span style={{fontSize:11,color:"#888",fontStyle:"italic"}}>{revising?"Revising…":"Updating Chronicle…"}</span>}
             </div>
