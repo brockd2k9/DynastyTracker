@@ -483,7 +483,33 @@ function pickGOTW(confGames, sorted) {
   }, null);
 }
 
-function WeekMatchupsCard({schedule,week,sorted,leagueName,season,setActiveArticle,articles,setArticles,commUnlocked,setupRows}) {
+// Rough win-probability estimate from record + dynasty points — no AI call, just arithmetic
+// off data already on hand, so it's instant and free to show for any matchup.
+function estimateWinProb(teamEntry, oppEntry) {
+  const gamesA = (teamEntry.wins||0)+(teamEntry.losses||0), gamesB = (oppEntry.wins||0)+(oppEntry.losses||0);
+  const winPctA = gamesA ? teamEntry.wins/gamesA : 0.5, winPctB = gamesB ? oppEntry.wins/gamesB : 0.5;
+  const ptsA = calcTotal(teamEntry), ptsB = calcTotal(oppEntry);
+  const ptsEdge = (ptsA-ptsB)/Math.max(ptsA,ptsB,1);
+  const prob = 0.5 + (winPctA-winPctB)*0.3 + ptsEdge*0.25;
+  return Math.min(0.93, Math.max(0.07, prob));
+}
+function probToAmericanOdds(p) {
+  return p>=0.5 ? Math.round(-100*p/(1-p)) : Math.round(100*(1-p)/p);
+}
+function fmtOdds(n) { return n>0?`+${n}`:`${n}`; }
+
+// Per-team scoring average from uploaded box scores for the given year, or null if none logged yet.
+function teamScoringTrend(gameArchive, year, teamName) {
+  let forPts=0, againstPts=0, games=0;
+  (gameArchive||[]).filter(g=>g.year===Number(year)).forEach(g=>{
+    [[g.team1,g.team2],[g.team2,g.team1]].forEach(([t,opp])=>{
+      if(t?.name===teamName){ forPts+=t.score||0; againstPts+=opp?.score||0; games++; }
+    });
+  });
+  return games ? {ppgFor:(forPts/games).toFixed(1), ppgAgainst:(againstPts/games).toFixed(1), games} : null;
+}
+
+function WeekMatchupsCard({schedule,week,sorted,leagueName,season,setActiveArticle,articles,setArticles,commUnlocked,setupRows,gameArchive,year}) {
   const [generating,setGenerating] = useState(false);
 
   const games = buildGamesList(schedule, week);
@@ -494,6 +520,15 @@ function WeekMatchupsCard({schedule,week,sorted,leagueName,season,setActiveArtic
     if(!entry) return null;
     return getPlayerImages(setupRows, entry.userId, entry.userName).teamLogo;
   };
+
+  const gotwT1Entry = gameOfWeek && sorted.find(t=>t.teamName===gameOfWeek.team1);
+  const gotwT2Entry = gameOfWeek && sorted.find(t=>t.teamName===gameOfWeek.team2);
+  const gotwProb1 = (gotwT1Entry&&gotwT2Entry) ? estimateWinProb(gotwT1Entry,gotwT2Entry) : 0.5;
+  const gotwOdds1 = probToAmericanOdds(gotwProb1);
+  const gotwOdds2 = probToAmericanOdds(1-gotwProb1);
+  const gotwTrend1 = gameOfWeek && teamScoringTrend(gameArchive, year, gameOfWeek.team1);
+  const gotwTrend2 = gameOfWeek && teamScoringTrend(gameArchive, year, gameOfWeek.team2);
+  const gotwH2H = gotwT1Entry?.h2h?.[gameOfWeek?.team2];
 
   const generateGOTWPreview = async () => {
     if(!gameOfWeek) return;
@@ -572,6 +607,24 @@ function WeekMatchupsCard({schedule,week,sorted,leagueName,season,setActiveArtic
                 <div style={{fontSize:18,fontWeight:900,color:"#111",wordBreak:"break-word",lineHeight:1.2}}>{gameOfWeek.team2}</div>
                 <div style={{fontSize:11,color:"#888",marginTop:3}}>#{gameOfWeek.rank2} in Dynasty</div>
                 <div style={{fontSize:12,color:"#555",marginTop:2}}>{sorted.find(t=>t.teamName===gameOfWeek.team2)?.wins||0}W-{sorted.find(t=>t.teamName===gameOfWeek.team2)?.losses||0}L</div>
+              </div>
+            </div>
+            <div style={{marginTop:12,display:"grid",gridTemplateColumns:"1fr 1fr",gap:8}}>
+              <div style={{background:"#f0f4ff",borderRadius:2,padding:"8px 10px"}}>
+                <div style={{fontSize:9,fontWeight:800,color:"#666",textTransform:"uppercase",letterSpacing:1,marginBottom:4}}>Moneyline</div>
+                <div style={{fontSize:12,fontWeight:700,color:"#111",display:"flex",justifyContent:"space-between",gap:6}}><span style={{overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{gameOfWeek.team1}</span><span style={{flexShrink:0}}>{fmtOdds(gotwOdds1)}</span></div>
+                <div style={{fontSize:12,fontWeight:700,color:"#111",display:"flex",justifyContent:"space-between",gap:6,marginTop:2}}><span style={{overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{gameOfWeek.team2}</span><span style={{flexShrink:0}}>{fmtOdds(gotwOdds2)}</span></div>
+              </div>
+              <div style={{background:"#f0f4ff",borderRadius:2,padding:"8px 10px"}}>
+                <div style={{fontSize:9,fontWeight:800,color:"#666",textTransform:"uppercase",letterSpacing:1,marginBottom:4}}>Key Stat</div>
+                {(gotwTrend1||gotwTrend2) ? (<>
+                  {gotwTrend1&&<div style={{fontSize:11,fontWeight:700,color:"#111"}}>{gameOfWeek.team1}: {gotwTrend1.ppgFor} PPG</div>}
+                  {gotwTrend2&&<div style={{fontSize:11,fontWeight:700,color:"#111",marginTop:2}}>{gameOfWeek.team2}: {gotwTrend2.ppgFor} PPG</div>}
+                </>) : gotwH2H ? (
+                  <div style={{fontSize:11,fontWeight:700,color:"#111"}}>{gameOfWeek.team1} is {gotwH2H.wins}-{gotwH2H.losses} all-time vs {gameOfWeek.team2}</div>
+                ) : (
+                  <div style={{fontSize:11,color:"#999",fontStyle:"italic"}}>No history yet</div>
+                )}
               </div>
             </div>
             {existingGOTW&&<div style={{marginTop:12,padding:"10px 14px",background:"#f0f4ff",borderRadius:2,border:"1px solid #c5d0e8",cursor:"pointer",display:"flex",justifyContent:"space-between",alignItems:"center",gap:10}} onClick={()=>setActiveArticle(existingGOTW)}>
@@ -4966,7 +5019,7 @@ export default function App() {
             <FeaturedCarousel articles={articles} setActiveArticle={setActiveArticle} RED={RED} ff={ff}/>
 
             {/* This week's matchups */}
-            {schedule&&schedule[week]&&Object.keys(schedule[week]).length>0&&<WeekMatchupsCard schedule={schedule} week={week} sorted={sorted} leagueName={leagueName} season={season} setActiveArticle={setActiveArticle} articles={articles} setArticles={setArticles} commUnlocked={commUnlocked} setupRows={setup?.rows}/>}
+            {schedule&&schedule[week]&&Object.keys(schedule[week]).length>0&&<WeekMatchupsCard schedule={schedule} week={week} sorted={sorted} leagueName={leagueName} season={season} setActiveArticle={setActiveArticle} articles={articles} setArticles={setArticles} commUnlocked={commUnlocked} setupRows={setup?.rows} gameArchive={setup?.gameArchive} year={year}/>}
 
             {/* Current standings summary */}
             <Card style={{overflow:"hidden"}}>
@@ -5009,7 +5062,7 @@ export default function App() {
           </>)}
 
           {tab==="Standings"&&(<>
-            {schedule&&schedule[week]&&Object.keys(schedule[week]).length>0&&<WeekMatchupsCard schedule={schedule} week={week} sorted={sorted} leagueName={leagueName} season={season} setActiveArticle={setActiveArticle} articles={articles} setArticles={setArticles} commUnlocked={commUnlocked} setupRows={setup?.rows}/>}
+            {schedule&&schedule[week]&&Object.keys(schedule[week]).length>0&&<WeekMatchupsCard schedule={schedule} week={week} sorted={sorted} leagueName={leagueName} season={season} setActiveArticle={setActiveArticle} articles={articles} setArticles={setArticles} commUnlocked={commUnlocked} setupRows={setup?.rows} gameArchive={setup?.gameArchive} year={year}/>}
 
             {/* Mobile: latest article teaser */}
             {isMobile&&articles.length>0&&(
