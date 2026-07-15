@@ -290,6 +290,30 @@ async function callClaudeVision(imageBase64, mediaType, prompt) {
   }
 }
 
+// Same as callClaudeVision but for box scores split across two screenshots (e.g. one screen per
+// team) — sends every image in the same request so the model can combine them into one box score.
+async function callClaudeVisionMulti(images, prompt) {
+  if (_claudeInFlight) { console.warn("[callClaudeVisionMulti] Call already in flight — skipped"); return ""; }
+  const safePrompt = _checkSafeguards(prompt);
+  _claudeInFlight = true;
+  _sessionCallCount++;
+  try {
+    const r = await fetch(WORKER_PROXY, {
+      method:"POST",
+      headers:{"Content-Type":"application/json"},
+      body:JSON.stringify({prompt:safePrompt, max_tokens:1024, images:images.map(img=>({data:img.data, media_type:img.mediaType}))}),
+    });
+    if (!r.ok){const e=await r.json().catch(()=>({}));throw new Error(e?.error||`API error ${r.status}`);}
+    const data = await r.json();
+    const outputText = data.text||"";
+    _logCost("Vision/scorecard scan (multi-image)", _estimateTokens(safePrompt) + 300*images.length, _estimateTokens(outputText));
+    return outputText;
+  } finally {
+    _claudeInFlight = false;
+    _lastCallFinishedAt = Date.now();
+  }
+}
+
 async function callClaude(prompt) {
   if (_claudeInFlight) { console.warn("[callClaude] Call already in flight — skipped"); return ""; }
   const safePrompt = _checkSafeguards(prompt);
@@ -3534,18 +3558,18 @@ function EnterResultsPanel({entries,weekResults,setWeekResults,week,setWeek,appl
   const unscheduled=[];
 
   async function handleBoxScoreUpload(t1Name,t2Name,e){
-    const file=e.target.files?.[0]; if(!file) return;
+    const files=Array.from(e.target.files||[]).slice(0,2); if(!files.length) return;
     const key=[t1Name,t2Name].sort().join("|");
     if(!window.confirm(`Scan box score for ${t1Name} vs ${t2Name}?\nThis will use the Claude Vision API.`)){
       if(fileRefs.current[key])fileRefs.current[key].value=""; return;
     }
     setScanning(key); setScanErrors(p=>({...p,[key]:null}));
     try {
-      const b64=await new Promise((res,rej)=>{const r=new FileReader();r.onload=()=>res(r.result.split(",")[1]);r.onerror=rej;r.readAsDataURL(file);});
-      const prompt=`This is a college football video game box score. Extract stats for BOTH teams and return ONLY this JSON (use 0 for missing stats):
+      const images=await Promise.all(files.map(file=>new Promise((res,rej)=>{const r=new FileReader();r.onload=()=>res({data:r.result.split(",")[1],mediaType:file.type||"image/jpeg"});r.onerror=rej;r.readAsDataURL(file);})));
+      const prompt=`${images.length>1?"These are two video game box score screenshots that together show":"This is a video game box score screenshot that shows"} the full box score for one college football game. Extract stats for BOTH teams and return ONLY this JSON (use 0 for missing stats):
 {"team1":{"name":"","score":0,"passing":{"comp":0,"att":0,"pct":0.0,"yds":0,"tds":0,"int":0},"rushing":{"att":0,"yds":0,"ypc":0.0,"tds":0},"defense":{"totalYdsAllowed":0,"passYdsAllowed":0,"rushYdsAllowed":0},"specialTeams":{"fgMade":0,"fgAtt":0,"krTds":0,"prTds":0}},"team2":{"name":"","score":0,"passing":{"comp":0,"att":0,"pct":0.0,"yds":0,"tds":0,"int":0},"rushing":{"att":0,"yds":0,"ypc":0.0,"tds":0},"defense":{"totalYdsAllowed":0,"passYdsAllowed":0,"rushYdsAllowed":0},"specialTeams":{"fgMade":0,"fgAtt":0,"krTds":0,"prTds":0}}}
 team1.defense = yards the OPPONENT gained (what team1 allowed). Return only JSON.`;
-      const text=await callClaudeVision(b64,file.type,prompt);
+      const text=await callClaudeVisionMulti(images,prompt);
       const json=JSON.parse(text.replace(/```json?|```/g,"").trim());
       const e1=entries.find(e=>e.teamName===t1Name); const e2=entries.find(e=>e.teamName===t2Name);
       json.team1.name=t1Name; json.team1.userId=e1?.userId||"";
@@ -3647,9 +3671,9 @@ team1.defense = yards the OPPONENT gained (what team1 allowed). Return only JSON
                       {archivedGame&&<div style={{fontSize:20,fontWeight:900,color:wr2.result==="win"?"#007a00":"#555",marginTop:2}}>{(archivedGame.team1.name===t2?archivedGame.team1:archivedGame.team2).score}</div>}
                     </div>
                     {/* Upload button */}
-                    <label style={{background:archivedGame?"#1a3a6b":RED,color:"#fff",fontSize:11,fontWeight:700,padding:"7px 12px",borderRadius:2,cursor:isScanning?"wait":"pointer",opacity:isScanning?0.6:1,fontFamily:ff,textTransform:"uppercase",letterSpacing:0.5,flexShrink:0,whiteSpace:"nowrap"}}>
+                    <label title="Select both screenshots at once (Ctrl/Cmd-click, or shift-select) if the box score is split across two images" style={{background:archivedGame?"#1a3a6b":RED,color:"#fff",fontSize:11,fontWeight:700,padding:"7px 12px",borderRadius:2,cursor:isScanning?"wait":"pointer",opacity:isScanning?0.6:1,fontFamily:ff,textTransform:"uppercase",letterSpacing:0.5,flexShrink:0,whiteSpace:"nowrap"}}>
                       {isScanning?"Scanning...":(archivedGame?"Replace":"📷 Box Score")}
-                      <input type="file" accept="image/*" style={{display:"none"}} ref={el=>fileRefs.current[key]=el} onChange={e=>handleBoxScoreUpload(t1,t2,e)} disabled={!!scanning}/>
+                      <input type="file" accept="image/*" multiple style={{display:"none"}} ref={el=>fileRefs.current[key]=el} onChange={e=>handleBoxScoreUpload(t1,t2,e)} disabled={!!scanning}/>
                     </label>
                   </div>
                   {scanErrors[key]&&<div style={{padding:"6px 16px",fontSize:11,color:RED,background:"#fff0f0"}}>{scanErrors[key]}</div>}
@@ -3719,17 +3743,17 @@ team1.defense = yards the OPPONENT gained (what team1 allowed). Return only JSON
                       {cpuTeamData&&<div style={{fontSize:20,fontWeight:900,color:wr.result==="loss"?"#c00":"#555",marginTop:2}}>{cpuTeamData.score}</div>}
                     </div>
                     {/* Upload button */}
-                    <label style={{background:archivedGame?"#1a3a6b":RED,color:"#fff",fontSize:11,fontWeight:700,padding:"7px 12px",borderRadius:2,cursor:isScanning?"wait":"pointer",opacity:isScanning?0.6:1,fontFamily:ff,textTransform:"uppercase",letterSpacing:0.5,flexShrink:0,whiteSpace:"nowrap"}}>
+                    <label title="Select both screenshots at once (Ctrl/Cmd-click, or shift-select) if the box score is split across two images" style={{background:archivedGame?"#1a3a6b":RED,color:"#fff",fontSize:11,fontWeight:700,padding:"7px 12px",borderRadius:2,cursor:isScanning?"wait":"pointer",opacity:isScanning?0.6:1,fontFamily:ff,textTransform:"uppercase",letterSpacing:0.5,flexShrink:0,whiteSpace:"nowrap"}}>
                       {isScanning?"Scanning...":(archivedGame?"Replace":"📷 Box Score")}
-                      <input type="file" accept="image/*" style={{display:"none"}} ref={el=>fileRefs.current[key]=el} onChange={ev=>{
-                        const file=ev.target.files?.[0]; if(!file) return;
+                      <input type="file" accept="image/*" multiple style={{display:"none"}} ref={el=>fileRefs.current[key]=el} onChange={ev=>{
+                        const files=Array.from(ev.target.files||[]).slice(0,2); if(!files.length) return;
                         if(!window.confirm(`Scan box score for ${teamName} vs ${displayCPU}?\nThis will use the Claude Vision API.`)){if(fileRefs.current[key])fileRefs.current[key].value="";return;}
                         setScanning(key); setScanErrors(p=>({...p,[key]:null}));
                         (async()=>{
                           try{
-                            const b64=await new Promise((res,rej)=>{const r=new FileReader();r.onload=()=>res(r.result.split(",")[1]);r.onerror=rej;r.readAsDataURL(file);});
-                            const prompt=`This is a college football video game box score. Extract stats for BOTH teams and return ONLY this JSON (use 0 for missing stats):\n{"team1":{"name":"","score":0,"passing":{"comp":0,"att":0,"pct":0.0,"yds":0,"tds":0,"int":0},"rushing":{"att":0,"yds":0,"ypc":0.0,"tds":0},"defense":{"totalYdsAllowed":0,"passYdsAllowed":0,"rushYdsAllowed":0},"specialTeams":{"fgMade":0,"fgAtt":0,"krTds":0,"prTds":0}},"team2":{"name":"","score":0,"passing":{"comp":0,"att":0,"pct":0.0,"yds":0,"tds":0,"int":0},"rushing":{"att":0,"yds":0,"ypc":0.0,"tds":0},"defense":{"totalYdsAllowed":0,"passYdsAllowed":0,"rushYdsAllowed":0},"specialTeams":{"fgMade":0,"fgAtt":0,"krTds":0,"prTds":0}}}\nteam1.defense = yards the OPPONENT gained. Return only JSON.`;
-                            const text=await callClaudeVision(b64,file.type,prompt);
+                            const images=await Promise.all(files.map(file=>new Promise((res,rej)=>{const r=new FileReader();r.onload=()=>res({data:r.result.split(",")[1],mediaType:file.type||"image/jpeg"});r.onerror=rej;r.readAsDataURL(file);})));
+                            const prompt=`${images.length>1?"These are two video game box score screenshots that together show":"This is a video game box score screenshot that shows"} the full box score for one college football game. Extract stats for BOTH teams and return ONLY this JSON (use 0 for missing stats):\n{"team1":{"name":"","score":0,"passing":{"comp":0,"att":0,"pct":0.0,"yds":0,"tds":0,"int":0},"rushing":{"att":0,"yds":0,"ypc":0.0,"tds":0},"defense":{"totalYdsAllowed":0,"passYdsAllowed":0,"rushYdsAllowed":0},"specialTeams":{"fgMade":0,"fgAtt":0,"krTds":0,"prTds":0}},"team2":{"name":"","score":0,"passing":{"comp":0,"att":0,"pct":0.0,"yds":0,"tds":0,"int":0},"rushing":{"att":0,"yds":0,"ypc":0.0,"tds":0},"defense":{"totalYdsAllowed":0,"passYdsAllowed":0,"rushYdsAllowed":0},"specialTeams":{"fgMade":0,"fgAtt":0,"krTds":0,"prTds":0}}}\nteam1.defense = yards the OPPONENT gained. Return only JSON.`;
+                            const text=await callClaudeVisionMulti(images,prompt);
                             const json=JSON.parse(text.replace(/```json?|```/g,"").trim());
                             const e1=entries.find(e=>e.teamName===teamName);
                             json.team1.name=teamName; json.team1.userId=e1?.userId||"";

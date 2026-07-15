@@ -115,16 +115,17 @@ export default {
         }
 
         const body = await request.json();
-        let { prompt, max_tokens, image } = body;
+        let { prompt, max_tokens, image, images } = body;
+        const imageList = (images && images.length) ? images : (image ? [image] : []);
 
         const apiKey = env.VITE_ANTHROPIC_KEY || env.ANTHROPIC_KEY || env.ANTHROPIC_API_KEY;
         if (!apiKey) {
           return json({ error: "API key not configured. Add VITE_ANTHROPIC_KEY in Cloudflare Workers settings." }, 500);
         }
 
-        // ── Image size guard ─────────────────────────────────────────────
-        if (image) {
-          const imageBytes = (image.data || "").length;
+        // ── Image size guard (checks every image when there's more than one) ──
+        for (const img of imageList) {
+          const imageBytes = (img.data || "").length;
           if (imageBytes > MAX_IMAGE_BYTES) {
             return json({ error: `Image too large (${Math.round(imageBytes/1000)}KB). Max is ${MAX_IMAGE_BYTES/1000}KB. Try a smaller screenshot.` }, 413);
           }
@@ -137,12 +138,12 @@ export default {
         }
 
         // ── Output token cap ─────────────────────────────────────────────
-        const tokenCap = image ? MAX_OUTPUT_TOKENS_VISION : MAX_OUTPUT_TOKENS_TEXT;
+        const tokenCap = imageList.length ? MAX_OUTPUT_TOKENS_VISION : MAX_OUTPUT_TOKENS_TEXT;
         const safeMaxTokens = Math.min(max_tokens || tokenCap, tokenCap);
 
-        const messages = image
+        const messages = imageList.length
           ? [{ role: "user", content: [
-              { type: "image", source: { type: "base64", media_type: image.media_type, data: image.data } },
+              ...imageList.map(img => ({ type: "image", source: { type: "base64", media_type: img.media_type, data: img.data } })),
               { type: "text", text: prompt }
             ]}]
           : [{ role: "user", content: prompt }];
@@ -171,7 +172,7 @@ export default {
 
         // Log usage so it shows in Cloudflare logs
         const usage = data.usage || {};
-        console.log(`[Claude] input=${usage.input_tokens} output=${usage.output_tokens} model=claude-sonnet-4-6 type=${image?"vision":"text"}`);
+        console.log(`[Claude] input=${usage.input_tokens} output=${usage.output_tokens} model=claude-sonnet-4-6 type=${imageList.length?`vision(${imageList.length})`:"text"}`);
 
         return json({ text });
 
