@@ -3,7 +3,7 @@
 // in Cloudflare Workers → Settings → Variables. No redeploy needed.
 const MAX_INPUT_CHARS  = 24000;   // ~6,000 tokens — hard cap on prompt length
 const MAX_OUTPUT_TOKENS_TEXT   = 1500;  // article generation cap
-const MAX_OUTPUT_TOKENS_VISION = 800;   // box score scan cap
+const MAX_OUTPUT_TOKENS_VISION = 1300;  // box score scan cap — box score JSON now includes misc/special-teams detail
 const MAX_IMAGE_BYTES  = 2_000_000; // reject images over ~2MB base64
 
 // ── Article sharing (GroupMe/Discord/iMessage link unfurling) ──────────────

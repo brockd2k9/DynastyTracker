@@ -301,7 +301,7 @@ async function callClaudeVisionMulti(images, prompt) {
     const r = await fetch(WORKER_PROXY, {
       method:"POST",
       headers:{"Content-Type":"application/json"},
-      body:JSON.stringify({prompt:safePrompt, max_tokens:1024, images:images.map(img=>({data:img.data, media_type:img.mediaType}))}),
+      body:JSON.stringify({prompt:safePrompt, max_tokens:1300, images:images.map(img=>({data:img.data, media_type:img.mediaType}))}),
     });
     if (!r.ok){const e=await r.json().catch(()=>({}));throw new Error(e?.error||`API error ${r.status}`);}
     const data = await r.json();
@@ -350,8 +350,19 @@ const EMPTY_BOX_TEAM = () => ({
   passing:{comp:0,att:0,pct:0,yds:0,tds:0,int:0},
   rushing:{att:0,yds:0,ypc:0,tds:0},
   defense:{totalYdsAllowed:0,passYdsAllowed:0,rushYdsAllowed:0},
-  specialTeams:{fgMade:0,fgAtt:0,krTds:0,prTds:0},
+  specialTeams:{fgMade:0,fgAtt:0,krTds:0,prTds:0,prYds:0,krYds:0,punts:0,puntYds:0},
+  misc:{firstDowns:0,totalPlays:0,totalYds:0,turnovers:0,fumblesLost:0,thirdDownConv:0,thirdDownAtt:0,fourthDownConv:0,fourthDownAtt:0,twoPtConv:0,twoPtAtt:0,redZoneTD:0,redZoneFG:0,redZonePct:0,penalties:0,penaltyYds:0,timeOfPossession:""},
 });
+
+// One team's half of the box score JSON schema asked of the vision scan — shared by both the
+// conference-matchup and CPU-game upload prompts so they can't drift out of sync with each other.
+const BOX_SCORE_TEAM_SCHEMA = `{"name":"","score":0,"passing":{"comp":0,"att":0,"pct":0.0,"yds":0,"tds":0,"int":0},"rushing":{"att":0,"yds":0,"ypc":0.0,"tds":0},"specialTeams":{"fgMade":0,"fgAtt":0,"krTds":0,"prTds":0,"prYds":0,"krYds":0,"punts":0,"puntYds":0},"misc":{"firstDowns":0,"totalPlays":0,"totalYds":0,"turnovers":0,"fumblesLost":0,"thirdDownConv":0,"thirdDownAtt":0,"fourthDownConv":0,"fourthDownAtt":0,"twoPtConv":0,"twoPtAtt":0,"redZoneTD":0,"redZoneFG":0,"redZonePct":0,"penalties":0,"penaltyYds":0,"timeOfPossession":""}}`;
+
+function buildBoxScorePrompt(multiImage) {
+  return `${multiImage?"These are two video game box score screenshots that together show":"This is a video game box score screenshot that shows"} the full box score for one college football game. Extract stats for BOTH teams and return ONLY this JSON (use 0 for missing stats). Read each team's name exactly as shown in the image (school name/logo label) into the "name" field — get this right, it's used to match the team. totalYds is the box score's own "Total Yards" stat (may differ slightly from passing+rushing yards). timeOfPossession as a "MM:SS" string. redZoneTD/redZoneFG/redZonePct come from the "Red Zone TD-FG-%" line in that order:
+{"team1":${BOX_SCORE_TEAM_SCHEMA},"team2":${BOX_SCORE_TEAM_SCHEMA}}
+Return only JSON.`;
+}
 
 // The vision scan reads team names straight off the screenshot, but its "team1"/"team2" JSON
 // keys just reflect left-to-right position in the image — nothing ties that to which schedule
@@ -420,7 +431,7 @@ function pickWeeklyAwards(games) {
 function buildRecapPrompt(games, awards, leagueName, week, season, year, reporter) {
   const w = g => g.team1.score > g.team2.score ? g.team1 : g.team2;
   const l = g => g.team1.score > g.team2.score ? g.team2 : g.team1;
-  const statLine = t => `${t.passing.comp}/${t.passing.att} (${t.passing.pct}%) ${t.passing.yds} pass yds ${t.passing.tds}TD/${t.passing.int}INT | ${t.rushing.att} rush, ${t.rushing.yds} yds (${t.rushing.ypc} YPC), ${t.rushing.tds} TD | Def: ${t.defense.totalYdsAllowed} total yds allowed (${t.defense.passYdsAllowed} pass / ${t.defense.rushYdsAllowed} rush) | FG ${t.specialTeams.fgMade}/${t.specialTeams.fgAtt}${t.specialTeams.krTds>0?` | ${t.specialTeams.krTds} KR TD`:''}${t.specialTeams.prTds>0?` | ${t.specialTeams.prTds} PR TD`:''}`;
+  const statLine = t => `${t.passing.comp}/${t.passing.att} (${t.passing.pct}%) ${t.passing.yds} pass yds ${t.passing.tds}TD/${t.passing.int}INT | ${t.rushing.att} rush, ${t.rushing.yds} yds (${t.rushing.ypc} YPC), ${t.rushing.tds} TD | Def: ${t.defense.totalYdsAllowed} total yds allowed (${t.defense.passYdsAllowed} pass / ${t.defense.rushYdsAllowed} rush) | FG ${t.specialTeams.fgMade}/${t.specialTeams.fgAtt}${t.specialTeams.krTds>0?` | ${t.specialTeams.krTds} KR TD`:''}${t.specialTeams.prTds>0?` | ${t.specialTeams.prTds} PR TD`:''}${t.misc?` | ${t.misc.firstDowns} first downs, ${t.misc.turnovers} turnovers, 3rd down ${t.misc.thirdDownConv}/${t.misc.thirdDownAtt}, TOP ${t.misc.timeOfPossession||'-'}`:''}`;
   const gameLines = games.map(g=>`${w(g).name} ${w(g).score}, ${l(g).name} ${l(g).score}\n  ${g.team1.name}: ${statLine(g.team1)}\n  ${g.team2.name}: ${statLine(g.team2)}`).join("\n\n");
   const awardLines = [
     awards.gotw ? `GAME OF THE WEEK: ${w(awards.gotw.game).name} def. ${l(awards.gotw.game).name} ${w(awards.gotw.game).score}-${l(awards.gotw.game).score} (margin: ${awards.gotw.margin})` : "",
@@ -3589,9 +3600,7 @@ function EnterResultsPanel({entries,weekResults,setWeekResults,week,setWeek,appl
     setScanning(key); setScanErrors(p=>({...p,[key]:null}));
     try {
       const images=await Promise.all(files.map(file=>new Promise((res,rej)=>{const r=new FileReader();r.onload=()=>res({data:r.result.split(",")[1],mediaType:file.type||"image/jpeg"});r.onerror=rej;r.readAsDataURL(file);})));
-      const prompt=`${images.length>1?"These are two video game box score screenshots that together show":"This is a video game box score screenshot that shows"} the full box score for one college football game. Extract stats for BOTH teams and return ONLY this JSON (use 0 for missing stats). Read each team's name exactly as shown in the image (school name/logo label) into the "name" field — get this right, it's used to match the team:
-{"team1":{"name":"","score":0,"passing":{"comp":0,"att":0,"pct":0.0,"yds":0,"tds":0,"int":0},"rushing":{"att":0,"yds":0,"ypc":0.0,"tds":0},"specialTeams":{"fgMade":0,"fgAtt":0,"krTds":0,"prTds":0}},"team2":{"name":"","score":0,"passing":{"comp":0,"att":0,"pct":0.0,"yds":0,"tds":0,"int":0},"rushing":{"att":0,"yds":0,"ypc":0.0,"tds":0},"specialTeams":{"fgMade":0,"fgAtt":0,"krTds":0,"prTds":0}}}
-Return only JSON.`;
+      const prompt=buildBoxScorePrompt(images.length>1);
       const text=await callClaudeVisionMulti(images,prompt);
       const parsed=JSON.parse(text.replace(/```json?|```/g,"").trim());
       const json={...parsed, ...reconcileBoxScoreTeams(parsed,t1Name,t2Name)};
@@ -3727,7 +3736,10 @@ Return only JSON.`;
                   {/* Archived stats preview */}
                   {archivedGame&&<div style={{padding:"4px 16px 10px",background:"#f0f8f0",fontSize:10,color:"#555",display:"grid",gridTemplateColumns:"1fr 1fr",gap:4}}>
                     {[archivedGame.team1,archivedGame.team2].map(t=>(
-                      <div key={t.name}><strong>{t.name}:</strong> {t.passing.comp}/{t.passing.att} {t.passing.yds}py {t.passing.tds}TD | {t.rushing.yds}ry {t.rushing.tds}TD | Def {t.defense.totalYdsAllowed}yds</div>
+                      <div key={t.name}>
+                        <div><strong>{t.name}:</strong> {t.passing.comp}/{t.passing.att} {t.passing.yds}py {t.passing.tds}TD | {t.rushing.yds}ry {t.rushing.tds}TD | Def {t.defense.totalYdsAllowed}yds</div>
+                        {t.misc&&<div style={{color:"#888",marginTop:1}}>{t.misc.firstDowns} 1st downs | {t.misc.turnovers} TO | 3rd: {t.misc.thirdDownConv}/{t.misc.thirdDownAtt} | TOP {t.misc.timeOfPossession||"-"}</div>}
+                      </div>
                     ))}
                   </div>}
                 </div>
@@ -3776,7 +3788,7 @@ Return only JSON.`;
                         (async()=>{
                           try{
                             const images=await Promise.all(files.map(file=>new Promise((res,rej)=>{const r=new FileReader();r.onload=()=>res({data:r.result.split(",")[1],mediaType:file.type||"image/jpeg"});r.onerror=rej;r.readAsDataURL(file);})));
-                            const prompt=`${images.length>1?"These are two video game box score screenshots that together show":"This is a video game box score screenshot that shows"} the full box score for one college football game. Extract stats for BOTH teams and return ONLY this JSON (use 0 for missing stats). Read each team's name exactly as shown in the image (school name/logo label) into the "name" field — get this right, it's used to match the team:\n{"team1":{"name":"","score":0,"passing":{"comp":0,"att":0,"pct":0.0,"yds":0,"tds":0,"int":0},"rushing":{"att":0,"yds":0,"ypc":0.0,"tds":0},"specialTeams":{"fgMade":0,"fgAtt":0,"krTds":0,"prTds":0}},"team2":{"name":"","score":0,"passing":{"comp":0,"att":0,"pct":0.0,"yds":0,"tds":0,"int":0},"rushing":{"att":0,"yds":0,"ypc":0.0,"tds":0},"specialTeams":{"fgMade":0,"fgAtt":0,"krTds":0,"prTds":0}}}\nReturn only JSON.`;
+                            const prompt=buildBoxScorePrompt(images.length>1);
                             const text=await callClaudeVisionMulti(images,prompt);
                             const parsed=JSON.parse(text.replace(/```json?|```/g,"").trim());
                             const json={...parsed, ...reconcileBoxScoreTeams(parsed,teamName,displayCPU)};
@@ -3813,8 +3825,14 @@ Return only JSON.`;
                     </div>}
                   </div>
                   {archivedGame&&myTeamData&&<div style={{padding:"4px 16px 10px",background:"#f0f8f0",fontSize:10,color:"#555",display:"grid",gridTemplateColumns:"1fr 1fr",gap:4}}>
-                    <div><strong>{teamName}:</strong> {myTeamData.passing.comp}/{myTeamData.passing.att} {myTeamData.passing.yds}py {myTeamData.passing.tds}TD | {myTeamData.rushing.yds}ry {myTeamData.rushing.tds}TD | Def {myTeamData.defense.totalYdsAllowed}yds</div>
-                    <div><strong>{displayCPU}:</strong> {cpuTeamData.passing.comp}/{cpuTeamData.passing.att} {cpuTeamData.passing.yds}py {cpuTeamData.passing.tds}TD | {cpuTeamData.rushing.yds}ry {cpuTeamData.rushing.tds}TD</div>
+                    <div>
+                      <div><strong>{teamName}:</strong> {myTeamData.passing.comp}/{myTeamData.passing.att} {myTeamData.passing.yds}py {myTeamData.passing.tds}TD | {myTeamData.rushing.yds}ry {myTeamData.rushing.tds}TD | Def {myTeamData.defense.totalYdsAllowed}yds</div>
+                      {myTeamData.misc&&<div style={{color:"#888",marginTop:1}}>{myTeamData.misc.firstDowns} 1st downs | {myTeamData.misc.turnovers} TO | 3rd: {myTeamData.misc.thirdDownConv}/{myTeamData.misc.thirdDownAtt} | TOP {myTeamData.misc.timeOfPossession||"-"}</div>}
+                    </div>
+                    <div>
+                      <div><strong>{displayCPU}:</strong> {cpuTeamData.passing.comp}/{cpuTeamData.passing.att} {cpuTeamData.passing.yds}py {cpuTeamData.passing.tds}TD | {cpuTeamData.rushing.yds}ry {cpuTeamData.rushing.tds}TD</div>
+                      {cpuTeamData.misc&&<div style={{color:"#888",marginTop:1}}>{cpuTeamData.misc.firstDowns} 1st downs | {cpuTeamData.misc.turnovers} TO | 3rd: {cpuTeamData.misc.thirdDownConv}/{cpuTeamData.misc.thirdDownAtt} | TOP {cpuTeamData.misc.timeOfPossession||"-"}</div>}
+                    </div>
                   </div>}
                 </div>
               );
