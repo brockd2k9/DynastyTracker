@@ -3569,11 +3569,36 @@ function EnterResultsPanel({entries,weekResults,setWeekResults,week,setWeek,appl
   const [resultsTab,setResultsTab] = useState("weekly");
   const [scanning,setScanning] = useState(null);
   const [scanErrors,setScanErrors] = useState({});
+  const [submitMsg,setSubmitMsg] = useState("");
   const fileRefs = useRef({});
 
   const setWR=(teamName,field,val)=>setWeekResults(prev=>prev.map(r=>r.teamName===teamName?{...r,[field]:val}:r));
   const getWR=(teamName)=>weekResults.find(r=>r.teamName===teamName)||{result:"none",ranked25:false,ranked10:false,forfeit:false};
   const thisWeekSchedule = schedule?.[entryWeek]||{};
+
+  // weekResults (pending, un-submitted win/loss picks) isn't persisted to the DB —
+  // it resets to "none" on every page load. If a box score was already scanned and
+  // archived for this week but never submitted, re-derive the win/loss from the
+  // archived score so the Override buttons (and the Submit button) reflect it
+  // instead of silently treating the game as if nothing had been entered.
+  useEffect(()=>{
+    const archive=(setup?.gameArchive||[]).filter(g=>g.year===Number(year)&&g.week===Number(entryWeek));
+    if(!archive.length) return;
+    setWeekResults(prev=>{
+      let changed=false;
+      const next=prev.map(r=>{
+        if(r.result!=="none") return r;
+        const game=archive.find(g=>g.team1.name===r.teamName||g.team2.name===r.teamName);
+        if(!game) return r;
+        const mine=game.team1.name===r.teamName?game.team1:game.team2;
+        const opp=game.team1.name===r.teamName?game.team2:game.team1;
+        if(mine.score===opp.score) return r;
+        changed=true;
+        return {...r,result:mine.score>opp.score?"win":"loss"};
+      });
+      return changed?next:prev;
+    });
+  },[setup?.gameArchive,entryWeek,year]);
 
   // Build matchup pairs from schedule
   const isCPUval=isCPUOpp;
@@ -3631,6 +3656,13 @@ function EnterResultsPanel({entries,weekResults,setWeekResults,week,setWeek,appl
   }
 
   const btnStyle=(active,color="#007a00")=>({padding:"5px 12px",borderRadius:2,border:"1px solid",borderColor:active?color:"#ddd",background:active?`${color}18`:"#fff",color:active?color:"#888",cursor:"pointer",fontSize:11,fontFamily:ff,fontWeight:800,textTransform:"uppercase"});
+
+  function submitAndFlash(targetWeek,goBack){
+    applyWeekResults(targetWeek);
+    setSubmitMsg(`✓ Week ${targetWeek} results saved`);
+    setTimeout(()=>setSubmitMsg(""),3000);
+    if(goBack)setEntryWeek(w=>Math.max(0,w-1));
+  }
 
   return (
     <div style={{display:"flex",flexDirection:"column",gap:16}}>
@@ -3858,9 +3890,10 @@ function EnterResultsPanel({entries,weekResults,setWeekResults,week,setWeek,appl
         {confPairs.length===0&&cpuTeams.length===0&&byeTeams.length===0&&unscheduled.length===0&&<Card><div style={{color:"#bbb",fontSize:12,textAlign:"center",padding:"20px 0"}}>Set the schedule first to see matchups here.</div></Card>}
 
         {/* Submit */}
+        {submitMsg&&<div style={{padding:"8px 14px",background:"#f0f8f0",color:"#007a00",fontWeight:800,fontSize:12,borderRadius:2,fontFamily:ff,textTransform:"uppercase",letterSpacing:0.5}}>{submitMsg}</div>}
         <div style={{display:"flex",gap:10,flexWrap:"wrap"}}>
-          {entryWeek>0&&<button onClick={()=>{applyWeekResults(entryWeek);setEntryWeek(w=>Math.max(0,w-1));}} style={{padding:"12px 20px",background:"#f0f0f0",border:"1px solid #ddd",borderRadius:2,cursor:"pointer",fontFamily:ff,fontSize:13,fontWeight:800,color:"#555",textTransform:"uppercase"}}>← Submit &amp; Go Back</button>}
-          <button onClick={()=>applyWeekResults(entryWeek)} style={{flex:1,background:RED,color:"#fff",border:"none",borderRadius:2,padding:"13px 22px",cursor:"pointer",fontFamily:ff,fontSize:14,fontWeight:800,textTransform:"uppercase"}}>
+          {entryWeek>0&&<button onClick={()=>submitAndFlash(entryWeek,true)} style={{padding:"12px 20px",background:"#f0f0f0",border:"1px solid #ddd",borderRadius:2,cursor:"pointer",fontFamily:ff,fontSize:13,fontWeight:800,color:"#555",textTransform:"uppercase"}}>← Submit &amp; Go Back</button>}
+          <button onClick={()=>submitAndFlash(entryWeek,false)} style={{flex:1,background:RED,color:"#fff",border:"none",borderRadius:2,padding:"13px 22px",cursor:"pointer",fontFamily:ff,fontSize:14,fontWeight:800,textTransform:"uppercase"}}>
             {entryWeek>=week?`Submit Week ${entryWeek} & Advance to Week ${entryWeek+1} →`:`Submit Week ${entryWeek} →`}
           </button>
         </div>
@@ -4939,18 +4972,39 @@ export default function App() {
         effectiveForfeit = resultsMap[opp].forfeit||false;
       }
       if(!effectiveResult)return entry;
+
+      // If this team already has a logged result for this week (e.g. re-submitting
+      // after replacing a box score scan), undo its prior contribution first so
+      // wins/losses/points/H2H aren't double-counted.
+      const priorLog=(entry.weekLog||[]).find(l=>l.week===targetWeek);
+      let wins=entry.wins,losses=entry.losses,confWins=entry.confWins||0,confLosses=entry.confLosses||0;
+      let gamePts=entry.gamePts,rankedBonusPts=entry.rankedBonusPts;
+      const h2h={...entry.h2h||{}};
+      if(priorLog){
+        const priorBonus=priorLog.result==="win"?(priorLog.ranked10?pc.top10Bonus:priorLog.ranked25?pc.top25Bonus:0):0;
+        const priorIsConf=priorLog.opponent&&!isCPUOpp(priorLog.opponent)&&priorLog.opponent!=="BYE"&&priorLog.opponent!=="Unknown"&&teamNames.includes(priorLog.opponent);
+        if(priorLog.result==="win"){wins--;if(priorIsConf)confWins--;}
+        else if(priorLog.result==="loss"){losses--;if(priorIsConf)confLosses--;}
+        gamePts-=((priorLog.pts||0)-priorBonus);
+        rankedBonusPts-=priorBonus;
+        if(priorLog.opponent&&h2h[priorLog.opponent]){
+          if(priorLog.result==="win")h2h[priorLog.opponent]={...h2h[priorLog.opponent],wins:Math.max(0,h2h[priorLog.opponent].wins-1)};
+          else if(priorLog.result==="loss")h2h[priorLog.opponent]={...h2h[priorLog.opponent],losses:Math.max(0,h2h[priorLog.opponent].losses-1)};
+        }
+      }
+
       let pts=0,bonus=0;
       if(effectiveResult==="win"){pts=pc.win;bonus=effectiveR10?pc.top10Bonus:effectiveR25?pc.top25Bonus:0;}
       const log={week:targetWeek,result:effectiveResult,ranked25:effectiveR25,ranked10:effectiveR10,forfeit:effectiveForfeit,pts:pts+bonus,opponent:opp||"Unknown"};
       // Update H2H if opponent is a dynasty member
-      const h2h={...entry.h2h||{}};
       if(opp&&!isCPUOpp(opp)&&opp!=="BYE"){
         if(!h2h[opp])h2h[opp]={wins:0,losses:0};
-        if(effectiveResult==="win")h2h[opp].wins++;
-        else if(effectiveResult==="loss")h2h[opp].losses++;
+        if(effectiveResult==="win")h2h[opp]={...h2h[opp],wins:h2h[opp].wins+1};
+        else if(effectiveResult==="loss")h2h[opp]={...h2h[opp],losses:h2h[opp].losses+1};
       }
       const isConfGame=opp&&!isCPUOpp(opp)&&opp!=="BYE"&&opp!=="Unknown"&&teamNames.includes(opp);
-      return{...entry,wins:effectiveResult==="win"?entry.wins+1:entry.wins,losses:effectiveResult==="loss"?entry.losses+1:entry.losses,confWins:isConfGame&&effectiveResult==="win"?(entry.confWins||0)+1:(entry.confWins||0),confLosses:isConfGame&&effectiveResult==="loss"?(entry.confLosses||0)+1:(entry.confLosses||0),gamePts:entry.gamePts+pts,rankedBonusPts:entry.rankedBonusPts+bonus,weekLog:[...(entry.weekLog||[]),log],h2h};
+      const newWeekLog=priorLog?(entry.weekLog||[]).map(l=>l.week===targetWeek?log:l):[...(entry.weekLog||[]),log];
+      return{...entry,wins:effectiveResult==="win"?wins+1:wins,losses:effectiveResult==="loss"?losses+1:losses,confWins:isConfGame&&effectiveResult==="win"?confWins+1:confWins,confLosses:isConfGame&&effectiveResult==="loss"?confLosses+1:confLosses,gamePts:gamePts+pts,rankedBonusPts:rankedBonusPts+bonus,weekLog:newWeekLog,h2h};
     });
     setEntries(nextEntries);
     setWeekResults(prev=>prev.map(r=>({...r,result:"none",ranked25:false,ranked10:false,forfeit:false})));
