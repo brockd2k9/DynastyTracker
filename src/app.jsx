@@ -2235,6 +2235,21 @@ function toYouTubeChannelLiveUrl(url) {
 
 function DynastyRedzone({setup,entries,setTab,autoLiveStatuses,autoEmbedUrls,schedule,week}) {
   const isMobile = useIsMobile();
+  const [shareCopied,setShareCopied] = useState(false);
+  async function shareRedzone() {
+    const shareUrl = `${window.location.origin}/redzone`;
+    if (navigator.share) {
+      try { await navigator.share({title:"Dynasty RedZone — Watch Live Now", url:shareUrl}); } catch(e) { /* user dismissed the share sheet */ }
+      return;
+    }
+    try {
+      await navigator.clipboard.writeText(shareUrl);
+      setShareCopied(true);
+      setTimeout(()=>setShareCopied(false),2000);
+    } catch(e) {
+      window.prompt("Copy this link to share:", shareUrl);
+    }
+  }
   const streamLinks = setup?.streamLinks || {};
   const rows = setup?.rows || [];
   const liveStreams = rows.filter(r => {
@@ -2271,6 +2286,7 @@ function DynastyRedzone({setup,entries,setTab,autoLiveStatuses,autoEmbedUrls,sch
             {checking?"Detecting live streams from configured channels…":"Dynasty RedZone goes live when league members are streaming. Check back when games are in progress."}
           </div>
           {checking&&<div style={{fontSize:12,color:"#cc0000",fontWeight:800,letterSpacing:1,textTransform:"uppercase",animation:"pulse 1.5s ease-in-out infinite"}}>● Checking Streams…</div>}
+          <button onClick={shareRedzone} style={{background:"transparent",border:"1px solid rgba(255,255,255,0.3)",color:"rgba(255,255,255,0.8)",borderRadius:2,padding:"6px 14px",cursor:"pointer",fontSize:11,fontWeight:700,fontFamily:"'Helvetica Neue',Arial,sans-serif",textTransform:"uppercase",letterSpacing:0.5}}>{shareCopied?"✓ Link Copied":"⤴ Share RedZone"}</button>
         </div>
         <RedzoneVoice/>
         <RedzoneChat setupRows={setup?.rows}/>
@@ -2284,6 +2300,7 @@ function DynastyRedzone({setup,entries,setTab,autoLiveStatuses,autoEmbedUrls,sch
       <div style={{background:"linear-gradient(135deg,#1a0000,#0a0a0a)",padding:"8px 16px",display:"flex",alignItems:"center",gap:12,borderBottom:"2px solid #cc0000"}}>
         <img src="/redzone-tv.png" alt="Dynasty RedZone TV" style={{height:isMobile?40:52,width:"auto",objectFit:"contain",flexShrink:0}}/>
         <div style={{flex:1}}/>
+        <button onClick={shareRedzone} style={{background:"transparent",border:"1px solid rgba(255,255,255,0.3)",color:"rgba(255,255,255,0.8)",borderRadius:2,padding:"6px 12px",cursor:"pointer",fontSize:11,fontWeight:700,fontFamily:"'Helvetica Neue',Arial,sans-serif",textTransform:"uppercase",letterSpacing:0.5,flexShrink:0}}>{shareCopied?"✓ Copied":"⤴ Share"}</button>
         <div style={{display:"flex",flexDirection:"column",alignItems:"flex-end",gap:3}}>
           <div style={{background:"#cc0000",borderRadius:3,padding:"2px 8px",fontSize:10,fontWeight:900,color:"#fff",letterSpacing:1.5}}>● LIVE</div>
           <div style={{fontSize:11,color:"rgba(255,255,255,0.6)"}}>{liveStreams.length} game{liveStreams.length>1?"s":""} live</div>
@@ -4585,6 +4602,15 @@ export default function App() {
     didAutoOpenArticle.current = true;
     window.history.replaceState({}, "", window.location.pathname);
   },[articles]);
+  // Deep link: /?tab=<name> jumps straight to that tab (used by the /redzone share-preview page)
+  useEffect(()=>{
+    const targetTab = new URLSearchParams(window.location.search).get("tab");
+    const validTabs = ["Home","Standings","Schedule","History","Profiles","Rules","Redzone","Discord"];
+    if (targetTab && validTabs.includes(targetTab)) {
+      setTab(targetTab);
+      window.history.replaceState({}, "", window.location.pathname);
+    }
+  },[]);
   const [dbLoading,setDbLoading] = useState(true);
   const [dbError,setDbError] = useState(null);
   const [lastSaved,setLastSaved] = useState(null);

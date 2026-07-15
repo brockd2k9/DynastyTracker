@@ -78,6 +78,35 @@ export default {
       return new Response(bytes, { headers: { "Content-Type": parsed[1], "Cache-Control": "public, max-age=31536000, immutable" } });
     }
 
+    // /redzone shares the RedZone tab specifically. No per-item data (unlike
+    // articles) so this is just a fixed OG landing page that redirects into
+    // the app with ?tab=Redzone.
+    if (url.pathname === "/redzone" && request.method === "GET") {
+      const title = "Dynasty RedZone — Watch Live Now";
+      const desc = "Live coach broadcasts from the dynasty league — jump in and watch.";
+      const imageUrl = `${url.origin}/redzone-tv.png`;
+      const pageUrl = `${url.origin}/redzone`;
+      const appUrl = `${url.origin}/?tab=Redzone`;
+      const html = `<!DOCTYPE html><html><head><meta charset="UTF-8">
+<title>${title}</title>
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<meta property="og:title" content="${title}">
+<meta property="og:description" content="${desc}">
+<meta property="og:image" content="${imageUrl}">
+<meta property="og:type" content="website">
+<meta property="og:url" content="${pageUrl}">
+<meta name="twitter:card" content="summary_large_image">
+<meta name="twitter:title" content="${title}">
+<meta name="twitter:description" content="${desc}">
+<meta name="twitter:image" content="${imageUrl}">
+<meta http-equiv="refresh" content="0; url=${appUrl}">
+</head><body>
+<script>location.replace(${JSON.stringify(appUrl)});</script>
+<p>Redirecting to <a href="${appUrl}">${title}</a>…</p>
+</body></html>`;
+      return new Response(html, { headers: { "Content-Type": "text/html; charset=UTF-8" } });
+    }
+
     if (url.pathname === "/.netlify/functions/claude" && request.method === "POST") {
       try {
         // ── Kill switch ──────────────────────────────────────────────────
