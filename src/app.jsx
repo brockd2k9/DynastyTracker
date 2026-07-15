@@ -353,6 +353,29 @@ const EMPTY_BOX_TEAM = () => ({
   specialTeams:{fgMade:0,fgAtt:0,krTds:0,prTds:0},
 });
 
+// The vision scan reads team names straight off the screenshot, but its "team1"/"team2" JSON
+// keys just reflect left-to-right position in the image — nothing ties that to which schedule
+// slot (t1Name vs t2Name) is which, so trusting position silently swapped both teams' entire
+// stat lines. Match by name instead (falling back to position only if the name can't be
+// matched), and compute yards-allowed ourselves from the opponent's own reported yards rather
+// than asking the model to do that cross-reference in its head, which is where it kept erring.
+function reconcileBoxScoreTeams(json, t1Name, t2Name) {
+  const raw1 = json.team1 || {}, raw2 = json.team2 || {};
+  const id1 = matchDynastyTeam(raw1.name||"", [t1Name,t2Name]);
+  const id2 = matchDynastyTeam(raw2.name||"", [t1Name,t2Name]);
+  const swapped = id1===t2Name && id2===t1Name;
+  const team1 = swapped ? raw2 : raw1;
+  const team2 = swapped ? raw1 : raw2;
+  const ydsAllowed = opp => ({
+    totalYdsAllowed: (opp.passing?.yds||0) + (opp.rushing?.yds||0),
+    passYdsAllowed: opp.passing?.yds||0,
+    rushYdsAllowed: opp.rushing?.yds||0,
+  });
+  team1.defense = ydsAllowed(team2);
+  team2.defense = ydsAllowed(team1);
+  return { team1, team2 };
+}
+
 function recomputePlayerStatsFromArchive(archive, existingPlayerStats, changedYear) {
   const yearGames = (archive||[]).filter(g=>String(g.year)===String(changedYear));
   const byUser = {};
@@ -3566,11 +3589,12 @@ function EnterResultsPanel({entries,weekResults,setWeekResults,week,setWeek,appl
     setScanning(key); setScanErrors(p=>({...p,[key]:null}));
     try {
       const images=await Promise.all(files.map(file=>new Promise((res,rej)=>{const r=new FileReader();r.onload=()=>res({data:r.result.split(",")[1],mediaType:file.type||"image/jpeg"});r.onerror=rej;r.readAsDataURL(file);})));
-      const prompt=`${images.length>1?"These are two video game box score screenshots that together show":"This is a video game box score screenshot that shows"} the full box score for one college football game. Extract stats for BOTH teams and return ONLY this JSON (use 0 for missing stats):
-{"team1":{"name":"","score":0,"passing":{"comp":0,"att":0,"pct":0.0,"yds":0,"tds":0,"int":0},"rushing":{"att":0,"yds":0,"ypc":0.0,"tds":0},"defense":{"totalYdsAllowed":0,"passYdsAllowed":0,"rushYdsAllowed":0},"specialTeams":{"fgMade":0,"fgAtt":0,"krTds":0,"prTds":0}},"team2":{"name":"","score":0,"passing":{"comp":0,"att":0,"pct":0.0,"yds":0,"tds":0,"int":0},"rushing":{"att":0,"yds":0,"ypc":0.0,"tds":0},"defense":{"totalYdsAllowed":0,"passYdsAllowed":0,"rushYdsAllowed":0},"specialTeams":{"fgMade":0,"fgAtt":0,"krTds":0,"prTds":0}}}
-team1.defense = yards the OPPONENT gained (what team1 allowed). Return only JSON.`;
+      const prompt=`${images.length>1?"These are two video game box score screenshots that together show":"This is a video game box score screenshot that shows"} the full box score for one college football game. Extract stats for BOTH teams and return ONLY this JSON (use 0 for missing stats). Read each team's name exactly as shown in the image (school name/logo label) into the "name" field — get this right, it's used to match the team:
+{"team1":{"name":"","score":0,"passing":{"comp":0,"att":0,"pct":0.0,"yds":0,"tds":0,"int":0},"rushing":{"att":0,"yds":0,"ypc":0.0,"tds":0},"specialTeams":{"fgMade":0,"fgAtt":0,"krTds":0,"prTds":0}},"team2":{"name":"","score":0,"passing":{"comp":0,"att":0,"pct":0.0,"yds":0,"tds":0,"int":0},"rushing":{"att":0,"yds":0,"ypc":0.0,"tds":0},"specialTeams":{"fgMade":0,"fgAtt":0,"krTds":0,"prTds":0}}}
+Return only JSON.`;
       const text=await callClaudeVisionMulti(images,prompt);
-      const json=JSON.parse(text.replace(/```json?|```/g,"").trim());
+      const parsed=JSON.parse(text.replace(/```json?|```/g,"").trim());
+      const json={...parsed, ...reconcileBoxScoreTeams(parsed,t1Name,t2Name)};
       const e1=entries.find(e=>e.teamName===t1Name); const e2=entries.find(e=>e.teamName===t2Name);
       json.team1.name=t1Name; json.team1.userId=e1?.userId||"";
       json.team2.name=t2Name; json.team2.userId=e2?.userId||"";
@@ -3752,9 +3776,10 @@ team1.defense = yards the OPPONENT gained (what team1 allowed). Return only JSON
                         (async()=>{
                           try{
                             const images=await Promise.all(files.map(file=>new Promise((res,rej)=>{const r=new FileReader();r.onload=()=>res({data:r.result.split(",")[1],mediaType:file.type||"image/jpeg"});r.onerror=rej;r.readAsDataURL(file);})));
-                            const prompt=`${images.length>1?"These are two video game box score screenshots that together show":"This is a video game box score screenshot that shows"} the full box score for one college football game. Extract stats for BOTH teams and return ONLY this JSON (use 0 for missing stats):\n{"team1":{"name":"","score":0,"passing":{"comp":0,"att":0,"pct":0.0,"yds":0,"tds":0,"int":0},"rushing":{"att":0,"yds":0,"ypc":0.0,"tds":0},"defense":{"totalYdsAllowed":0,"passYdsAllowed":0,"rushYdsAllowed":0},"specialTeams":{"fgMade":0,"fgAtt":0,"krTds":0,"prTds":0}},"team2":{"name":"","score":0,"passing":{"comp":0,"att":0,"pct":0.0,"yds":0,"tds":0,"int":0},"rushing":{"att":0,"yds":0,"ypc":0.0,"tds":0},"defense":{"totalYdsAllowed":0,"passYdsAllowed":0,"rushYdsAllowed":0},"specialTeams":{"fgMade":0,"fgAtt":0,"krTds":0,"prTds":0}}}\nteam1.defense = yards the OPPONENT gained. Return only JSON.`;
+                            const prompt=`${images.length>1?"These are two video game box score screenshots that together show":"This is a video game box score screenshot that shows"} the full box score for one college football game. Extract stats for BOTH teams and return ONLY this JSON (use 0 for missing stats). Read each team's name exactly as shown in the image (school name/logo label) into the "name" field — get this right, it's used to match the team:\n{"team1":{"name":"","score":0,"passing":{"comp":0,"att":0,"pct":0.0,"yds":0,"tds":0,"int":0},"rushing":{"att":0,"yds":0,"ypc":0.0,"tds":0},"specialTeams":{"fgMade":0,"fgAtt":0,"krTds":0,"prTds":0}},"team2":{"name":"","score":0,"passing":{"comp":0,"att":0,"pct":0.0,"yds":0,"tds":0,"int":0},"rushing":{"att":0,"yds":0,"ypc":0.0,"tds":0},"specialTeams":{"fgMade":0,"fgAtt":0,"krTds":0,"prTds":0}}}\nReturn only JSON.`;
                             const text=await callClaudeVisionMulti(images,prompt);
-                            const json=JSON.parse(text.replace(/```json?|```/g,"").trim());
+                            const parsed=JSON.parse(text.replace(/```json?|```/g,"").trim());
+                            const json={...parsed, ...reconcileBoxScoreTeams(parsed,teamName,displayCPU)};
                             const e1=entries.find(e=>e.teamName===teamName);
                             json.team1.name=teamName; json.team1.userId=e1?.userId||"";
                             json.team2.name=displayCPU; json.team2.userId="";
