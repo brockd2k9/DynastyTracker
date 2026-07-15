@@ -1475,7 +1475,8 @@ function ScheduleTab({schedule,entries,week,season,year,setup,setupRows,history}
                   <div><span style={{color:"#888",fontWeight:700}}>PASS</span> {t.passing.comp}/{t.passing.att} · {t.passing.yds}yds · {t.passing.tds}TD · {t.passing.int}INT · {t.passing.pct}%</div>
                   <div><span style={{color:"#888",fontWeight:700}}>RUSH</span> {t.rushing.att}att · {t.rushing.yds}yds · {t.rushing.ypc}YPC · {t.rushing.tds}TD</div>
                   <div><span style={{color:"#888",fontWeight:700}}>DEF</span> {t.defense.totalYdsAllowed}yds ({t.defense.passYdsAllowed}p/{t.defense.rushYdsAllowed}r)</div>
-                  <div><span style={{color:"#888",fontWeight:700}}>ST</span> FG {t.specialTeams.fgMade}/{t.specialTeams.fgAtt}{t.specialTeams.krTds>0?` · KR ${t.specialTeams.krTds}TD`:""}{t.specialTeams.prTds>0?` · PR ${t.specialTeams.prTds}TD`:""}</div>
+                  <div><span style={{color:"#888",fontWeight:700}}>ST</span> FG {t.specialTeams.fgMade}/{t.specialTeams.fgAtt}{t.specialTeams.krTds>0?` · KR ${t.specialTeams.krTds}TD`:""}{t.specialTeams.prTds>0?` · PR ${t.specialTeams.prTds}TD`:""}{t.specialTeams.punts>0?` · P ${t.specialTeams.punts}/${t.specialTeams.puntYds}yds`:""}</div>
+                  {t.misc&&<div><span style={{color:"#888",fontWeight:700}}>MISC</span> {t.misc.firstDowns} 1st · {t.misc.turnovers}TO ({t.misc.fumblesLost}F/{t.passing.int}I) · 3rd {t.misc.thirdDownConv}/{t.misc.thirdDownAtt} · 4th {t.misc.fourthDownConv}/{t.misc.fourthDownAtt} · RZ {t.misc.redZoneTD}TD-{t.misc.redZoneFG}FG-{t.misc.redZonePct}% · {t.misc.penalties}-{t.misc.penaltyYds} · TOP {t.misc.timeOfPossession||"-"}</div>}
                 </div>
               </div>
             ))}
