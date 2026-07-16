@@ -433,7 +433,7 @@ function QuarterScoreTable({team1,team2,name1,name2,dark}) {
   const head={...cell,fontSize:9,color:sub,textTransform:"uppercase",fontWeight:700,letterSpacing:0.3};
   return (
     <div style={{padding:"10px 12px",background:dark?"#1a1a1a":"#fafafa",borderRadius:2,marginBottom:8,overflowX:"auto"}}>
-      <table style={{borderCollapse:"collapse"}}>
+      <table style={{borderCollapse:"collapse",margin:"0 auto"}}>
         <thead>
           <tr>
             <th style={{...head,textAlign:"left",paddingRight:16}}>Team</th>
