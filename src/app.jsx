@@ -1675,8 +1675,8 @@ function ScheduleTab({schedule,entries,week,season,year,setup,setupRows,history}
   }
 
   function MatchupRow({home, away, w}) {
-    const isCPU = isCPUOpp(away)||away==="BYE";
-    const result = !isCPU ? getGameResult(home, away, w) : null;
+    const isCPU = isCPUOpp(away);
+    const result = away!=="BYE" ? getGameResult(home, away, w) : null;
     const played = !!result;
     const winHome = result?.winner===home, winAway = result?.winner===away;
     const key = `${w}-${[home,away].sort().join("||")}`;
@@ -1786,8 +1786,7 @@ function ScheduleTab({schedule,entries,week,season,year,setup,setupRows,history}
               <div style={{fontSize:11,color:"#888"}}>Season {season} Schedule</div>
             </div>
             {getTeamSchedule(view).map(({week:w,opp,log})=>{
-              const isCPU = isCPUOpp(opp)||opp==="BYE";
-              const gameResult = !isCPU ? getGameResult(view, opp, w) : null;
+              const gameResult = opp!=="BYE" ? getGameResult(view, opp, w) : null;
               const played = !!gameResult;
               const won = gameResult?.winner===view;
               const key=`team-${view}-${w}`;
