@@ -2098,25 +2098,29 @@ function ProfileTab({history,setupRows,currentEntries,season,year,permanentUsers
                     {expandedSeasons[key]&&s.weekLog&&s.weekLog.length>0&&(
                       <div style={{background:"#fafafa"}}>
                         <table style={{width:"100%",borderCollapse:"collapse",fontSize:12}}>
-                          <thead><tr style={{borderBottom:"1px solid #e0e0e0"}}>{["Week","Result","Opponent Rank","Pts"].map(h=><th key={h} style={{padding:"6px 12px",textAlign:"center",color:"#aaa",fontSize:9,letterSpacing:1,textTransform:"uppercase",fontWeight:700}}>{h}</th>)}</tr></thead>
+                          <thead><tr style={{borderBottom:"1px solid #e0e0e0"}}>{["Week","Opponent","Result","Score","Opponent Rank","Pts"].map(h=><th key={h} style={{padding:"6px 12px",textAlign:"center",color:"#aaa",fontSize:9,letterSpacing:1,textTransform:"uppercase",fontWeight:700}}>{h}</th>)}</tr></thead>
                           <tbody>{s.weekLog.map((w,i)=>{
                             const archivedGame=(gameArchive||[]).find(g=>g.year===s.year&&g.week===w.week&&(g.team1.name===s.teamName||g.team2.name===s.teamName));
                             const gameKey=`${key}-${w.week}-${i}`;
                             const isOpen=expandedGames[gameKey];
+                            const mine=archivedGame&&(archivedGame.team1.name===s.teamName?archivedGame.team1:archivedGame.team2);
+                            const opp=archivedGame&&(archivedGame.team1.name===s.teamName?archivedGame.team2:archivedGame.team1);
                             return(<Fragment key={i}>
                               <tr onClick={archivedGame?()=>setExpandedGames(prev=>({...prev,[gameKey]:!prev[gameKey]})):undefined} style={{borderBottom:"1px solid #f0f0f0",background:w.result==="win"?"#f0f8f0":"#fff8f8",cursor:archivedGame?"pointer":"default"}}>
                                 <td style={{padding:"7px 12px",textAlign:"center",color:"#888"}}>Wk {w.week}</td>
+                                <td style={{padding:"7px 12px",textAlign:"center",color:"#555"}}>{w.opponent&&w.opponent!=="Unknown"?formatOpp(w.opponent):"—"}</td>
                                 <td style={{padding:"7px 12px",textAlign:"center",fontWeight:800,color:w.result==="win"?"#007a00":RED,textTransform:"uppercase"}}>{w.result}{w.forfeit&&" (F)"}</td>
+                                <td style={{padding:"7px 12px",textAlign:"center",color:"#555",fontWeight:700}}>{archivedGame?`${mine.score}-${opp.score}`:"-"}</td>
                                 <td style={{padding:"7px 12px",textAlign:"center",color:w.ranked10?RED:w.ranked25?"#cc7700":"#ccc"}}>{w.ranked10?"Top 10":w.ranked25?"Top 25":"Unranked"}</td>
                                 <td style={{padding:"7px 12px",textAlign:"center",color:RED,fontWeight:700}}>+{w.pts}{archivedGame&&<span style={{marginLeft:6,color:"#bbb",fontSize:10}}>{isOpen?"▲":"▼"}</span>}</td>
                               </tr>
-                              {isOpen&&archivedGame&&(()=>{const mine=archivedGame.team1.name===s.teamName?archivedGame.team1:archivedGame.team2;const opp=archivedGame.team1.name===s.teamName?archivedGame.team2:archivedGame.team1;return(
+                              {isOpen&&archivedGame&&(
                                 <tr>
-                                  <td colSpan={4} style={{padding:"10px 12px",background:"#fff"}}>
+                                  <td colSpan={6} style={{padding:"10px 12px",background:"#fff"}}>
                                     <BoxScoreDetail team1={mine} team2={opp}/>
                                   </td>
                                 </tr>
-                              );})()}
+                              )}
                             </Fragment>);
                           })}</tbody>
                         </table>
