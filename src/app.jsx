@@ -432,19 +432,19 @@ function QuarterScoreTable({team1,team2,name1,name2,dark}) {
   const cell={padding:"4px 8px",textAlign:"center",fontSize:11,fontWeight:700,color:ink};
   const head={...cell,fontSize:9,color:sub,textTransform:"uppercase",fontWeight:700,letterSpacing:0.3};
   return (
-    <div style={{padding:"10px 12px",background:dark?"#1a1a1a":"#fafafa",borderRadius:2,marginBottom:8}}>
-      <table style={{width:"100%",borderCollapse:"collapse"}}>
+    <div style={{padding:"10px 12px",background:dark?"#1a1a1a":"#fafafa",borderRadius:2,marginBottom:8,overflowX:"auto"}}>
+      <table style={{borderCollapse:"collapse"}}>
         <thead>
           <tr>
-            <th style={{...head,textAlign:"left"}}>Team</th>
-            {labels.map(lbl=><th key={lbl} style={head}>{lbl}</th>)}
-            <th style={{...head,borderLeft:`1px solid ${grid}`}}>Final</th>
+            <th style={{...head,textAlign:"left",paddingRight:16}}>Team</th>
+            {labels.map(lbl=><th key={lbl} style={{...head,minWidth:34}}>{lbl}</th>)}
+            <th style={{...head,minWidth:44,borderLeft:`1px solid ${grid}`}}>Final</th>
           </tr>
         </thead>
         <tbody>
           {[{name:name1,q:q1,score:team1.score},{name:name2,q:q2,score:team2.score}].map((row,i)=>(
             <tr key={i} style={{borderTop:`1px solid ${grid}`}}>
-              <td style={{...cell,textAlign:"left",fontWeight:800}}>{row.name}</td>
+              <td style={{...cell,textAlign:"left",fontWeight:800,whiteSpace:"nowrap",paddingRight:16}}>{row.name}</td>
               {labels.map((lbl,qi)=><td key={lbl} style={cell}>{row.q[qi]||0}</td>)}
               <td style={{...cell,borderLeft:`1px solid ${grid}`,fontWeight:900}}>{row.score}</td>
             </tr>
