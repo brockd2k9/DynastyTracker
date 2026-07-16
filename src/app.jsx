@@ -301,7 +301,7 @@ async function callClaudeVisionMulti(images, prompt) {
     const r = await fetch(WORKER_PROXY, {
       method:"POST",
       headers:{"Content-Type":"application/json"},
-      body:JSON.stringify({prompt:safePrompt, max_tokens:1300, images:images.map(img=>({data:img.data, media_type:img.mediaType}))}),
+      body:JSON.stringify({prompt:safePrompt, max_tokens:2200, images:images.map(img=>({data:img.data, media_type:img.mediaType}))}),
     });
     if (!r.ok){const e=await r.json().catch(()=>({}));throw new Error(e?.error||`API error ${r.status}`);}
     const data = await r.json();
@@ -360,9 +360,24 @@ const EMPTY_BOX_TEAM = () => ({
 const BOX_SCORE_TEAM_SCHEMA = `{"name":"","score":0,"quarters":[0,0,0,0],"passing":{"comp":0,"att":0,"pct":0.0,"yds":0,"tds":0,"int":0},"rushing":{"att":0,"yds":0,"ypc":0.0,"tds":0},"specialTeams":{"fgMade":0,"fgAtt":0,"krTds":0,"prTds":0,"prYds":0,"krYds":0,"punts":0,"puntYds":0},"misc":{"firstDowns":0,"totalPlays":0,"totalYds":0,"turnovers":0,"fumblesLost":0,"thirdDownConv":0,"thirdDownAtt":0,"fourthDownConv":0,"fourthDownAtt":0,"twoPtConv":0,"twoPtAtt":0,"redZoneTD":0,"redZoneFG":0,"redZonePct":0,"penalties":0,"penaltyYds":0,"timeOfPossession":""}}`;
 
 function buildBoxScorePrompt(multiImage) {
-  return `${multiImage?"These are two video game box score screenshots that together show":"This is a video game box score screenshot that shows"} the full box score for one college football game. Extract stats for BOTH teams and return ONLY this JSON (use 0 for missing stats). Read each team's name exactly as shown in the image (school name/logo label) into the "name" field — get this right, it's used to match the team. quarters is that team's score in each quarter shown in the quarter-by-quarter scoring line at the top of the box score, in order (add a 5th element only if there was an overtime period) — the quarters must sum to that team's final score. totalYds is the box score's own "Total Yards" stat (may differ slightly from passing+rushing yards). timeOfPossession as a "MM:SS" string. redZoneTD/redZoneFG/redZonePct come from the "Red Zone TD-FG-%" line in that order:
-{"team1":${BOX_SCORE_TEAM_SCHEMA},"team2":${BOX_SCORE_TEAM_SCHEMA}}
-Return only JSON.`;
+  return `${multiImage?"These are two video game box score screenshots that together show":"This is a video game box score screenshot that shows"} the full box score for one college football game, laid out as two columns side by side (one team's name headlines each column, with every stat row underneath showing that column's team on the left and the other team's on the right, or as two separate stacked panels — either way, every number in a team's column/panel belongs ONLY to that team).
+
+Before answering, work through it step by step in plain text:
+1. Name the team on the LEFT (or top panel) and the team on the RIGHT (or bottom panel), exactly as shown.
+2. Go stat row by stat row and read off the LEFT team's number and the RIGHT team's number, in order, keeping them in their own column the whole time — this is the step where mixing the two teams' numbers up is easiest, so go slowly.
+3. Self-check each team ON ITS OWN before finalizing: that team's passing yards + rushing yards should land close to that same team's own "Total Yards" stat, and that team's passing attempts + rushing attempts should land close to that same team's own "Total Plays" stat. If a team's own numbers don't roughly add up like that, you likely swapped a row with the other team somewhere — find it and fix it before answering.
+
+Then output ONLY the final JSON, wrapped in <answer></answer> tags with nothing else inside them (use 0 for any stat you can't find). Use "team1" for the team you decided is on the LEFT/top and "team2" for the RIGHT/bottom. Read each team's name exactly as shown in the image (school name/logo label) into the "name" field — get this right, it's used to match the team. quarters is that team's score in each quarter shown in the quarter-by-quarter scoring line at the top of the box score, in order (add a 5th element only if there was an overtime period) — the quarters must sum to that team's final score. totalYds is the box score's own "Total Yards" stat (may differ slightly from passing+rushing yards). timeOfPossession as a "MM:SS" string. redZoneTD/redZoneFG/redZonePct come from the "Red Zone TD-FG-%" line in that order:
+<answer>{"team1":${BOX_SCORE_TEAM_SCHEMA},"team2":${BOX_SCORE_TEAM_SCHEMA}}</answer>`;
+}
+
+// The vision scan is now asked to reason step-by-step before its final JSON (helps catch the
+// model transposing a stat row between the two teams), so the response isn't pure JSON anymore
+// — pull out just the <answer> tag's contents. Falls back to the whole response for safety if
+// the model ever drops the tags, since the old prompt's plain-JSON responses still need to parse.
+function extractBoxScoreJson(text) {
+  const tagged = text.match(/<answer>([\s\S]*?)<\/answer>/i);
+  return (tagged ? tagged[1] : text).replace(/```json?|```/g,"").trim();
 }
 
 // Stats derived by simple arithmetic from the raw box-score fields rather than asked of the
@@ -3735,7 +3750,7 @@ function EnterResultsPanel({entries,weekResults,setWeekResults,week,setWeek,appl
       const images=await Promise.all(files.map(file=>new Promise((res,rej)=>{const r=new FileReader();r.onload=()=>res({data:r.result.split(",")[1],mediaType:file.type||"image/jpeg"});r.onerror=rej;r.readAsDataURL(file);})));
       const prompt=buildBoxScorePrompt(images.length>1);
       const text=await callClaudeVisionMulti(images,prompt);
-      const parsed=JSON.parse(text.replace(/```json?|```/g,"").trim());
+      const parsed=JSON.parse(extractBoxScoreJson(text));
       const json={...parsed, ...reconcileBoxScoreTeams(parsed,t1Name,t2Name)};
       const e1=entries.find(e=>e.teamName===t1Name); const e2=entries.find(e=>e.teamName===t2Name);
       json.team1.name=t1Name; json.team1.userId=e1?.userId||"";
@@ -3934,7 +3949,7 @@ function EnterResultsPanel({entries,weekResults,setWeekResults,week,setWeek,appl
                             const images=await Promise.all(files.map(file=>new Promise((res,rej)=>{const r=new FileReader();r.onload=()=>res({data:r.result.split(",")[1],mediaType:file.type||"image/jpeg"});r.onerror=rej;r.readAsDataURL(file);})));
                             const prompt=buildBoxScorePrompt(images.length>1);
                             const text=await callClaudeVisionMulti(images,prompt);
-                            const parsed=JSON.parse(text.replace(/```json?|```/g,"").trim());
+                            const parsed=JSON.parse(extractBoxScoreJson(text));
                             const json={...parsed, ...reconcileBoxScoreTeams(parsed,teamName,displayCPU)};
                             const e1=entries.find(e=>e.teamName===teamName);
                             json.team1.name=teamName; json.team1.userId=e1?.userId||"";
