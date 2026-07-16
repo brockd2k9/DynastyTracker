@@ -462,17 +462,32 @@ function BoxScoreDetail({team1,team2,dark}) {
   );
 }
 
+// Lax 0..1 name-similarity score for picking between exactly two known candidates — unlike
+// matchDynastyTeam (which requires full word coverage before trusting a match at all, since it
+// also has to decide "is this a dynasty team or a CPU opponent"), this only ever has to rank
+// t1Name vs t2Name against each other, so a partial match is still useful signal.
+function teamNameSimilarity(rawName, teamName) {
+  const rawWords = normalizeTeamWords(rawName), rosterWords = normalizeTeamWords(teamName);
+  return Math.max(teamWordCoverage(rawWords, rosterWords), teamWordCoverage(rosterWords, rawWords));
+}
+
 // The vision scan reads team names straight off the screenshot, but its "team1"/"team2" JSON
 // keys just reflect left-to-right position in the image — nothing ties that to which schedule
 // slot (t1Name vs t2Name) is which, so trusting position silently swapped both teams' entire
-// stat lines. Match by name instead (falling back to position only if the name can't be
-// matched), and compute yards-allowed ourselves from the opponent's own reported yards rather
-// than asking the model to do that cross-reference in its head, which is where it kept erring.
+// stat lines. Match by name instead (falling back to position only when neither assignment has
+// any name signal at all), and compute yards-allowed ourselves from the opponent's own reported
+// yards rather than asking the model to do that cross-reference in its head, which is where it
+// kept erring.
 function reconcileBoxScoreTeams(json, t1Name, t2Name) {
   const raw1 = json.team1 || {}, raw2 = json.team2 || {};
-  const id1 = matchDynastyTeam(raw1.name||"", [t1Name,t2Name]);
-  const id2 = matchDynastyTeam(raw2.name||"", [t1Name,t2Name]);
-  const swapped = id1===t2Name && id2===t1Name;
+  const name1 = raw1.name||"", name2 = raw2.name||"";
+  // Score both possible assignments and keep whichever the names agree with more — requiring
+  // a perfect match on BOTH sides (the old behavior) meant one misread/abbreviated/mascot-style
+  // name was enough to silently fall back to trusting position, which is exactly the bug this
+  // function exists to prevent.
+  const simNormal  = teamNameSimilarity(name1, t1Name) + teamNameSimilarity(name2, t2Name);
+  const simSwapped = teamNameSimilarity(name1, t2Name) + teamNameSimilarity(name2, t1Name);
+  const swapped = simSwapped > simNormal;
   const team1 = swapped ? raw2 : raw1;
   const team2 = swapped ? raw1 : raw2;
   const ydsAllowed = opp => ({
