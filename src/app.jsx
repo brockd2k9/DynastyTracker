@@ -420,40 +420,37 @@ function boxScoreDerived(t) {
   return {offYds,totalYds,ypp,ypa,puntAvg};
 }
 
-// Two-team quarter-by-quarter scoring chart. Blue/red pair validated for categorical
-// use (CVD ΔE well above target, normal-vision ΔE well above floor) against both a
-// dark (#111) and light (#fafafa) chart surface.
-function QuarterChart({team1,team2,name1,name2,dark}) {
+// Two-team quarter-by-quarter score table, laid out like the in-game box score's own
+// scoring summary: one column per quarter (plus OT if it went there), a Final column,
+// one row per team.
+function QuarterScoreTable({team1,team2,name1,name2,dark}) {
   const q1=team1?.quarters||[], q2=team2?.quarters||[];
   const n=Math.max(q1.length,q2.length);
   if(!n) return null;
-  const max=Math.max(1,...q1,...q2);
-  const c1=dark?"#3987e5":"#2a78d6", c2=dark?"#e66767":"#e34948";
   const ink=dark?"#fff":"#111", sub=dark?"#888":"#888", grid=dark?"#333":"#e1e0d9";
   const labels=Array.from({length:n},(_,i)=>i<4?`Q${i+1}`:"OT");
-  const barMax=64;
+  const cell={padding:"4px 8px",textAlign:"center",fontSize:11,fontWeight:700,color:ink};
+  const head={...cell,fontSize:9,color:sub,textTransform:"uppercase",fontWeight:700,letterSpacing:0.3};
   return (
     <div style={{padding:"10px 12px",background:dark?"#1a1a1a":"#fafafa",borderRadius:2,marginBottom:8}}>
-      <div style={{display:"flex",gap:14,marginBottom:8,fontSize:10,fontWeight:700,textTransform:"uppercase",letterSpacing:0.5}}>
-        <div style={{display:"flex",alignItems:"center",gap:5}}><span style={{width:9,height:9,borderRadius:2,background:c1,display:"inline-block"}}/><span style={{color:ink}}>{name1}</span></div>
-        <div style={{display:"flex",alignItems:"center",gap:5}}><span style={{width:9,height:9,borderRadius:2,background:c2,display:"inline-block"}}/><span style={{color:ink}}>{name2}</span></div>
-      </div>
-      <div style={{display:"flex",gap:10}}>
-        {labels.map((lbl,i)=>{
-          const v1=q1[i]||0, v2=q2[i]||0;
-          const h1=Math.round((v1/max)*barMax), h2=Math.round((v2/max)*barMax);
-          return (
-            <div key={i} style={{flex:1,display:"flex",flexDirection:"column",alignItems:"center",gap:4}}>
-              <div style={{display:"flex",alignItems:"flex-end",gap:3,height:barMax}}>
-                <div style={{width:16,height:Math.max(2,h1),background:c1,borderRadius:"3px 3px 0 0"}} title={`${name1} ${lbl}: ${v1}`}/>
-                <div style={{width:16,height:Math.max(2,h2),background:c2,borderRadius:"3px 3px 0 0"}} title={`${name2} ${lbl}: ${v2}`}/>
-              </div>
-              <div style={{display:"flex",gap:3,fontSize:9,fontWeight:700,color:ink}}><span style={{width:16,textAlign:"center"}}>{v1}</span><span style={{width:16,textAlign:"center"}}>{v2}</span></div>
-              <div style={{fontSize:9,fontWeight:700,color:sub,textTransform:"uppercase",borderTop:`1px solid ${grid}`,width:"100%",textAlign:"center",paddingTop:3}}>{lbl}</div>
-            </div>
-          );
-        })}
-      </div>
+      <table style={{width:"100%",borderCollapse:"collapse"}}>
+        <thead>
+          <tr>
+            <th style={{...head,textAlign:"left"}}>Team</th>
+            {labels.map(lbl=><th key={lbl} style={head}>{lbl}</th>)}
+            <th style={{...head,borderLeft:`1px solid ${grid}`}}>Final</th>
+          </tr>
+        </thead>
+        <tbody>
+          {[{name:name1,q:q1,score:team1.score},{name:name2,q:q2,score:team2.score}].map((row,i)=>(
+            <tr key={i} style={{borderTop:`1px solid ${grid}`}}>
+              <td style={{...cell,textAlign:"left",fontWeight:800}}>{row.name}</td>
+              {labels.map((lbl,qi)=><td key={lbl} style={cell}>{row.q[qi]||0}</td>)}
+              <td style={{...cell,borderLeft:`1px solid ${grid}`,fontWeight:900}}>{row.score}</td>
+            </tr>
+          ))}
+        </tbody>
+      </table>
     </div>
   );
 }
@@ -489,7 +486,7 @@ function BoxScoreDetail({team1,team2,dark}) {
   ];
   return (
     <div>
-      <QuarterChart team1={team1} team2={team2} name1={team1.name} name2={team2.name} dark={dark}/>
+      <QuarterScoreTable team1={team1} team2={team2} name1={team1.name} name2={team2.name} dark={dark}/>
       <div>
         {rows.map(([lbl,v1,v2])=>(
           <div key={lbl} style={{display:"grid",gridTemplateColumns:"1fr auto 1fr",gap:8,padding:"4px 2px",borderBottom:`1px solid ${dark?"#2a2a2a":"#f0f0f0"}`,alignItems:"center"}}>
