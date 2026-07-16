@@ -2460,8 +2460,8 @@ function PlayerStatsTab({userId, userName, playerStats, yearList, ff, RED}) {
           <StatRow label="Passing Yards" val={p.yds.toLocaleString()}/>
           <StatRow label="Passing TDs" val={p.tds}/>
           <StatRow label="Interceptions" val={p.int||0}/>
-          <StatRow label="Attempts" val={p.att}/>
           <StatRow label="Completions" val={p.comp}/>
+          <StatRow label="Attempts" val={p.att}/>
           <StatRow label="Completion %" val={compPct==="-"?"-":compPct+"%"}/>
           <StatRow label="Yards Per Completion" val={ypassComp}/>
         </>}
