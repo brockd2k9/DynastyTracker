@@ -708,7 +708,7 @@ function careerWinPct(entry, history) {
 // off data already on hand, so it's instant and free to show for any matchup. Once a team has
 // more than 3 games logged this year, this-season form is the signal; before that the in-season
 // sample is too small to mean anything, so it falls back to career win% from past seasons instead.
-function estimateWinProb(teamEntry, oppEntry, history) {
+function estimateWinProb(teamEntry, oppEntry, history, trendA=null, trendB=null) {
   const gamesA = (teamEntry.wins||0)+(teamEntry.losses||0), gamesB = (oppEntry.wins||0)+(oppEntry.losses||0);
   const winPctFor = (entry, games) => {
     if (games > 3) return entry.wins/games;
@@ -718,7 +718,18 @@ function estimateWinProb(teamEntry, oppEntry, history) {
   const winPctA = winPctFor(teamEntry, gamesA), winPctB = winPctFor(oppEntry, gamesB);
   const ptsA = calcTotal(teamEntry), ptsB = calcTotal(oppEntry);
   const ptsEdge = (ptsA-ptsB)/Math.max(ptsA,ptsB,1);
-  const prob = 0.5 + (winPctA-winPctB)*0.3 + ptsEdge*0.25;
+  let prob = 0.5 + (winPctA-winPctB)*0.3 + ptsEdge*0.25;
+  // Blend in actual scored-game point differential when both teams have logged box scores this
+  // season — the strongest signal available, and often the ONLY real signal early on, since
+  // win/loss records stay blank until a week is Submitted even after box scores are scanned.
+  // Without this, a lopsided already-played game (e.g. a 42-21 blowout) still priced as a near
+  // coin-flip because the standings hadn't caught up yet.
+  if (trendA && trendB) {
+    const marginA = (parseFloat(trendA.ppgFor)-parseFloat(trendA.ppgAgainst)) - (parseFloat(trendB.ppgFor)-parseFloat(trendB.ppgAgainst));
+    const trendEdge = Math.max(-0.4, Math.min(0.4, marginA/40));
+    const trendWeight = Math.min(1, (trendA.games+trendB.games)/4);
+    prob = prob*(1-trendWeight) + (0.5+trendEdge)*trendWeight;
+  }
   return Math.min(0.93, Math.max(0.07, prob));
 }
 // Converts a fair win probability into a book-style American moneyline. Bakes in a standard
@@ -755,11 +766,11 @@ function WeekMatchupsCard({schedule,week,sorted,leagueName,season,setActiveArtic
 
   const gotwT1Entry = gameOfWeek && sorted.find(t=>t.teamName===gameOfWeek.team1);
   const gotwT2Entry = gameOfWeek && sorted.find(t=>t.teamName===gameOfWeek.team2);
-  const gotwProb1 = (gotwT1Entry&&gotwT2Entry) ? estimateWinProb(gotwT1Entry,gotwT2Entry,history) : 0.5;
-  const gotwOdds1 = probToAmericanOdds(gotwProb1);
-  const gotwOdds2 = probToAmericanOdds(1-gotwProb1);
   const gotwTrend1 = gameOfWeek && teamScoringTrend(gameArchive, year, gameOfWeek.team1);
   const gotwTrend2 = gameOfWeek && teamScoringTrend(gameArchive, year, gameOfWeek.team2);
+  const gotwProb1 = (gotwT1Entry&&gotwT2Entry) ? estimateWinProb(gotwT1Entry,gotwT2Entry,history,gotwTrend1,gotwTrend2) : 0.5;
+  const gotwOdds1 = probToAmericanOdds(gotwProb1);
+  const gotwOdds2 = probToAmericanOdds(1-gotwProb1);
   const gotwH2H = gotwT1Entry?.h2h?.[gameOfWeek?.team2];
 
   const generateGOTWPreview = async () => {
