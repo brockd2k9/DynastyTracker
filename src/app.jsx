@@ -1619,10 +1619,6 @@ function ScheduleTab({schedule,entries,week,season,year,setup,setupRows,history}
             </div>
           </div>
           <div style={{padding:12,fontSize:11}}>
-            <div style={{display:"flex",justifyContent:"space-between",marginBottom:6,fontSize:12,fontWeight:900}}>
-              <span style={{color:wA?"#4ade80":"#fff"}}><TeamNameLink name={teamA}/> — {mine.score} pts</span>
-              <span style={{color:wB?"#4ade80":"#fff"}}><TeamNameLink name={teamB}/> — {opp.score} pts</span>
-            </div>
             <BoxScoreDetail team1={mine} team2={opp} dark/>
           </div>
         </div>
