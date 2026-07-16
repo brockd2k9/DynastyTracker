@@ -1445,7 +1445,6 @@ function HistoryTab({history, setHistory, saveToDb, commUnlocked, entries, setEn
 
   return (
     <div style={{display:"flex",flexDirection:"column",gap:14}}>
-      <ClassicGamesCard classicGames={classicGames} gameArchive={gameArchive} setupRows={setupRows||[]}/>
       <LeagueRecordBook history={history} currentEntries={currentEntries||entries||[]} season={season} year={year} permanentUsers={permanentUsers} setupRows={setupRows||[]}/>
 
       {/* Live Season Editor */}
@@ -1697,6 +1696,7 @@ function HistoryTab({history, setHistory, saveToDb, commUnlocked, entries, setEn
           );
         })()}
       </Card>
+      <ClassicGamesCard classicGames={classicGames} gameArchive={gameArchive} setupRows={setupRows||[]}/>
     </div>
   );
 }
