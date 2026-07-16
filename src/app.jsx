@@ -1,5 +1,5 @@
 
-import { useState, useEffect, useRef, useCallback, useContext, createContext } from "react";
+import { useState, useEffect, useRef, useCallback, useContext, createContext, Fragment } from "react";
 
 const NavCtx = createContext(null);
 function Name({children, userId, userName, style={}}) {
@@ -1926,9 +1926,10 @@ function LeagueRecordBook({history,currentEntries,season,year,permanentUsers,set
   );
 }
 
-function ProfileTab({history,setupRows,currentEntries,season,year,permanentUsers,sel,setSel,pTab,setPTab,articles,setActiveArticle,playerStats}) {
+function ProfileTab({history,setupRows,currentEntries,season,year,permanentUsers,sel,setSel,pTab,setPTab,articles,setActiveArticle,playerStats,gameArchive}) {
   const isMobile = useIsMobile();
   const [expandedSeasons,setExpandedSeasons] = useState({});
+  const [expandedGames,setExpandedGames] = useState({});
   // Merge permanentUsers with setupRows so no one gets dropped
   const puList = (permanentUsers||[]).map(u=>({userId:u.id,userName:u.defaultName,teamName:(setupRows||[]).find(r=>r.userId===u.id)?.teamName||u.teamName||""}));
   const puIds = new Set(puList.map(u=>u.userId));
@@ -2098,14 +2099,26 @@ function ProfileTab({history,setupRows,currentEntries,season,year,permanentUsers
                       <div style={{background:"#fafafa"}}>
                         <table style={{width:"100%",borderCollapse:"collapse",fontSize:12}}>
                           <thead><tr style={{borderBottom:"1px solid #e0e0e0"}}>{["Week","Result","Opponent Rank","Pts"].map(h=><th key={h} style={{padding:"6px 12px",textAlign:"center",color:"#aaa",fontSize:9,letterSpacing:1,textTransform:"uppercase",fontWeight:700}}>{h}</th>)}</tr></thead>
-                          <tbody>{s.weekLog.map((w,i)=>(
-                            <tr key={i} style={{borderBottom:"1px solid #f0f0f0",background:w.result==="win"?"#f0f8f0":"#fff8f8"}}>
-                              <td style={{padding:"7px 12px",textAlign:"center",color:"#888"}}>Wk {w.week}</td>
-                              <td style={{padding:"7px 12px",textAlign:"center",fontWeight:800,color:w.result==="win"?"#007a00":RED,textTransform:"uppercase"}}>{w.result}{w.forfeit&&" (F)"}</td>
-                              <td style={{padding:"7px 12px",textAlign:"center",color:w.ranked10?RED:w.ranked25?"#cc7700":"#ccc"}}>{w.ranked10?"Top 10":w.ranked25?"Top 25":"Unranked"}</td>
-                              <td style={{padding:"7px 12px",textAlign:"center",color:RED,fontWeight:700}}>+{w.pts}</td>
-                            </tr>
-                          ))}</tbody>
+                          <tbody>{s.weekLog.map((w,i)=>{
+                            const archivedGame=(gameArchive||[]).find(g=>g.year===s.year&&g.week===w.week&&(g.team1.name===s.teamName||g.team2.name===s.teamName));
+                            const gameKey=`${key}-${w.week}-${i}`;
+                            const isOpen=expandedGames[gameKey];
+                            return(<Fragment key={i}>
+                              <tr onClick={archivedGame?()=>setExpandedGames(prev=>({...prev,[gameKey]:!prev[gameKey]})):undefined} style={{borderBottom:"1px solid #f0f0f0",background:w.result==="win"?"#f0f8f0":"#fff8f8",cursor:archivedGame?"pointer":"default"}}>
+                                <td style={{padding:"7px 12px",textAlign:"center",color:"#888"}}>Wk {w.week}</td>
+                                <td style={{padding:"7px 12px",textAlign:"center",fontWeight:800,color:w.result==="win"?"#007a00":RED,textTransform:"uppercase"}}>{w.result}{w.forfeit&&" (F)"}</td>
+                                <td style={{padding:"7px 12px",textAlign:"center",color:w.ranked10?RED:w.ranked25?"#cc7700":"#ccc"}}>{w.ranked10?"Top 10":w.ranked25?"Top 25":"Unranked"}</td>
+                                <td style={{padding:"7px 12px",textAlign:"center",color:RED,fontWeight:700}}>+{w.pts}{archivedGame&&<span style={{marginLeft:6,color:"#bbb",fontSize:10}}>{isOpen?"▲":"▼"}</span>}</td>
+                              </tr>
+                              {isOpen&&archivedGame&&(()=>{const mine=archivedGame.team1.name===s.teamName?archivedGame.team1:archivedGame.team2;const opp=archivedGame.team1.name===s.teamName?archivedGame.team2:archivedGame.team1;return(
+                                <tr>
+                                  <td colSpan={4} style={{padding:"10px 12px",background:"#fff"}}>
+                                    <BoxScoreDetail team1={mine} team2={opp}/>
+                                  </td>
+                                </tr>
+                              );})()}
+                            </Fragment>);
+                          })}</tbody>
                         </table>
                       </div>
                     )}
@@ -5476,7 +5489,7 @@ export default function App() {
           </>)}
 
           {tab==="History"&&<HistoryTab history={history} setHistory={setHistory} saveToDb={saveToDb} commUnlocked={commUnlocked} yearRosters={setup?.yearRosters} permanentUsers={setup?.permanentUsers} currentEntries={entries} season={season} year={year} setupRows={setup?.rows||[]}/>}
-          {tab==="Profiles"&&<ProfileTab history={history} setupRows={(setup?.rows||[]).filter(r=>r.active!==false)} currentEntries={activeEntries} season={season} year={year} permanentUsers={setup?.permanentUsers?.filter(u=>(setup?.rows||[]).some(r=>r.userId===u.id&&r.active!==false))} sel={profileSel} setSel={setProfileSel} pTab={profilePTab} setPTab={setProfilePTab} articles={articles} setActiveArticle={setActiveArticle} playerStats={setup?.playerStats}/>}
+          {tab==="Profiles"&&<ProfileTab history={history} setupRows={(setup?.rows||[]).filter(r=>r.active!==false)} currentEntries={activeEntries} season={season} year={year} permanentUsers={setup?.permanentUsers?.filter(u=>(setup?.rows||[]).some(r=>r.userId===u.id&&r.active!==false))} sel={profileSel} setSel={setProfileSel} pTab={profilePTab} setPTab={setProfilePTab} articles={articles} setActiveArticle={setActiveArticle} playerStats={setup?.playerStats} gameArchive={setup?.gameArchive}/>}
           {tab==="Schedule"&&<ScheduleTab schedule={schedule} entries={activeEntries} week={week} season={season} year={year} setup={setup} setupRows={setup?.rows||[]} history={history}/>}
           {tab==="Rules"&&(()=>{
             const customCats=(pc.customCategories||[]);
