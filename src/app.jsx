@@ -789,8 +789,77 @@ function teamScoringTrend(gameArchive, year, teamName) {
   return games ? {ppgFor:(forPts/games).toFixed(1), ppgAgainst:(againstPts/games).toFixed(1), games} : null;
 }
 
+// Same betting-line info shown on the Game of the Week card (Moneyline/Key Stat/Spread/O-U),
+// packaged for reuse on any matchup — including CPU games, where there's no dynasty entry for
+// the opponent, so a neutral placeholder record stands in (estimateWinProb/estimateSpread then
+// lean entirely on scored-game trend data when it's available).
+function MatchupPreview({team1, team2, sorted, gameArchive, year, history, logoFor}) {
+  const NEUTRAL = {wins:0,losses:0,gamePts:0,rankedBonusPts:0,h2h:{}};
+  const entry1 = sorted.find(t=>t.teamName===team1);
+  const entry2 = sorted.find(t=>t.teamName===team2);
+  const rank1 = entry1 ? sorted.findIndex(t=>t.teamName===team1)+1 : null;
+  const rank2 = entry2 ? sorted.findIndex(t=>t.teamName===team2)+1 : null;
+  const e1 = entry1||NEUTRAL, e2 = entry2||NEUTRAL;
+  const trend1 = teamScoringTrend(gameArchive, year, team1);
+  const trend2 = teamScoringTrend(gameArchive, year, team2);
+  const prob1 = estimateWinProb(e1, e2, history, trend1, trend2);
+  const odds1 = probToAmericanOdds(prob1), odds2 = probToAmericanOdds(1-prob1);
+  const spread1 = estimateSpread(e1, e2, trend1, trend2);
+  const total = estimateTotal(trend1, trend2);
+  const h2h = entry1?.h2h?.[team2];
+  return (
+    <div style={{padding:"12px 14px",background:"#fafbff"}}>
+      <div style={{display:"flex",alignItems:"center",gap:0,marginBottom:10}}>
+        <div style={{flex:1,textAlign:"center",minWidth:0,overflow:"hidden"}}>
+          {logoFor(team1)&&<img src={logoFor(team1)} alt="" style={{height:28,width:"auto",maxWidth:"100%",objectFit:"contain",marginBottom:4}} onError={e=>{e.target.style.display="none";}}/>}
+          <div style={{fontSize:14,fontWeight:900,color:"#111",wordBreak:"break-word",lineHeight:1.2}}>{team1}</div>
+          {rank1&&<div style={{fontSize:10,color:"#888",marginTop:2}}>#{rank1} in Dynasty</div>}
+          <div style={{fontSize:11,color:"#555",marginTop:2}}>{e1.wins}W-{e1.losses}L</div>
+        </div>
+        <div style={{padding:"0 10px",flexShrink:0}}>
+          <div style={{fontSize:11,fontWeight:900,color:"#1a3a6b",letterSpacing:1}}>VS</div>
+        </div>
+        <div style={{flex:1,textAlign:"center",minWidth:0,overflow:"hidden"}}>
+          {logoFor(team2)&&<img src={logoFor(team2)} alt="" style={{height:28,width:"auto",maxWidth:"100%",objectFit:"contain",marginBottom:4}} onError={e=>{e.target.style.display="none";}}/>}
+          <div style={{fontSize:14,fontWeight:900,color:"#111",wordBreak:"break-word",lineHeight:1.2}}>{team2}</div>
+          {rank2&&<div style={{fontSize:10,color:"#888",marginTop:2}}>#{rank2} in Dynasty</div>}
+          <div style={{fontSize:11,color:"#555",marginTop:2}}>{e2.wins}W-{e2.losses}L</div>
+        </div>
+      </div>
+      <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:8}}>
+        <div style={{background:"#f0f4ff",borderRadius:2,padding:"8px 10px"}}>
+          <div style={{fontSize:9,fontWeight:800,color:"#666",textTransform:"uppercase",letterSpacing:1,marginBottom:4}}>Moneyline</div>
+          <div style={{fontSize:12,fontWeight:700,color:"#111",display:"flex",justifyContent:"space-between",gap:6}}><span style={{overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{team1}</span><span style={{flexShrink:0}}>{fmtOdds(odds1)}</span></div>
+          <div style={{fontSize:12,fontWeight:700,color:"#111",display:"flex",justifyContent:"space-between",gap:6,marginTop:2}}><span style={{overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{team2}</span><span style={{flexShrink:0}}>{fmtOdds(odds2)}</span></div>
+        </div>
+        <div style={{background:"#f0f4ff",borderRadius:2,padding:"8px 10px"}}>
+          <div style={{fontSize:9,fontWeight:800,color:"#666",textTransform:"uppercase",letterSpacing:1,marginBottom:4}}>Key Stat</div>
+          {(trend1||trend2) ? (<>
+            {trend1&&<div style={{fontSize:11,fontWeight:700,color:"#111"}}>{team1}: {trend1.ppgFor} PPG</div>}
+            {trend2&&<div style={{fontSize:11,fontWeight:700,color:"#111",marginTop:2}}>{team2}: {trend2.ppgFor} PPG</div>}
+          </>) : h2h ? (
+            <div style={{fontSize:11,fontWeight:700,color:"#111"}}>{team1} is {h2h.wins}-{h2h.losses} all-time vs {team2}</div>
+          ) : (
+            <div style={{fontSize:11,color:"#999",fontStyle:"italic"}}>No history yet</div>
+          )}
+        </div>
+        <div style={{background:"#f0f4ff",borderRadius:2,padding:"8px 10px"}}>
+          <div style={{fontSize:9,fontWeight:800,color:"#666",textTransform:"uppercase",letterSpacing:1,marginBottom:4}}>Spread</div>
+          <div style={{fontSize:12,fontWeight:700,color:"#111",display:"flex",justifyContent:"space-between",gap:6}}><span style={{overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{team1}</span><span style={{flexShrink:0}}>{spread1>0?`+${spread1}`:spread1}</span></div>
+          <div style={{fontSize:12,fontWeight:700,color:"#111",display:"flex",justifyContent:"space-between",gap:6,marginTop:2}}><span style={{overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{team2}</span><span style={{flexShrink:0}}>{-spread1>0?`+${-spread1}`:-spread1}</span></div>
+        </div>
+        <div style={{background:"#f0f4ff",borderRadius:2,padding:"8px 10px"}}>
+          <div style={{fontSize:9,fontWeight:800,color:"#666",textTransform:"uppercase",letterSpacing:1,marginBottom:4}}>Over/Under</div>
+          <div style={{fontSize:12,fontWeight:700,color:"#111"}}>O/U {total}</div>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 function WeekMatchupsCard({schedule,week,sorted,leagueName,season,setActiveArticle,articles,setArticles,commUnlocked,setupRows,gameArchive,year,history,setTab}) {
   const [generating,setGenerating] = useState(false);
+  const [expandedMatchup,setExpandedMatchup] = useState({});
 
   const games = buildGamesList(schedule, week);
   const confGames = games.filter(g => g.opp !== "BYE" && !isCPUOpp(g.opp));
@@ -933,25 +1002,32 @@ function WeekMatchupsCard({schedule,week,sorted,leagueName,season,setActiveArtic
         <div style={{padding:"4px 14px 8px"}}>
           {games.map(({team,opp},i)=>{
             const isGOTW = gameOfWeek&&((team===gameOfWeek.team1&&opp===gameOfWeek.team2)||(team===gameOfWeek.team2&&opp===gameOfWeek.team1));
+            const isBye = opp==="BYE";
+            const opp2 = isCPUOpp(opp) ? (cpuOppName(opp)||"CPU") : opp;
+            const isOpen = expandedMatchup[i];
             return(
-              <div key={i} style={{display:"flex",alignItems:"center",padding:"9px 0",borderBottom:"1px solid #f0f0f0",background:isGOTW?"#f8f9ff":"transparent",gap:4}}>
-                {isGOTW&&<span style={{fontSize:10,flexShrink:0}}>🏆</span>}
-                {opp==="BYE"
-                  ?<><span style={{fontSize:13,fontWeight:600,color:"#888",flex:1,minWidth:0,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{team}</span><span style={{fontSize:11,color:"#aaa",background:"#f5f5f5",borderRadius:2,padding:"2px 8px",flexShrink:0}}>BYE</span></>
-                  :isCPUOpp(opp)
-                  ?<><span style={{fontSize:13,fontWeight:700,color:"#111",flex:1,minWidth:0,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{team}</span><span style={{fontSize:10,fontWeight:800,color:"#bbb",padding:"0 8px",flexShrink:0}}>VS</span><span style={{fontSize:13,fontWeight:600,color:"#888",flex:1,minWidth:0,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{formatOpp(opp)}</span></>
-                  :<>
-                      <span style={{flex:1,minWidth:0,display:"flex",alignItems:"center",justifyContent:"flex-end",gap:6,overflow:"hidden"}}>
-                        <span style={{fontSize:13,fontWeight:isGOTW?800:700,color:"#111",overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap",textAlign:"right"}}>{team}</span>
-                        {logoFor(team)&&<img src={logoFor(team)} alt="" style={{height:20,width:20,objectFit:"contain",flexShrink:0}} onError={e=>{e.target.style.display="none";}}/>}
-                      </span>
-                      <div style={{padding:"0 10px",textAlign:"center",flexShrink:0}}><span style={{fontSize:10,fontWeight:900,color:isGOTW?"#1a3a6b":"#bbb",letterSpacing:1}}>VS</span></div>
-                      <span style={{flex:1,minWidth:0,display:"flex",alignItems:"center",gap:6,overflow:"hidden"}}>
-                        {logoFor(opp)&&<img src={logoFor(opp)} alt="" style={{height:20,width:20,objectFit:"contain",flexShrink:0}} onError={e=>{e.target.style.display="none";}}/>}
-                        <span style={{fontSize:13,fontWeight:isGOTW?800:700,color:"#111",overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{opp}</span>
-                      </span>
-                    </>
-                }
+              <div key={i} style={{borderBottom:"1px solid #f0f0f0"}}>
+                <div onClick={isBye?undefined:()=>setExpandedMatchup(p=>({...p,[i]:!p[i]}))} style={{display:"flex",alignItems:"center",padding:"9px 0",background:isGOTW?"#f8f9ff":"transparent",gap:4,cursor:isBye?"default":"pointer"}}>
+                  {isGOTW&&<span style={{fontSize:10,flexShrink:0}}>🏆</span>}
+                  {isBye
+                    ?<><span style={{fontSize:13,fontWeight:600,color:"#888",flex:1,minWidth:0,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{team}</span><span style={{fontSize:11,color:"#aaa",background:"#f5f5f5",borderRadius:2,padding:"2px 8px",flexShrink:0}}>BYE</span></>
+                    :isCPUOpp(opp)
+                    ?<><span style={{fontSize:13,fontWeight:700,color:"#111",flex:1,minWidth:0,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{team}</span><span style={{fontSize:10,fontWeight:800,color:"#bbb",padding:"0 8px",flexShrink:0}}>VS</span><span style={{fontSize:13,fontWeight:600,color:"#888",flex:1,minWidth:0,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{formatOpp(opp)}</span></>
+                    :<>
+                        <span style={{flex:1,minWidth:0,display:"flex",alignItems:"center",justifyContent:"flex-end",gap:6,overflow:"hidden"}}>
+                          <span style={{fontSize:13,fontWeight:isGOTW?800:700,color:"#111",overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap",textAlign:"right"}}>{team}</span>
+                          {logoFor(team)&&<img src={logoFor(team)} alt="" style={{height:20,width:20,objectFit:"contain",flexShrink:0}} onError={e=>{e.target.style.display="none";}}/>}
+                        </span>
+                        <div style={{padding:"0 10px",textAlign:"center",flexShrink:0}}><span style={{fontSize:10,fontWeight:900,color:isGOTW?"#1a3a6b":"#bbb",letterSpacing:1}}>VS</span></div>
+                        <span style={{flex:1,minWidth:0,display:"flex",alignItems:"center",gap:6,overflow:"hidden"}}>
+                          {logoFor(opp)&&<img src={logoFor(opp)} alt="" style={{height:20,width:20,objectFit:"contain",flexShrink:0}} onError={e=>{e.target.style.display="none";}}/>}
+                          <span style={{fontSize:13,fontWeight:isGOTW?800:700,color:"#111",overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{opp}</span>
+                        </span>
+                      </>
+                  }
+                  {!isBye&&<span style={{fontSize:10,color:"#ccc",flexShrink:0,marginLeft:6}}>{isOpen?"▲":"▼"}</span>}
+                </div>
+                {isOpen&&!isBye&&<MatchupPreview team1={team} team2={opp2} sorted={sorted} gameArchive={gameArchive} year={year} history={history} logoFor={logoFor}/>}
               </div>
             );
           })}
