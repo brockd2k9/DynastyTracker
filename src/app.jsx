@@ -741,6 +741,43 @@ function probToAmericanOdds(p) {
 }
 function fmtOdds(n) { return n>0?`+${n}`:`${n}`; }
 
+// Point spread for teamEntry, in standard betting notation (negative = teamEntry favored by
+// that many, positive = teamEntry an underdog getting that many). Prefers real scored-game
+// margins (same trend data the moneyline blends in) since that's the strongest signal on hand;
+// falls back to win% + dynasty-points edge when neither team has box scores logged yet. Clamped
+// to 3.5–30.5 either way — a real book never quotes a true pick'em as a flat 0, and a dynasty
+// blowout shouldn't produce an implausible 50+ point line.
+function estimateSpread(teamEntry, oppEntry, trendA=null, trendB=null) {
+  let margin; // positive = teamEntry the stronger/favored side
+  if (trendA && trendB) {
+    const marginA = parseFloat(trendA.ppgFor)-parseFloat(trendA.ppgAgainst);
+    const marginB = parseFloat(trendB.ppgFor)-parseFloat(trendB.ppgAgainst);
+    margin = (marginA-marginB)/2;
+  } else {
+    const gamesA=(teamEntry.wins||0)+(teamEntry.losses||0), gamesB=(oppEntry.wins||0)+(oppEntry.losses||0);
+    const winPctA = gamesA?teamEntry.wins/gamesA:0.5, winPctB = gamesB?oppEntry.wins/gamesB:0.5;
+    const ptsA = calcTotal(teamEntry), ptsB = calcTotal(oppEntry);
+    const ptsEdge = (ptsA-ptsB)/Math.max(ptsA,ptsB,1);
+    margin = (winPctA-winPctB)*16 + ptsEdge*10;
+  }
+  const mag = Math.floor(Math.max(3.5,Math.min(30.5,Math.abs(margin))))+0.5;
+  return margin>=0 ? -mag : mag;
+}
+// Combined-score total (Over/Under). Blends each team's own scoring average with the other
+// team's points-allowed average when both have logged box scores this season; falls back to a
+// generic league-average total (24 pts/team) for whichever side has no data yet.
+function estimateTotal(trendA=null, trendB=null) {
+  const LEAGUE_AVG = 24;
+  const projFor = (mine,theirs) => {
+    if (mine && theirs) return (parseFloat(mine.ppgFor)+parseFloat(theirs.ppgAgainst))/2;
+    if (mine) return parseFloat(mine.ppgFor);
+    if (theirs) return parseFloat(theirs.ppgAgainst);
+    return LEAGUE_AVG;
+  };
+  const total = projFor(trendA,trendB) + projFor(trendB,trendA);
+  return Math.floor(total)+0.5;
+}
+
 // Per-team scoring average from uploaded box scores for the given year, or null if none logged yet.
 function teamScoringTrend(gameArchive, year, teamName) {
   let forPts=0, againstPts=0, games=0;
@@ -771,6 +808,8 @@ function WeekMatchupsCard({schedule,week,sorted,leagueName,season,setActiveArtic
   const gotwProb1 = (gotwT1Entry&&gotwT2Entry) ? estimateWinProb(gotwT1Entry,gotwT2Entry,history,gotwTrend1,gotwTrend2) : 0.5;
   const gotwOdds1 = probToAmericanOdds(gotwProb1);
   const gotwOdds2 = probToAmericanOdds(1-gotwProb1);
+  const gotwSpread1 = (gotwT1Entry&&gotwT2Entry) ? estimateSpread(gotwT1Entry,gotwT2Entry,gotwTrend1,gotwTrend2) : 3.5;
+  const gotwTotal = gameOfWeek ? estimateTotal(gotwTrend1,gotwTrend2) : null;
   const gotwH2H = gotwT1Entry?.h2h?.[gameOfWeek?.team2];
 
   const generateGOTWPreview = async () => {
@@ -868,6 +907,15 @@ function WeekMatchupsCard({schedule,week,sorted,leagueName,season,setActiveArtic
                 ) : (
                   <div style={{fontSize:11,color:"#999",fontStyle:"italic"}}>No history yet</div>
                 )}
+              </div>
+              <div style={{background:"#f0f4ff",borderRadius:2,padding:"8px 10px"}}>
+                <div style={{fontSize:9,fontWeight:800,color:"#666",textTransform:"uppercase",letterSpacing:1,marginBottom:4}}>Spread</div>
+                <div style={{fontSize:12,fontWeight:700,color:"#111",display:"flex",justifyContent:"space-between",gap:6}}><span style={{overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{gameOfWeek.team1}</span><span style={{flexShrink:0}}>{gotwSpread1>0?`+${gotwSpread1}`:gotwSpread1}</span></div>
+                <div style={{fontSize:12,fontWeight:700,color:"#111",display:"flex",justifyContent:"space-between",gap:6,marginTop:2}}><span style={{overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{gameOfWeek.team2}</span><span style={{flexShrink:0}}>{-gotwSpread1>0?`+${-gotwSpread1}`:-gotwSpread1}</span></div>
+              </div>
+              <div style={{background:"#f0f4ff",borderRadius:2,padding:"8px 10px"}}>
+                <div style={{fontSize:9,fontWeight:800,color:"#666",textTransform:"uppercase",letterSpacing:1,marginBottom:4}}>Over/Under</div>
+                <div style={{fontSize:12,fontWeight:700,color:"#111"}}>O/U {gotwTotal}</div>
               </div>
             </div>
             {setTab&&<button onClick={()=>setTab("Redzone")} style={{marginTop:12,width:"100%",background:"#111",color:"#fff",border:"none",borderRadius:2,padding:"10px 14px",cursor:"pointer",fontFamily:"'Helvetica Neue',Arial,sans-serif",fontSize:12,fontWeight:800,textTransform:"uppercase",letterSpacing:0.5,display:"flex",alignItems:"center",justifyContent:"center",gap:8}}>📺 Watch on RedZone</button>}
