@@ -1208,8 +1208,53 @@ function SchedulePanel({entries,schedule,setSchedule}) {
   );
 }
 
+// Games flagged from Enter Results ("🏆 Instant Classic") — a lightweight year/week/team-pair
+// tag independent of gameArchive, so it works whether or not a box score was ever scanned.
+// When an archived box score does exist for the tagged game, the row expands into the same
+// BoxScoreDetail view used everywhere else.
+function ClassicGamesCard({classicGames, gameArchive, setupRows}) {
+  const [expanded,setExpanded] = useState({});
+  const games=[...(classicGames||[])].sort((a,b)=>b.year!==a.year?b.year-a.year:b.week-a.week);
+  if(!games.length) return null;
+  const logoFor=(teamName)=>{
+    const row=(setupRows||[]).find(r=>r.teamName===teamName);
+    return row?getPlayerImages(setupRows,row.userId,row.userName).teamLogo:null;
+  };
+  return (
+    <Card style={{overflow:"hidden"}}>
+      <CardHead bg="#b8860b">🏆 Classic Games</CardHead>
+      <div style={{padding:14,display:"flex",flexDirection:"column",gap:8}}>
+        {games.map((g,i)=>{
+          const archivedGame=(gameArchive||[]).find(ga=>ga.year===g.year&&ga.week===g.week&&((ga.team1.name===g.teamA&&ga.team2.name===g.teamB)||(ga.team1.name===g.teamB&&ga.team2.name===g.teamA)));
+          const key=`${g.year}-${g.week}-${g.teamA}-${g.teamB}-${i}`;
+          const isOpen=expanded[key];
+          const score=archivedGame&&(archivedGame.team1.name===g.teamA?`${archivedGame.team1.score}-${archivedGame.team2.score}`:`${archivedGame.team2.score}-${archivedGame.team1.score}`);
+          return (
+            <div key={key} style={{border:"1px solid #f0e6cc",borderRadius:2,overflow:"hidden"}}>
+              <div onClick={archivedGame?()=>setExpanded(p=>({...p,[key]:!p[key]})):undefined} style={{padding:"10px 14px",display:"flex",alignItems:"center",gap:10,flexWrap:"wrap",cursor:archivedGame?"pointer":"default",background:"#fffbf0"}}>
+                <span style={{fontSize:16}}>🏆</span>
+                <div style={{flex:1,display:"flex",alignItems:"center",gap:6,fontSize:13,fontWeight:800,color:"#111",minWidth:0}}>
+                  <TeamLogo url={logoFor(g.teamA)} size={18}/>
+                  <span>{g.teamA}</span>
+                  <span style={{color:"#bbb",fontWeight:600}}>vs</span>
+                  <TeamLogo url={logoFor(g.teamB)} size={18}/>
+                  <span>{g.teamB}</span>
+                  {score&&<span style={{marginLeft:8,color:"#555",fontWeight:700}}>{score}</span>}
+                </div>
+                <div style={{fontSize:11,color:"#888",flexShrink:0}}>Wk {g.week} · {g.year}</div>
+                {archivedGame&&<span style={{color:"#ccc",fontSize:11,flexShrink:0}}>{isOpen?"▲":"▼"}</span>}
+              </div>
+              {isOpen&&archivedGame&&<div style={{padding:"10px 14px",background:"#fff"}}><BoxScoreDetail team1={archivedGame.team1} team2={archivedGame.team2}/></div>}
+            </div>
+          );
+        })}
+      </div>
+    </Card>
+  );
+}
+
 // ── History Tab ───────────────────────────────────────────────────────────
-function HistoryTab({history, setHistory, saveToDb, commUnlocked, entries, setEntries, season, week, setWeek, yearRosters, permanentUsers, currentEntries, year, setupRows}) {
+function HistoryTab({history, setHistory, saveToDb, commUnlocked, entries, setEntries, season, week, setWeek, yearRosters, permanentUsers, currentEntries, year, setupRows, gameArchive, classicGames}) {
   // Apply per-year team overrides from yearRosters to a standings array (username never changes)
   function applyRoster(standings, yr) {
     const roster = yearRosters?.[yr];
@@ -1265,6 +1310,7 @@ function HistoryTab({history, setHistory, saveToDb, commUnlocked, entries, setEn
 
   return (
     <div style={{display:"flex",flexDirection:"column",gap:14}}>
+      <ClassicGamesCard classicGames={classicGames} gameArchive={gameArchive} setupRows={setupRows||[]}/>
       <LeagueRecordBook history={history} currentEntries={currentEntries||entries||[]} season={season} year={year} permanentUsers={permanentUsers} setupRows={setupRows||[]}/>
 
       {/* Live Season Editor */}
@@ -3759,6 +3805,19 @@ function EnterResultsPanel({entries,weekResults,setWeekResults,week,setWeek,appl
     });
   },[setup?.gameArchive,entryWeek,year]);
 
+  // Instant Classic — a lightweight tag on a specific game (year/week/team pair), independent
+  // of gameArchive so it can be set whether or not a box score has been scanned for the game.
+  const classicKey=(y,w,t1,t2)=>`${y}|${w}|${[t1,t2].sort().join("||")}`;
+  const isClassic=(t1,t2)=>(setup?.classicGames||[]).some(c=>classicKey(c.year,c.week,c.teamA,c.teamB)===classicKey(Number(year),Number(entryWeek),t1,t2));
+  function toggleClassic(t1,t2){
+    const k=classicKey(Number(year),Number(entryWeek),t1,t2);
+    const cur=setup?.classicGames||[];
+    const exists=cur.some(c=>classicKey(c.year,c.week,c.teamA,c.teamB)===k);
+    const next=exists?cur.filter(c=>classicKey(c.year,c.week,c.teamA,c.teamB)!==k):[...cur,{year:Number(year),week:Number(entryWeek),season:Number(season),teamA:t1,teamB:t2,markedAt:new Date().toISOString()}];
+    const updatedSetup={...setup,classicGames:next};
+    setSetup(updatedSetup); saveToDb({setup:updatedSetup});
+  }
+
   // Build matchup pairs from schedule
   const isCPUval=isCPUOpp;
   const getCPUName=(v)=>cpuOppName(v)||"CPU";
@@ -3912,6 +3971,10 @@ function EnterResultsPanel({entries,weekResults,setWeekResults,week,setWeek,appl
                       {[{label:t1,win:t1,loss:t2},{label:t2,win:t2,loss:t1}].map(opt=>(
                         <button key={"f-"+opt.label} onClick={()=>{setWR(opt.win,"result","win");setWR(opt.win,"forfeit",true);setWR(opt.win,"ranked25",false);setWR(opt.win,"ranked10",false);setWR(opt.loss,"result","loss");setWR(opt.loss,"forfeit",true);}} title={`${opt.loss} couldn't play — ${opt.win} gets a forced win, no stats`} style={btnStyle(winner===opt.win&&getWR(opt.win).forfeit,"#b8860b")}>{opt.label} Win by Forfeit</button>
                       ))}
+                      <span style={{width:1,height:16,background:"#ddd",margin:"0 2px"}}/>
+                      <label style={{display:"flex",alignItems:"center",gap:4,fontSize:11,color:isClassic(t1,t2)?"#b8860b":"#888",fontWeight:isClassic(t1,t2)?800:400,cursor:"pointer"}}>
+                        <input type="checkbox" checked={isClassic(t1,t2)} onChange={()=>toggleClassic(t1,t2)}/> 🏆 Instant Classic
+                      </label>
                     </div>
                     {winner&&!getWR(winner).forfeit&&<div style={{display:"flex",gap:10,marginLeft:"auto"}}>
                       <label style={{display:"flex",alignItems:"center",gap:4,fontSize:11,color:"#888",cursor:"pointer"}}>
@@ -4011,6 +4074,10 @@ function EnterResultsPanel({entries,weekResults,setWeekResults,week,setWeek,appl
                       <button key={opt.res} onClick={()=>setWR(teamName,"result",opt.res)} style={btnStyle(wr.result===opt.res,opt.res==="win"?"#007a00":RED)}>{opt.label}</button>
                     ))}
                     <button onClick={()=>setWR(teamName,"result","none")} style={btnStyle(wr.result==="none","#888")}>Clear</button>
+                    <span style={{width:1,height:16,background:"#ddd",margin:"0 2px"}}/>
+                    <label style={{display:"flex",alignItems:"center",gap:4,fontSize:11,color:isClassic(teamName,displayCPU)?"#b8860b":"#888",fontWeight:isClassic(teamName,displayCPU)?800:400,cursor:"pointer"}}>
+                      <input type="checkbox" checked={isClassic(teamName,displayCPU)} onChange={()=>toggleClassic(teamName,displayCPU)}/> 🏆 Instant Classic
+                    </label>
                     {wr.result==="win"&&<div style={{display:"flex",gap:10,marginLeft:"auto"}}>
                       <label style={{display:"flex",alignItems:"center",gap:4,fontSize:11,color:"#888",cursor:"pointer"}}><input type="checkbox" checked={wr.ranked25||false} onChange={e=>setWR(teamName,"ranked25",e.target.checked)}/> vs Top 25</label>
                       <label style={{display:"flex",alignItems:"center",gap:4,fontSize:11,color:RED,cursor:"pointer",fontWeight:700}}><input type="checkbox" checked={wr.ranked10||false} onChange={e=>setWR(teamName,"ranked10",e.target.checked)}/> vs Top 10</label>
@@ -5492,7 +5559,7 @@ export default function App() {
             )}
           </>)}
 
-          {tab==="History"&&<HistoryTab history={history} setHistory={setHistory} saveToDb={saveToDb} commUnlocked={commUnlocked} yearRosters={setup?.yearRosters} permanentUsers={setup?.permanentUsers} currentEntries={entries} season={season} year={year} setupRows={setup?.rows||[]}/>}
+          {tab==="History"&&<HistoryTab history={history} setHistory={setHistory} saveToDb={saveToDb} commUnlocked={commUnlocked} yearRosters={setup?.yearRosters} permanentUsers={setup?.permanentUsers} currentEntries={entries} season={season} year={year} setupRows={setup?.rows||[]} gameArchive={setup?.gameArchive} classicGames={setup?.classicGames}/>}
           {tab==="Profiles"&&<ProfileTab history={history} setupRows={(setup?.rows||[]).filter(r=>r.active!==false)} currentEntries={activeEntries} season={season} year={year} permanentUsers={setup?.permanentUsers?.filter(u=>(setup?.rows||[]).some(r=>r.userId===u.id&&r.active!==false))} sel={profileSel} setSel={setProfileSel} pTab={profilePTab} setPTab={setProfilePTab} articles={articles} setActiveArticle={setActiveArticle} playerStats={setup?.playerStats} gameArchive={setup?.gameArchive}/>}
           {tab==="Schedule"&&<ScheduleTab schedule={schedule} entries={activeEntries} week={week} season={season} year={year} setup={setup} setupRows={setup?.rows||[]} history={history}/>}
           {tab==="Rules"&&(()=>{
@@ -5610,7 +5677,7 @@ export default function App() {
           {["Enter Results","Season History","Schedule","Content","Player Stats","League Setup"].map(t=><button key={t} onClick={()=>setCommTab(t)} style={{padding:"11px 18px",background:"transparent",border:"none",borderBottom:commTab===t?`3px solid ${RED}`:"3px solid transparent",color:commTab===t?"#fff":"#888",cursor:"pointer",fontSize:12,fontWeight:700,fontFamily:ff,textTransform:"uppercase",letterSpacing:0.5,whiteSpace:"nowrap"}}>{t}</button>)}
         </div>
         <div style={{maxWidth:800,margin:"0 auto",padding:"20px 14px"}}>
-          {commTab==="Season History"&&<HistoryTab history={history} setHistory={setHistory} saveToDb={saveToDb} commUnlocked={true} entries={entries} setEntries={setEntries} season={season} week={week} setWeek={setWeek} yearRosters={setup?.yearRosters} permanentUsers={setup?.permanentUsers} currentEntries={entries} year={year} setupRows={setup?.rows||[]}/>}
+          {commTab==="Season History"&&<HistoryTab history={history} setHistory={setHistory} saveToDb={saveToDb} commUnlocked={true} entries={entries} setEntries={setEntries} season={season} week={week} setWeek={setWeek} yearRosters={setup?.yearRosters} permanentUsers={setup?.permanentUsers} currentEntries={entries} year={year} setupRows={setup?.rows||[]} gameArchive={setup?.gameArchive} classicGames={setup?.classicGames}/>}
           {commTab==="Enter Results"&&<EnterResultsPanel entries={activeEntries} weekResults={weekResults} setWeekResults={setWeekResults} week={week} setWeek={setWeek} applyBulkResults={applyBulkResults} applyWeekResults={applyWeekResults} postSeasonInputs={postSeasonInputs} setPSI={setPSI} applyPostSeason={applyPostSeason} finalizeSeason={finalizeSeason} season={season} setSeason={setSeason} year={year} setYear={setYear} teamNames={teamNames} schedule={schedule} history={history} onImportHistory={importHistoricalSeason} setupRows={setup?.rows||[]} saveToDb={saveToDb} setup={setup} setSetup={setSetup}/>}
           {commTab==="Schedule"&&<SchedulePanel entries={activeEntries} schedule={schedule} setSchedule={setSchedule}/>}
 {commTab==="Content"&&<ContentHub sorted={sorted} entries={activeEntries} week={week} season={season} year={year} leagueName={leagueName} history={history} leader={leader} articles={articles} setArticles={setArticles} setActiveArticle={setActiveArticle} schedule={schedule} setup={setup} setSetup={setSetup} saveToDb={saveToDb}/>}
