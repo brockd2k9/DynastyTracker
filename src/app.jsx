@@ -352,16 +352,114 @@ const EMPTY_BOX_TEAM = () => ({
   defense:{totalYdsAllowed:0,passYdsAllowed:0,rushYdsAllowed:0},
   specialTeams:{fgMade:0,fgAtt:0,krTds:0,prTds:0,prYds:0,krYds:0,punts:0,puntYds:0},
   misc:{firstDowns:0,totalPlays:0,totalYds:0,turnovers:0,fumblesLost:0,thirdDownConv:0,thirdDownAtt:0,fourthDownConv:0,fourthDownAtt:0,twoPtConv:0,twoPtAtt:0,redZoneTD:0,redZoneFG:0,redZonePct:0,penalties:0,penaltyYds:0,timeOfPossession:""},
+  quarters:[],
 });
 
 // One team's half of the box score JSON schema asked of the vision scan — shared by both the
 // conference-matchup and CPU-game upload prompts so they can't drift out of sync with each other.
-const BOX_SCORE_TEAM_SCHEMA = `{"name":"","score":0,"passing":{"comp":0,"att":0,"pct":0.0,"yds":0,"tds":0,"int":0},"rushing":{"att":0,"yds":0,"ypc":0.0,"tds":0},"specialTeams":{"fgMade":0,"fgAtt":0,"krTds":0,"prTds":0,"prYds":0,"krYds":0,"punts":0,"puntYds":0},"misc":{"firstDowns":0,"totalPlays":0,"totalYds":0,"turnovers":0,"fumblesLost":0,"thirdDownConv":0,"thirdDownAtt":0,"fourthDownConv":0,"fourthDownAtt":0,"twoPtConv":0,"twoPtAtt":0,"redZoneTD":0,"redZoneFG":0,"redZonePct":0,"penalties":0,"penaltyYds":0,"timeOfPossession":""}}`;
+const BOX_SCORE_TEAM_SCHEMA = `{"name":"","score":0,"quarters":[0,0,0,0],"passing":{"comp":0,"att":0,"pct":0.0,"yds":0,"tds":0,"int":0},"rushing":{"att":0,"yds":0,"ypc":0.0,"tds":0},"specialTeams":{"fgMade":0,"fgAtt":0,"krTds":0,"prTds":0,"prYds":0,"krYds":0,"punts":0,"puntYds":0},"misc":{"firstDowns":0,"totalPlays":0,"totalYds":0,"turnovers":0,"fumblesLost":0,"thirdDownConv":0,"thirdDownAtt":0,"fourthDownConv":0,"fourthDownAtt":0,"twoPtConv":0,"twoPtAtt":0,"redZoneTD":0,"redZoneFG":0,"redZonePct":0,"penalties":0,"penaltyYds":0,"timeOfPossession":""}}`;
 
 function buildBoxScorePrompt(multiImage) {
-  return `${multiImage?"These are two video game box score screenshots that together show":"This is a video game box score screenshot that shows"} the full box score for one college football game. Extract stats for BOTH teams and return ONLY this JSON (use 0 for missing stats). Read each team's name exactly as shown in the image (school name/logo label) into the "name" field — get this right, it's used to match the team. totalYds is the box score's own "Total Yards" stat (may differ slightly from passing+rushing yards). timeOfPossession as a "MM:SS" string. redZoneTD/redZoneFG/redZonePct come from the "Red Zone TD-FG-%" line in that order:
+  return `${multiImage?"These are two video game box score screenshots that together show":"This is a video game box score screenshot that shows"} the full box score for one college football game. Extract stats for BOTH teams and return ONLY this JSON (use 0 for missing stats). Read each team's name exactly as shown in the image (school name/logo label) into the "name" field — get this right, it's used to match the team. quarters is that team's score in each quarter shown in the quarter-by-quarter scoring line at the top of the box score, in order (add a 5th element only if there was an overtime period) — the quarters must sum to that team's final score. totalYds is the box score's own "Total Yards" stat (may differ slightly from passing+rushing yards). timeOfPossession as a "MM:SS" string. redZoneTD/redZoneFG/redZonePct come from the "Red Zone TD-FG-%" line in that order:
 {"team1":${BOX_SCORE_TEAM_SCHEMA},"team2":${BOX_SCORE_TEAM_SCHEMA}}
 Return only JSON.`;
+}
+
+// Stats derived by simple arithmetic from the raw box-score fields rather than asked of the
+// vision model directly — fewer fields for it to misread, and these are guaranteed consistent
+// with the raw numbers it does report.
+function boxScoreDerived(t) {
+  const passing = t.passing||{}, rushing = t.rushing||{}, misc = t.misc||{}, st = t.specialTeams||{};
+  const offYds = (passing.yds||0) + (rushing.yds||0);
+  const totalYds = misc.totalYds || offYds;
+  const totalPlays = misc.totalPlays||0;
+  const ypp = totalPlays>0 ? (totalYds/totalPlays).toFixed(1) : "-";
+  const ypa = (passing.att||0)>0 ? (passing.yds/passing.att).toFixed(1) : "-";
+  const puntAvg = (st.punts||0)>0 ? (st.puntYds/st.punts).toFixed(1) : "-";
+  return {offYds,totalYds,ypp,ypa,puntAvg};
+}
+
+// Two-team quarter-by-quarter scoring chart. Blue/red pair validated for categorical
+// use (CVD ΔE well above target, normal-vision ΔE well above floor) against both a
+// dark (#111) and light (#fafafa) chart surface.
+function QuarterChart({team1,team2,name1,name2,dark}) {
+  const q1=team1?.quarters||[], q2=team2?.quarters||[];
+  const n=Math.max(q1.length,q2.length);
+  if(!n) return null;
+  const max=Math.max(1,...q1,...q2);
+  const c1=dark?"#3987e5":"#2a78d6", c2=dark?"#e66767":"#e34948";
+  const ink=dark?"#fff":"#111", sub=dark?"#888":"#888", grid=dark?"#333":"#e1e0d9";
+  const labels=Array.from({length:n},(_,i)=>i<4?`Q${i+1}`:"OT");
+  const barMax=64;
+  return (
+    <div style={{padding:"10px 12px",background:dark?"#1a1a1a":"#fafafa",borderRadius:2,marginBottom:8}}>
+      <div style={{display:"flex",gap:14,marginBottom:8,fontSize:10,fontWeight:700,textTransform:"uppercase",letterSpacing:0.5}}>
+        <div style={{display:"flex",alignItems:"center",gap:5}}><span style={{width:9,height:9,borderRadius:2,background:c1,display:"inline-block"}}/><span style={{color:ink}}>{name1}</span></div>
+        <div style={{display:"flex",alignItems:"center",gap:5}}><span style={{width:9,height:9,borderRadius:2,background:c2,display:"inline-block"}}/><span style={{color:ink}}>{name2}</span></div>
+      </div>
+      <div style={{display:"flex",gap:10}}>
+        {labels.map((lbl,i)=>{
+          const v1=q1[i]||0, v2=q2[i]||0;
+          const h1=Math.round((v1/max)*barMax), h2=Math.round((v2/max)*barMax);
+          return (
+            <div key={i} style={{flex:1,display:"flex",flexDirection:"column",alignItems:"center",gap:4}}>
+              <div style={{display:"flex",alignItems:"flex-end",gap:3,height:barMax}}>
+                <div style={{width:16,height:Math.max(2,h1),background:c1,borderRadius:"3px 3px 0 0"}} title={`${name1} ${lbl}: ${v1}`}/>
+                <div style={{width:16,height:Math.max(2,h2),background:c2,borderRadius:"3px 3px 0 0"}} title={`${name2} ${lbl}: ${v2}`}/>
+              </div>
+              <div style={{display:"flex",gap:3,fontSize:9,fontWeight:700,color:ink}}><span style={{width:16,textAlign:"center"}}>{v1}</span><span style={{width:16,textAlign:"center"}}>{v2}</span></div>
+              <div style={{fontSize:9,fontWeight:700,color:sub,textTransform:"uppercase",borderTop:`1px solid ${grid}`,width:"100%",textAlign:"center",paddingTop:3}}>{lbl}</div>
+            </div>
+          );
+        })}
+      </div>
+    </div>
+  );
+}
+
+// Full side-by-side stat comparison for one archived game — shared by the Schedule tab's
+// box score card and the Enter Results archived-stats previews so all three stay in sync.
+function BoxScoreDetail({team1,team2,dark}) {
+  if(!team1||!team2) return null;
+  const d1=boxScoreDerived(team1), d2=boxScoreDerived(team2);
+  const m1=team1.misc||{}, m2=team2.misc||{}, st1=team1.specialTeams||{}, st2=team2.specialTeams||{};
+  const ink=dark?"#ccc":"#555", label=dark?"#888":"#888", head=dark?"#fff":"#333";
+  const rows=[
+    ["First Downs", m1.firstDowns, m2.firstDowns],
+    ["Total Plays", m1.totalPlays, m2.totalPlays],
+    ["Total Yards", d1.totalYds, d2.totalYds],
+    ["Yards / Play", d1.ypp, d2.ypp],
+    ["Offensive Yards", d1.offYds, d2.offYds],
+    ["Passing", `${team1.passing.comp}/${team1.passing.att} ${team1.passing.tds}TD ${team1.passing.int}INT`, `${team2.passing.comp}/${team2.passing.att} ${team2.passing.tds}TD ${team2.passing.int}INT`],
+    ["Passing Yards", team1.passing.yds, team2.passing.yds],
+    ["Yards / Pass", d1.ypa, d2.ypa],
+    ["Rushing", `${team1.rushing.att} Rushes ${team1.rushing.yds} Yards ${team1.rushing.tds} TD`, `${team2.rushing.att} Rushes ${team2.rushing.yds} Yards ${team2.rushing.tds} TD`],
+    ["Rushing Yards", team1.rushing.yds, team2.rushing.yds],
+    ["3rd Down Conv.", `${m1.thirdDownConv}/${m1.thirdDownAtt}`, `${m2.thirdDownConv}/${m2.thirdDownAtt}`],
+    ["4th Down Conv.", `${m1.fourthDownConv}/${m1.fourthDownAtt}`, `${m2.fourthDownConv}/${m2.fourthDownAtt}`],
+    ["Red Zone TD-FG-%", `${m1.redZoneTD}-${m1.redZoneFG}-${m1.redZonePct}%`, `${m2.redZoneTD}-${m2.redZoneFG}-${m2.redZonePct}%`],
+    ["Turnovers", m1.turnovers, m2.turnovers],
+    ["Interceptions", team1.passing.int, team2.passing.int],
+    ["KR Yards", st1.krYds, st2.krYds],
+    ["PR Yards", st1.prYds, st2.prYds],
+    ["Punting Avg", d1.puntAvg, d2.puntAvg],
+    ["Penalties-Yards", `${m1.penalties}-${m1.penaltyYds}`, `${m2.penalties}-${m2.penaltyYds}`],
+    ["Time of Poss.", m1.timeOfPossession||"-", m2.timeOfPossession||"-"],
+  ];
+  return (
+    <div>
+      <QuarterChart team1={team1} team2={team2} name1={team1.name} name2={team2.name} dark={dark}/>
+      <div>
+        {rows.map(([lbl,v1,v2])=>(
+          <div key={lbl} style={{display:"grid",gridTemplateColumns:"1fr auto 1fr",gap:8,padding:"4px 2px",borderBottom:`1px solid ${dark?"#2a2a2a":"#f0f0f0"}`,alignItems:"center"}}>
+            <div style={{textAlign:"right",fontSize:11,color:ink,fontWeight:600}}>{v1}</div>
+            <div style={{fontSize:9,color:label,textTransform:"uppercase",fontWeight:700,textAlign:"center",minWidth:96,letterSpacing:0.3}}>{lbl}</div>
+            <div style={{textAlign:"left",fontSize:11,color:ink,fontWeight:600}}>{v2}</div>
+          </div>
+        ))}
+      </div>
+    </div>
+  );
 }
 
 // The vision scan reads team names straight off the screenshot, but its "team1"/"team2" JSON
@@ -431,7 +529,7 @@ function pickWeeklyAwards(games) {
 function buildRecapPrompt(games, awards, leagueName, week, season, year, reporter) {
   const w = g => g.team1.score > g.team2.score ? g.team1 : g.team2;
   const l = g => g.team1.score > g.team2.score ? g.team2 : g.team1;
-  const statLine = t => `${t.passing.comp}/${t.passing.att} (${t.passing.pct}%) ${t.passing.yds} pass yds ${t.passing.tds}TD/${t.passing.int}INT | ${t.rushing.att} rush, ${t.rushing.yds} yds (${t.rushing.ypc} YPC), ${t.rushing.tds} TD | Def: ${t.defense.totalYdsAllowed} total yds allowed (${t.defense.passYdsAllowed} pass / ${t.defense.rushYdsAllowed} rush) | FG ${t.specialTeams.fgMade}/${t.specialTeams.fgAtt}${t.specialTeams.krTds>0?` | ${t.specialTeams.krTds} KR TD`:''}${t.specialTeams.prTds>0?` | ${t.specialTeams.prTds} PR TD`:''}${t.misc?` | ${t.misc.firstDowns} first downs, ${t.misc.turnovers} turnovers, 3rd down ${t.misc.thirdDownConv}/${t.misc.thirdDownAtt}, TOP ${t.misc.timeOfPossession||'-'}`:''}`;
+  const statLine = t => { const d=boxScoreDerived(t); return `${t.passing.comp}/${t.passing.att} (${t.passing.pct}%) ${t.passing.yds} pass yds (${d.ypa} YPA) ${t.passing.tds}TD/${t.passing.int}INT | ${t.rushing.att} rush, ${t.rushing.yds} yds (${t.rushing.ypc} YPC), ${t.rushing.tds} TD | ${d.totalYds} total yds, ${d.ypp} YPP | Def: ${t.defense.totalYdsAllowed} total yds allowed (${t.defense.passYdsAllowed} pass / ${t.defense.rushYdsAllowed} rush) | FG ${t.specialTeams.fgMade}/${t.specialTeams.fgAtt}${t.specialTeams.krTds>0?` | ${t.specialTeams.krTds} KR TD`:''}${t.specialTeams.prTds>0?` | ${t.specialTeams.prTds} PR TD`:''}${t.specialTeams.punts>0?` | punting ${d.puntAvg} avg`:''}${t.quarters?.length?` | by quarter: ${t.quarters.join('-')}`:''}${t.misc?` | ${t.misc.firstDowns} first downs, ${t.misc.turnovers} turnovers (${t.misc.fumblesLost}F/${t.passing.int}I), 3rd down ${t.misc.thirdDownConv}/${t.misc.thirdDownAtt}, 4th down ${t.misc.fourthDownConv}/${t.misc.fourthDownAtt}, red zone ${t.misc.redZoneTD}TD-${t.misc.redZoneFG}FG-${t.misc.redZonePct}%, ${t.misc.penalties}-${t.misc.penaltyYds} penalties, TOP ${t.misc.timeOfPossession||'-'}`:''}`; };
   const gameLines = games.map(g=>`${w(g).name} ${w(g).score}, ${l(g).name} ${l(g).score}\n  ${g.team1.name}: ${statLine(g.team1)}\n  ${g.team2.name}: ${statLine(g.team2)}`).join("\n\n");
   const awardLines = [
     awards.gotw ? `GAME OF THE WEEK: ${w(awards.gotw.game).name} def. ${l(awards.gotw.game).name} ${w(awards.gotw.game).score}-${l(awards.gotw.game).score} (margin: ${awards.gotw.margin})` : "",
@@ -1467,19 +1565,12 @@ function ScheduleTab({schedule,entries,week,season,year,setup,setupRows,history}
               <div style={{fontSize:22,fontWeight:900,color:wB?"#fff":"#888",lineHeight:1.1}}>{opp.score}</div>
             </div>
           </div>
-          <div style={{padding:12,display:"grid",gridTemplateColumns:"1fr 1fr",gap:8,fontSize:11}}>
-            {[{name:teamA,t:mine,win:wA},{name:teamB,t:opp,win:wB}].map(({name,t,win})=>(
-              <div key={name} style={{background:"#1a1a1a",borderRadius:2,padding:"10px 12px"}}>
-                <div style={{fontWeight:900,color:win?"#4ade80":"#fff",fontSize:12,marginBottom:6,borderBottom:"1px solid #333",paddingBottom:4}}><TeamNameLink name={name}/> — {t.score} pts</div>
-                <div style={{display:"flex",flexDirection:"column",gap:2,color:"#ccc"}}>
-                  <div><span style={{color:"#888",fontWeight:700}}>PASS</span> {t.passing.comp}/{t.passing.att} · {t.passing.yds}yds · {t.passing.tds}TD · {t.passing.int}INT · {t.passing.pct}%</div>
-                  <div><span style={{color:"#888",fontWeight:700}}>RUSH</span> {t.rushing.att}att · {t.rushing.yds}yds · {t.rushing.ypc}YPC · {t.rushing.tds}TD</div>
-                  <div><span style={{color:"#888",fontWeight:700}}>DEF</span> {t.defense.totalYdsAllowed}yds ({t.defense.passYdsAllowed}p/{t.defense.rushYdsAllowed}r)</div>
-                  <div><span style={{color:"#888",fontWeight:700}}>ST</span> FG {t.specialTeams.fgMade}/{t.specialTeams.fgAtt}{t.specialTeams.krTds>0?` · KR ${t.specialTeams.krTds}TD`:""}{t.specialTeams.prTds>0?` · PR ${t.specialTeams.prTds}TD`:""}{t.specialTeams.punts>0?` · P ${t.specialTeams.punts}/${t.specialTeams.puntYds}yds`:""}</div>
-                  {t.misc&&<div><span style={{color:"#888",fontWeight:700}}>MISC</span> {t.misc.firstDowns} 1st · {t.misc.turnovers}TO ({t.misc.fumblesLost}F/{t.passing.int}I) · 3rd {t.misc.thirdDownConv}/{t.misc.thirdDownAtt} · 4th {t.misc.fourthDownConv}/{t.misc.fourthDownAtt} · RZ {t.misc.redZoneTD}TD-{t.misc.redZoneFG}FG-{t.misc.redZonePct}% · {t.misc.penalties}-{t.misc.penaltyYds} · TOP {t.misc.timeOfPossession||"-"}</div>}
-                </div>
-              </div>
-            ))}
+          <div style={{padding:12,fontSize:11}}>
+            <div style={{display:"flex",justifyContent:"space-between",marginBottom:6,fontSize:12,fontWeight:900}}>
+              <span style={{color:wA?"#4ade80":"#fff"}}><TeamNameLink name={teamA}/> — {mine.score} pts</span>
+              <span style={{color:wB?"#4ade80":"#fff"}}><TeamNameLink name={teamB}/> — {opp.score} pts</span>
+            </div>
+            <BoxScoreDetail team1={mine} team2={opp} dark/>
           </div>
         </div>
       );
@@ -3570,6 +3661,7 @@ function EnterResultsPanel({entries,weekResults,setWeekResults,week,setWeek,appl
   const [scanning,setScanning] = useState(null);
   const [scanErrors,setScanErrors] = useState({});
   const [submitMsg,setSubmitMsg] = useState("");
+  const [expandedBox,setExpandedBox] = useState({});
   const fileRefs = useRef({});
 
   const setWR=(teamName,field,val)=>setWeekResults(prev=>prev.map(r=>r.teamName===teamName?{...r,[field]:val}:r));
@@ -3767,13 +3859,17 @@ function EnterResultsPanel({entries,weekResults,setWeekResults,week,setWeek,appl
                     {winner&&getWR(winner).forfeit&&<div style={{marginLeft:"auto",fontSize:11,color:"#b8860b",fontWeight:700,fontStyle:"italic"}}>No box score — forfeit win/loss, no ranked bonus</div>}
                   </div>
                   {/* Archived stats preview */}
-                  {archivedGame&&<div style={{padding:"4px 16px 10px",background:"#f0f8f0",fontSize:10,color:"#555",display:"grid",gridTemplateColumns:"1fr 1fr",gap:4}}>
-                    {[archivedGame.team1,archivedGame.team2].map(t=>(
-                      <div key={t.name}>
-                        <div><strong>{t.name}:</strong> {t.passing.comp}/{t.passing.att} {t.passing.yds}py {t.passing.tds}TD | {t.rushing.yds}ry {t.rushing.tds}TD | Def {t.defense.totalYdsAllowed}yds</div>
-                        {t.misc&&<div style={{color:"#888",marginTop:1}}>{t.misc.firstDowns} 1st downs | {t.misc.turnovers} TO | 3rd: {t.misc.thirdDownConv}/{t.misc.thirdDownAtt} | TOP {t.misc.timeOfPossession||"-"}</div>}
-                      </div>
-                    ))}
+                  {archivedGame&&<div style={{padding:"4px 16px 10px",background:"#f0f8f0",fontSize:10,color:"#555"}}>
+                    <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:4}}>
+                      {[archivedGame.team1,archivedGame.team2].map(t=>(
+                        <div key={t.name}>
+                          <div><strong>{t.name}:</strong> {t.passing.comp}/{t.passing.att} {t.passing.yds}py {t.passing.tds}TD | {t.rushing.yds}ry {t.rushing.tds}TD | Def {t.defense.totalYdsAllowed}yds</div>
+                          {t.misc&&<div style={{color:"#888",marginTop:1}}>{t.misc.firstDowns} 1st downs | {t.misc.turnovers} TO | 3rd: {t.misc.thirdDownConv}/{t.misc.thirdDownAtt} | TOP {t.misc.timeOfPossession||"-"}</div>}
+                        </div>
+                      ))}
+                    </div>
+                    <button onClick={()=>setExpandedBox(p=>({...p,[key]:!p[key]}))} style={{marginTop:6,background:"none",border:"none",color:"#1a3a6b",fontWeight:700,fontSize:10,textTransform:"uppercase",letterSpacing:0.5,cursor:"pointer",padding:0,fontFamily:ff}}>{expandedBox[key]?"▲ Hide full box score":"▼ Full box score"}</button>
+                    {expandedBox[key]&&<div style={{marginTop:8}}><BoxScoreDetail team1={archivedGame.team1} team2={archivedGame.team2}/></div>}
                   </div>}
                 </div>
               );
@@ -3857,15 +3953,19 @@ function EnterResultsPanel({entries,weekResults,setWeekResults,week,setWeek,appl
                       <label style={{display:"flex",alignItems:"center",gap:4,fontSize:11,color:RED,cursor:"pointer",fontWeight:700}}><input type="checkbox" checked={wr.ranked10||false} onChange={e=>setWR(teamName,"ranked10",e.target.checked)}/> vs Top 10</label>
                     </div>}
                   </div>
-                  {archivedGame&&myTeamData&&<div style={{padding:"4px 16px 10px",background:"#f0f8f0",fontSize:10,color:"#555",display:"grid",gridTemplateColumns:"1fr 1fr",gap:4}}>
-                    <div>
-                      <div><strong>{teamName}:</strong> {myTeamData.passing.comp}/{myTeamData.passing.att} {myTeamData.passing.yds}py {myTeamData.passing.tds}TD | {myTeamData.rushing.yds}ry {myTeamData.rushing.tds}TD | Def {myTeamData.defense.totalYdsAllowed}yds</div>
-                      {myTeamData.misc&&<div style={{color:"#888",marginTop:1}}>{myTeamData.misc.firstDowns} 1st downs | {myTeamData.misc.turnovers} TO | 3rd: {myTeamData.misc.thirdDownConv}/{myTeamData.misc.thirdDownAtt} | TOP {myTeamData.misc.timeOfPossession||"-"}</div>}
+                  {archivedGame&&myTeamData&&<div style={{padding:"4px 16px 10px",background:"#f0f8f0",fontSize:10,color:"#555"}}>
+                    <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:4}}>
+                      <div>
+                        <div><strong>{teamName}:</strong> {myTeamData.passing.comp}/{myTeamData.passing.att} {myTeamData.passing.yds}py {myTeamData.passing.tds}TD | {myTeamData.rushing.yds}ry {myTeamData.rushing.tds}TD | Def {myTeamData.defense.totalYdsAllowed}yds</div>
+                        {myTeamData.misc&&<div style={{color:"#888",marginTop:1}}>{myTeamData.misc.firstDowns} 1st downs | {myTeamData.misc.turnovers} TO | 3rd: {myTeamData.misc.thirdDownConv}/{myTeamData.misc.thirdDownAtt} | TOP {myTeamData.misc.timeOfPossession||"-"}</div>}
+                      </div>
+                      <div>
+                        <div><strong>{displayCPU}:</strong> {cpuTeamData.passing.comp}/{cpuTeamData.passing.att} {cpuTeamData.passing.yds}py {cpuTeamData.passing.tds}TD | {cpuTeamData.rushing.yds}ry {cpuTeamData.rushing.tds}TD</div>
+                        {cpuTeamData.misc&&<div style={{color:"#888",marginTop:1}}>{cpuTeamData.misc.firstDowns} 1st downs | {cpuTeamData.misc.turnovers} TO | 3rd: {cpuTeamData.misc.thirdDownConv}/{cpuTeamData.misc.thirdDownAtt} | TOP {cpuTeamData.misc.timeOfPossession||"-"}</div>}
+                      </div>
                     </div>
-                    <div>
-                      <div><strong>{displayCPU}:</strong> {cpuTeamData.passing.comp}/{cpuTeamData.passing.att} {cpuTeamData.passing.yds}py {cpuTeamData.passing.tds}TD | {cpuTeamData.rushing.yds}ry {cpuTeamData.rushing.tds}TD</div>
-                      {cpuTeamData.misc&&<div style={{color:"#888",marginTop:1}}>{cpuTeamData.misc.firstDowns} 1st downs | {cpuTeamData.misc.turnovers} TO | 3rd: {cpuTeamData.misc.thirdDownConv}/{cpuTeamData.misc.thirdDownAtt} | TOP {cpuTeamData.misc.timeOfPossession||"-"}</div>}
-                    </div>
+                    <button onClick={()=>setExpandedBox(p=>({...p,[key]:!p[key]}))} style={{marginTop:6,background:"none",border:"none",color:"#1a3a6b",fontWeight:700,fontSize:10,textTransform:"uppercase",letterSpacing:0.5,cursor:"pointer",padding:0,fontFamily:ff}}>{expandedBox[key]?"▲ Hide full box score":"▼ Full box score"}</button>
+                    {expandedBox[key]&&<div style={{marginTop:8}}><BoxScoreDetail team1={myTeamData} team2={cpuTeamData}/></div>}
                   </div>}
                 </div>
               );
