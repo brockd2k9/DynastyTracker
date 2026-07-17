@@ -181,6 +181,32 @@ export default {
       }
     }
 
+    // ── GroupMe bot posting (score + recap notifications) ──────────────────
+    // bot_id lives server-side as a Cloudflare Workers secret (GROUPME_BOT_ID)
+    // so it's never exposed in client JS.
+    if (url.pathname === "/api/groupme-post" && request.method === "POST") {
+      try {
+        if (!env.GROUPME_BOT_ID) {
+          return json({ error: "GroupMe bot not configured. Add GROUPME_BOT_ID in Cloudflare Workers settings." }, 500);
+        }
+        const { text } = await request.json();
+        if (!text || !text.trim()) return json({ error: "Missing text" }, 400);
+        const trimmed = text.length > 1000 ? text.slice(0, 997) + "..." : text; // GroupMe's message length cap
+        const gmRes = await fetch("https://api.groupme.com/v3/bots/post", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ bot_id: env.GROUPME_BOT_ID, text: trimmed }),
+        });
+        if (!gmRes.ok) {
+          const errText = await gmRes.text().catch(() => "");
+          return json({ error: `GroupMe error ${gmRes.status}: ${errText}` }, 502);
+        }
+        return json({ ok: true });
+      } catch (e) {
+        return json({ error: e.message }, 500);
+      }
+    }
+
     // Serve static assets for everything else
     return env.ASSETS.fetch(request);
   },

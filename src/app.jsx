@@ -340,6 +340,15 @@ async function callClaude(prompt) {
   }
 }
 
+async function postToGroupMe(text) {
+  const r = await fetch("/api/groupme-post", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ text }),
+  });
+  if (!r.ok) { const e = await r.json().catch(()=>({})); throw new Error(e?.error || `GroupMe post failed (${r.status})`); }
+}
+
 const ff = "'Helvetica Neue',Arial,sans-serif";
 const RED = "#cc0000";
 
@@ -4006,7 +4015,26 @@ function EnterResultsPanel({entries,weekResults,setWeekResults,week,setWeek,appl
   const [scanErrors,setScanErrors] = useState({});
   const [submitMsg,setSubmitMsg] = useState("");
   const [expandedBox,setExpandedBox] = useState({});
+  const [gmStatus,setGmStatus] = useState({});
   const fileRefs = useRef({});
+
+  async function submitScoreToGroupMe(key,team1,team2){
+    if(!window.confirm(`Post ${team1.name} ${team1.score} - ${team2.score} ${team2.name} to GroupMe with an AI recap?\nThis will use the Claude API.`))return;
+    setGmStatus(p=>({...p,[key]:"sending"}));
+    try{
+      const statLine=t=>`${t.name}: ${t.passing?.comp??0}/${t.passing?.att??0}, ${t.passing?.yds??0} pass yds, ${t.passing?.tds??0} pass TD | ${t.rushing?.yds??0} rush yds, ${t.rushing?.tds??0} rush TD | ${t.misc?.turnovers??0} turnovers`;
+      const prompt=`Write a 4-5 sentence game recap for a dynasty college football league group chat. Be punchy and conversational, like a quick update to friends in a group chat — not a formal news article. No headline, no markdown, just the recap paragraph.\n\nFinal score: ${team1.name} ${team1.score} - ${team2.score} ${team2.name}\n\n${statLine(team1)}\n${statLine(team2)}`;
+      const recap=(await callClaude(prompt)).trim();
+      if(!recap||recap==="No content returned.")throw new Error("Claude didn't return a recap — try again");
+      const text=`🏈 FINAL: ${team1.name} ${team1.score} - ${team2.score} ${team2.name}\n\n${recap}`;
+      await postToGroupMe(text);
+      setGmStatus(p=>({...p,[key]:"sent"}));
+      setTimeout(()=>setGmStatus(p=>{const n={...p};delete n[key];return n;}),4000);
+    }catch(e){
+      setGmStatus(p=>{const n={...p};delete n[key];return n;});
+      alert("Failed to post to GroupMe: "+e.message);
+    }
+  }
 
   const setWR=(teamName,field,val)=>setWeekResults(prev=>prev.map(r=>r.teamName===teamName?{...r,[field]:val}:r));
   const getWR=(teamName)=>weekResults.find(r=>r.teamName===teamName)||{result:"none",ranked25:false,ranked10:false,forfeit:false};
@@ -4227,7 +4255,10 @@ function EnterResultsPanel({entries,weekResults,setWeekResults,week,setWeek,appl
                         </div>
                       ))}
                     </div>
-                    <button onClick={()=>setExpandedBox(p=>({...p,[key]:!p[key]}))} style={{marginTop:6,background:"none",border:"none",color:"#1a3a6b",fontWeight:700,fontSize:10,textTransform:"uppercase",letterSpacing:0.5,cursor:"pointer",padding:0,fontFamily:ff}}>{expandedBox[key]?"▲ Hide full box score":"▼ Full box score"}</button>
+                    <div style={{display:"flex",alignItems:"center",gap:14,marginTop:6,flexWrap:"wrap"}}>
+                      <button onClick={()=>setExpandedBox(p=>({...p,[key]:!p[key]}))} style={{background:"none",border:"none",color:"#1a3a6b",fontWeight:700,fontSize:10,textTransform:"uppercase",letterSpacing:0.5,cursor:"pointer",padding:0,fontFamily:ff}}>{expandedBox[key]?"▲ Hide full box score":"▼ Full box score"}</button>
+                      <button onClick={()=>submitScoreToGroupMe(key,archivedGame.team1,archivedGame.team2)} disabled={gmStatus[key]==="sending"} style={{background:gmStatus[key]==="sent"?"#f0f8f0":"none",border:"1px solid #1a3a6b",color:gmStatus[key]==="sent"?"#007a00":"#1a3a6b",fontWeight:700,fontSize:10,textTransform:"uppercase",letterSpacing:0.5,cursor:gmStatus[key]==="sending"?"wait":"pointer",padding:"3px 8px",borderRadius:2,fontFamily:ff}}>{gmStatus[key]==="sending"?"Posting...":gmStatus[key]==="sent"?"✓ Posted to GroupMe":"📢 Submit Score to GroupMe"}</button>
+                    </div>
                     {expandedBox[key]&&<div style={{marginTop:8}}><BoxScoreDetail team1={archivedGame.team1} team2={archivedGame.team2}/></div>}
                   </div>}
                 </div>
@@ -4325,7 +4356,10 @@ function EnterResultsPanel({entries,weekResults,setWeekResults,week,setWeek,appl
                         {cpuTeamData.misc&&<div style={{color:"#888",marginTop:1}}>{cpuTeamData.misc.firstDowns} 1st downs | {cpuTeamData.misc.turnovers} TO | 3rd: {cpuTeamData.misc.thirdDownConv}/{cpuTeamData.misc.thirdDownAtt} | TOP {cpuTeamData.misc.timeOfPossession||"-"}</div>}
                       </div>
                     </div>
-                    <button onClick={()=>setExpandedBox(p=>({...p,[key]:!p[key]}))} style={{marginTop:6,background:"none",border:"none",color:"#1a3a6b",fontWeight:700,fontSize:10,textTransform:"uppercase",letterSpacing:0.5,cursor:"pointer",padding:0,fontFamily:ff}}>{expandedBox[key]?"▲ Hide full box score":"▼ Full box score"}</button>
+                    <div style={{display:"flex",alignItems:"center",gap:14,marginTop:6,flexWrap:"wrap"}}>
+                      <button onClick={()=>setExpandedBox(p=>({...p,[key]:!p[key]}))} style={{background:"none",border:"none",color:"#1a3a6b",fontWeight:700,fontSize:10,textTransform:"uppercase",letterSpacing:0.5,cursor:"pointer",padding:0,fontFamily:ff}}>{expandedBox[key]?"▲ Hide full box score":"▼ Full box score"}</button>
+                      <button onClick={()=>submitScoreToGroupMe(key,myTeamData,cpuTeamData)} disabled={gmStatus[key]==="sending"} style={{background:gmStatus[key]==="sent"?"#f0f8f0":"none",border:"1px solid #1a3a6b",color:gmStatus[key]==="sent"?"#007a00":"#1a3a6b",fontWeight:700,fontSize:10,textTransform:"uppercase",letterSpacing:0.5,cursor:gmStatus[key]==="sending"?"wait":"pointer",padding:"3px 8px",borderRadius:2,fontFamily:ff}}>{gmStatus[key]==="sending"?"Posting...":gmStatus[key]==="sent"?"✓ Posted to GroupMe":"📢 Submit Score to GroupMe"}</button>
+                    </div>
                     {expandedBox[key]&&<div style={{marginTop:8}}><BoxScoreDetail team1={myTeamData} team2={cpuTeamData}/></div>}
                   </div>}
                 </div>
