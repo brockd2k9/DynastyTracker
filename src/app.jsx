@@ -2139,6 +2139,8 @@ function ProfileTab({history,setupRows,currentEntries,season,year,permanentUsers
   const isMobile = useIsMobile();
   const [expandedSeasons,setExpandedSeasons] = useState({});
   const [expandedGames,setExpandedGames] = useState({});
+  const [expandedH2H,setExpandedH2H] = useState({});
+  const [expandedH2HGame,setExpandedH2HGame] = useState({});
   // Merge permanentUsers with setupRows so no one gets dropped
   const puList = (permanentUsers||[]).map(u=>({userId:u.id,userName:u.defaultName,teamName:(setupRows||[]).find(r=>r.userId===u.id)?.teamName||u.teamName||""}));
   const puIds = new Set(puList.map(u=>u.userId));
@@ -2260,19 +2262,81 @@ function ProfileTab({history,setupRows,currentEntries,season,year,permanentUsers
             </div></div>}
           </div>}
 
-          {pTab==="h2h"&&<div>
+          {pTab==="h2h"&&(()=>{
+            // Individual games behind an H2H record — weekLog only stores the aggregate
+            // win/loss count per opponent, so this walks every season's (and the live
+            // season's) log looking for entries against this one opponent team.
+            const getH2HGames = (oppTeamName) => {
+              const games=[];
+              profile.seasons.filter(s=>!s.isHistorical).forEach(s=>{
+                (s.weekLog||[]).forEach(w=>{ if(w.opponent===oppTeamName) games.push({year:s.year,week:w.week,result:w.result,forfeit:w.forfeit,teamName:s.teamName}); });
+              });
+              if(profile.cur){
+                (profile.cur.weekLog||[]).forEach(w=>{ if(w.opponent===oppTeamName) games.push({year,week:w.week,result:w.result,forfeit:w.forfeit,teamName:profile.cur.teamName}); });
+              }
+              return games.sort((a,b)=>b.year!==a.year?b.year-a.year:b.week-a.week);
+            };
+            const H2HGameLog = ({opp}) => {
+              const games = getH2HGames(opp);
+              if(!games.length) return <div style={{padding:"10px 14px",background:"#fafafa",color:"#aaa",fontSize:12}}>No individual game records found (this opponent's record may be from a bulk/historical import).</div>;
+              return (
+                <div style={{background:"#fafafa"}}>
+                  {games.map((g,i)=>{
+                    const archivedGame=(gameArchive||[]).find(ga=>ga.year===g.year&&ga.week===g.week&&(ga.team1.name===g.teamName||ga.team2.name===g.teamName));
+                    const gameKey=`${opp}-${g.year}-${g.week}-${i}`;
+                    const isOpen=expandedH2HGame[gameKey];
+                    const mine=archivedGame&&(archivedGame.team1.name===g.teamName?archivedGame.team1:archivedGame.team2);
+                    const oppGame=archivedGame&&(archivedGame.team1.name===g.teamName?archivedGame.team2:archivedGame.team1);
+                    return (
+                      <div key={gameKey} style={{borderTop:"1px solid #eee"}}>
+                        <div onClick={archivedGame?()=>setExpandedH2HGame(p=>({...p,[gameKey]:!p[gameKey]})):undefined} style={{display:"flex",alignItems:"center",gap:10,padding:"8px 14px",cursor:archivedGame?"pointer":"default"}}>
+                          <span style={{fontSize:11,color:"#888",width:80,flexShrink:0}}>Wk {g.week} · {g.year}</span>
+                          <span style={{fontSize:11,fontWeight:800,color:g.result==="win"?"#007a00":RED,textTransform:"uppercase",width:50,flexShrink:0}}>{g.result}{g.forfeit?" (F)":""}</span>
+                          <span style={{fontSize:12,fontWeight:700,color:"#555",flex:1}}>{archivedGame?`${mine.score}-${oppGame.score}`:"-"}</span>
+                          {archivedGame&&<span style={{fontSize:10,color:"#ccc"}}>{isOpen?"▲":"▼"}</span>}
+                        </div>
+                        {isOpen&&archivedGame&&<div style={{padding:"0 14px 10px"}}><BoxScoreDetail team1={mine} team2={oppGame}/></div>}
+                      </div>
+                    );
+                  })}
+                </div>
+              );
+            };
+            return (
+            <div>
             <SL>Head-to-Head Records</SL>
             {Object.keys(profile.h2hMerged).length===0?<div style={{color:"#888",fontSize:13,padding:"12px 0"}}>No head-to-head data yet. Records are tracked when opponent names match dynasty users.</div>:
             isMobile?(
               <div style={{display:"flex",flexDirection:"column",gap:6,marginTop:4}}>
-                {Object.entries(profile.h2hMerged).sort((a,b)=>(b[1].wins+b[1].losses)-(a[1].wins+a[1].losses)).map(([opp,rec])=>{const winning=rec.wins>rec.losses;return(<div key={opp} style={{display:"flex",justifyContent:"space-between",alignItems:"center",padding:"10px 12px",borderRadius:2,border:"1px solid #eee",background:winning?"#f0f8f0":rec.wins<rec.losses?"#fff8f8":"transparent"}}><span style={{fontSize:13,fontWeight:600,color:"#111",flex:1,minWidth:0,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{teamNameToCoach[opp]||opp}</span><span style={{fontSize:12,fontWeight:700,color:"#555",margin:"0 10px",flexShrink:0}}>{rec.wins}W-{rec.losses}L</span><span style={{background:winning?RED:"#007a00",color:"#fff",borderRadius:2,padding:"2px 8px",fontSize:10,fontWeight:700,flexShrink:0}}>{winning?"LEADS":"TRAILS"}{rec.wins===rec.losses?" (TIED)":""}</span></div>);})}
+                {Object.entries(profile.h2hMerged).sort((a,b)=>(b[1].wins+b[1].losses)-(a[1].wins+a[1].losses)).map(([opp,rec])=>{const winning=rec.wins>rec.losses;const isOpen=expandedH2H[opp];return(
+                  <div key={opp} style={{borderRadius:2,border:"1px solid #eee",overflow:"hidden"}}>
+                    <div onClick={()=>setExpandedH2H(p=>({...p,[opp]:!p[opp]}))} style={{display:"flex",justifyContent:"space-between",alignItems:"center",padding:"10px 12px",cursor:"pointer",background:winning?"#f0f8f0":rec.wins<rec.losses?"#fff8f8":"transparent"}}>
+                      <span style={{fontSize:13,fontWeight:600,color:"#111",flex:1,minWidth:0,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{teamNameToCoach[opp]||opp}</span>
+                      <span style={{fontSize:12,fontWeight:700,color:"#555",margin:"0 10px",flexShrink:0}}>{rec.wins}W-{rec.losses}L</span>
+                      <span style={{background:winning?RED:"#007a00",color:"#fff",borderRadius:2,padding:"2px 8px",fontSize:10,fontWeight:700,flexShrink:0}}>{winning?"LEADS":"TRAILS"}{rec.wins===rec.losses?" (TIED)":""}</span>
+                      <span style={{fontSize:10,color:"#ccc",marginLeft:8,flexShrink:0}}>{isOpen?"▲":"▼"}</span>
+                    </div>
+                    {isOpen&&<H2HGameLog opp={opp}/>}
+                  </div>
+                );})}
               </div>
             ):(
             <table style={{width:"100%",borderCollapse:"collapse",fontSize:13}}>
               <thead><tr style={{borderBottom:`2px solid ${RED}`,background:"#f7f7f7"}}>{["Opponent","W","L","W%","Result"].map(h=><th key={h} style={{padding:"8px 10px",textAlign:h==="Opponent"?"left":"center",color:"#555",fontSize:9,letterSpacing:1,textTransform:"uppercase",fontWeight:800}}>{h}</th>)}</tr></thead>
-              <tbody>{Object.entries(profile.h2hMerged).sort((a,b)=>(b[1].wins+b[1].losses)-(a[1].wins+a[1].losses)).map(([opp,rec])=>{const total=rec.wins+rec.losses;const wpct=total>0?((rec.wins/total)*100).toFixed(0):0;const winning=rec.wins>rec.losses;return(<tr key={opp} style={{borderBottom:"1px solid #eee",background:winning?"#f0f8f0":rec.wins<rec.losses?"#fff8f8":"transparent"}}><td style={{padding:"9px 10px",fontWeight:600,color:"#111"}}>{teamNameToCoach[opp]||opp}</td><td style={{padding:"9px 10px",textAlign:"center",fontWeight:700,color:"#007a00"}}>{rec.wins}</td><td style={{padding:"9px 10px",textAlign:"center",fontWeight:700,color:RED}}>{rec.losses}</td><td style={{padding:"9px 10px",textAlign:"center",color:"#555"}}>{wpct}%</td><td style={{padding:"9px 10px",textAlign:"center"}}><span style={{background:winning?RED:"#007a00",color:"#fff",borderRadius:2,padding:"2px 8px",fontSize:10,fontWeight:700}}>{winning?"LEADS":"TRAILS"}{rec.wins===rec.losses?" (TIED)":""}</span></td></tr>);})}</tbody>
+              <tbody>{Object.entries(profile.h2hMerged).sort((a,b)=>(b[1].wins+b[1].losses)-(a[1].wins+a[1].losses)).map(([opp,rec])=>{const total=rec.wins+rec.losses;const wpct=total>0?((rec.wins/total)*100).toFixed(0):0;const winning=rec.wins>rec.losses;const isOpen=expandedH2H[opp];return(<Fragment key={opp}>
+                <tr onClick={()=>setExpandedH2H(p=>({...p,[opp]:!p[opp]}))} style={{borderBottom:"1px solid #eee",cursor:"pointer",background:winning?"#f0f8f0":rec.wins<rec.losses?"#fff8f8":"transparent"}}>
+                  <td style={{padding:"9px 10px",fontWeight:600,color:"#111"}}>{teamNameToCoach[opp]||opp} <span style={{fontSize:10,color:"#ccc"}}>{isOpen?"▲":"▼"}</span></td>
+                  <td style={{padding:"9px 10px",textAlign:"center",fontWeight:700,color:"#007a00"}}>{rec.wins}</td>
+                  <td style={{padding:"9px 10px",textAlign:"center",fontWeight:700,color:RED}}>{rec.losses}</td>
+                  <td style={{padding:"9px 10px",textAlign:"center",color:"#555"}}>{wpct}%</td>
+                  <td style={{padding:"9px 10px",textAlign:"center"}}><span style={{background:winning?RED:"#007a00",color:"#fff",borderRadius:2,padding:"2px 8px",fontSize:10,fontWeight:700}}>{winning?"LEADS":"TRAILS"}{rec.wins===rec.losses?" (TIED)":""}</span></td>
+                </tr>
+                {isOpen&&<tr><td colSpan={5} style={{padding:0}}><H2HGameLog opp={opp}/></td></tr>}
+              </Fragment>);})}</tbody>
             </table>)}
-          </div>}
+            </div>
+            );
+          })()}
 
           {pTab==="seasons"&&<div style={{display:"flex",flexDirection:"column",gap:0}}>
             <SL>Season-by-Season Results</SL>
