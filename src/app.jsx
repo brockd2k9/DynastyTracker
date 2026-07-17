@@ -524,6 +524,11 @@ function BoxScoreDetail({team1,team2,dark}) {
   return (
     <div>
       <QuarterScoreTable team1={team1} team2={team2} name1={team1.name} name2={team2.name} dark={dark}/>
+      <div style={{display:"grid",gridTemplateColumns:"1fr auto 1fr",gap:8,padding:"6px 2px 4px",borderBottom:`2px solid ${dark?"#333":"#ddd"}`,alignItems:"center"}}>
+        <div style={{textAlign:"right",fontSize:11,color:head,fontWeight:900,textTransform:"uppercase",letterSpacing:0.3}}>{team1.name}</div>
+        <div style={{minWidth:96}}/>
+        <div style={{textAlign:"left",fontSize:11,color:head,fontWeight:900,textTransform:"uppercase",letterSpacing:0.3}}>{team2.name}</div>
+      </div>
       <div>
         {rows.map(([lbl,v1,v2])=>(
           <div key={lbl} style={{display:"grid",gridTemplateColumns:"1fr auto 1fr",gap:8,padding:"4px 2px",borderBottom:`1px solid ${dark?"#2a2a2a":"#f0f0f0"}`,alignItems:"center"}}>
