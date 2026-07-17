@@ -390,6 +390,34 @@ function extractBoxScoreJson(text) {
   return (tagged ? tagged[1] : text).replace(/```json?|```/g,"").trim();
 }
 
+// Box score screenshots (phone/console captures) usually run well above the ~1568px-long-edge
+// point where Claude's vision pricing caps out — Anthropic downsizes anything larger before
+// tokenizing it, so sending the original resolution just burns bandwidth without buying any
+// extra accuracy. Shrinking client-side to something a bit BELOW that cap, before the (now 2x,
+// since the LEFT/RIGHT split) vision calls, cuts real input-token cost — box score text is large
+// UI type, not fine print, so it stays legible well under full resolution.
+function downscaleImage(file, maxDim=1024, quality=0.82) {
+  return new Promise((resolve, reject) => {
+    const img = new Image();
+    const url = URL.createObjectURL(file);
+    img.onload = () => {
+      URL.revokeObjectURL(url);
+      let { width, height } = img;
+      if (width > maxDim || height > maxDim) {
+        const scale = maxDim / Math.max(width, height);
+        width = Math.round(width*scale);
+        height = Math.round(height*scale);
+      }
+      const canvas = document.createElement("canvas");
+      canvas.width = width; canvas.height = height;
+      canvas.getContext("2d").drawImage(img, 0, 0, width, height);
+      resolve({ data: canvas.toDataURL("image/jpeg", quality).split(",")[1], mediaType: "image/jpeg" });
+    };
+    img.onerror = () => { URL.revokeObjectURL(url); reject(new Error("Could not read image")); };
+    img.src = url;
+  });
+}
+
 // Scans the LEFT and RIGHT teams in two separate sequential calls instead of one combined
 // call — the combined-call approach kept occasionally producing a fully self-consistent stat
 // block filed under the wrong team's name, which no amount of "double check your work"
@@ -3978,7 +4006,7 @@ function EnterResultsPanel({entries,weekResults,setWeekResults,week,setWeek,appl
     }
     setScanning(key); setScanErrors(p=>({...p,[key]:null}));
     try {
-      const images=await Promise.all(files.map(file=>new Promise((res,rej)=>{const r=new FileReader();r.onload=()=>res({data:r.result.split(",")[1],mediaType:file.type||"image/jpeg"});r.onerror=rej;r.readAsDataURL(file);})));
+      const images=await Promise.all(files.map(file=>downscaleImage(file)));
       const parsed=await scanBoxScoreBothSides(images);
       const json={...parsed, ...reconcileBoxScoreTeams(parsed,t1Name,t2Name)};
       const e1=entries.find(e=>e.teamName===t1Name); const e2=entries.find(e=>e.teamName===t2Name);
@@ -4179,7 +4207,7 @@ function EnterResultsPanel({entries,weekResults,setWeekResults,week,setWeek,appl
                         setScanning(key); setScanErrors(p=>({...p,[key]:null}));
                         (async()=>{
                           try{
-                            const images=await Promise.all(files.map(file=>new Promise((res,rej)=>{const r=new FileReader();r.onload=()=>res({data:r.result.split(",")[1],mediaType:file.type||"image/jpeg"});r.onerror=rej;r.readAsDataURL(file);})));
+                            const images=await Promise.all(files.map(file=>downscaleImage(file)));
                             const parsed=await scanBoxScoreBothSides(images);
                             const json={...parsed, ...reconcileBoxScoreTeams(parsed,teamName,displayCPU)};
                             const e1=entries.find(e=>e.teamName===teamName);
