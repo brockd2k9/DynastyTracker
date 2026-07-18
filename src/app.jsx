@@ -5500,6 +5500,26 @@ export default function App() {
     }
   }
 
+  // Posts a week recap + full points standings to GroupMe. Called after triggerAutoWeeklyArticles
+  // resolves (rather than concurrently) so the two don't fight over callClaude's single in-flight slot.
+  async function postWeekRecapToGroupMe(completedWeek, entriesAfter) {
+    try {
+      const activeAfter = entriesAfter.filter(e=>(e.userId&&activeUserIds.has(e.userId))||(!e.userId&&activeUserNames.has(e.userName)));
+      const sortedAfter = [...activeAfter].sort((a,b)=>calcTotal(b)-calcTotal(a));
+      const weekGames = (setup?.gameArchive||[]).filter(g=>g.year===Number(year)&&g.week===Number(completedWeek));
+      const gameLines = weekGames.length
+        ? weekGames.map(g=>`${g.team1.name} ${g.team1.score}-${g.team2.score} ${g.team2.name}`).join("; ")
+        : activeAfter.map(e=>{const log=(e.weekLog||[]).find(l=>l.week===completedWeek);return log&&log.result==="win"?`${e.teamName} beat ${log.opponent}`:null;}).filter(Boolean).join("; ");
+      const prompt = `Write a punchy 3-4 sentence recap of Week ${completedWeek} for a dynasty college football league group chat. Conversational, like a quick group chat update — not a formal article. No headline, no markdown, just the recap paragraph.\n\nGames this week: ${gameLines||"No games logged."}\n\nStandings leader: ${sortedAfter[0]?.teamName||"—"} with ${sortedAfter[0]?calcTotal(sortedAfter[0]):0} pts.`;
+      const recap = (await callClaude(prompt)).trim();
+      const standingsLines = sortedAfter.map((e,i)=>`${i+1}. ${e.teamName} — ${calcTotal(e)}pts (${e.wins}-${e.losses})`).join("\n");
+      const text = `🏈 WEEK ${completedWeek} RESULTS — ${leagueName}\n\n${recap&&recap!=="No content returned."?recap:"Results are in."}\n\n📊 STANDINGS\n${standingsLines}`;
+      await postToGroupMe(text);
+    } catch(e) {
+      console.error("GroupMe week recap failed:", e);
+    }
+  }
+
   function applyWeekResults(targetWeek=week) {
     const thisWeekSchedule = schedule[targetWeek] || {};
     // Build a map of results entered this week
@@ -5561,7 +5581,7 @@ export default function App() {
       const newWeek=targetWeek+1;
       setWeek(newWeek);
       setTimeout(()=>saveToDb({week:newWeek,entries:nextEntries}),100);
-      triggerAutoWeeklyArticles(targetWeek,newWeek,nextEntries).catch(e=>console.error("Auto weekly articles failed:",e));
+      triggerAutoWeeklyArticles(targetWeek,newWeek,nextEntries).then(()=>postWeekRecapToGroupMe(targetWeek,nextEntries)).catch(e=>console.error("Auto weekly articles failed:",e));
     }
     else{setTimeout(()=>saveToDb({entries:nextEntries}),100);}
   }
@@ -5586,7 +5606,7 @@ export default function App() {
       const newWeek=targetWeek+1;
       setWeek(newWeek);
       setTimeout(()=>saveToDb({week:newWeek,entries:nextEntries}),100);
-      triggerAutoWeeklyArticles(targetWeek,newWeek,nextEntries).catch(e=>console.error("Auto weekly articles failed:",e));
+      triggerAutoWeeklyArticles(targetWeek,newWeek,nextEntries).then(()=>postWeekRecapToGroupMe(targetWeek,nextEntries)).catch(e=>console.error("Auto weekly articles failed:",e));
     }
     else{setTimeout(()=>saveToDb({entries:nextEntries}),100);}
   }
