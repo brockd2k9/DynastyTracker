@@ -4187,10 +4187,15 @@ function EnterResultsPanel({entries,weekResults,setWeekResults,week,setWeek,appl
   const btnStyle=(active,color="#007a00")=>({padding:"5px 12px",borderRadius:2,border:"1px solid",borderColor:active?color:"#ddd",background:active?`${color}18`:"#fff",color:active?color:"#888",cursor:"pointer",fontSize:11,fontFamily:ff,fontWeight:800,textTransform:"uppercase"});
 
   function submitAndFlash(targetWeek,goBack){
+    // applyWeekResults advances the shared `week` state whenever targetWeek>=week — mirror that
+    // same condition here so this panel's own week cursor doesn't get left behind, which otherwise
+    // made Submit Week look like it did nothing (data saved, but the form kept showing the old week).
+    const willAdvance = targetWeek>=week;
     applyWeekResults(targetWeek);
     setSubmitMsg(`✓ Week ${targetWeek} results saved`);
     setTimeout(()=>setSubmitMsg(""),3000);
     if(goBack)setEntryWeek(w=>Math.max(0,w-1));
+    else if(willAdvance)setEntryWeek(targetWeek+1);
   }
 
   return (
