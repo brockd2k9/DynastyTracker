@@ -181,21 +181,30 @@ export default {
       }
     }
 
-    // ── GroupMe bot posting (score + recap notifications) ──────────────────
-    // bot_id lives server-side as a Cloudflare Workers secret (GROUPME_BOT_ID)
-    // so it's never exposed in client JS.
+    // ── GroupMe bot posting (score + recap notifications, personality tweets) ──
+    // bot_id lives server-side as a Cloudflare Workers secret (GROUPME_BOT_ID) so it's
+    // never exposed in client JS. A `persona` name in the request routes to that
+    // personality's own bot via GROUPME_PERSONA_BOTS — since GroupMe fixes a bot's
+    // display name/avatar at creation, each personality needs its own real bot_id.
+    // GROUPME_PERSONA_BOTS is a JSON secret: {"Stephen A. Smith":"bot_id", ...}.
     if (url.pathname === "/api/groupme-post" && request.method === "POST") {
       try {
-        if (!env.GROUPME_BOT_ID) {
-          return json({ error: "GroupMe bot not configured. Add GROUPME_BOT_ID in Cloudflare Workers settings." }, 500);
-        }
-        const { text } = await request.json();
+        const { text, persona } = await request.json();
         if (!text || !text.trim()) return json({ error: "Missing text" }, 400);
+        let botId = env.GROUPME_BOT_ID;
+        if (persona) {
+          let personaBots = {};
+          try { personaBots = JSON.parse(env.GROUPME_PERSONA_BOTS || "{}"); } catch {}
+          botId = personaBots[persona] || botId;
+        }
+        if (!botId) {
+          return json({ error: "GroupMe bot not configured. Add GROUPME_BOT_ID (and GROUPME_PERSONA_BOTS for personas) in Cloudflare Workers settings." }, 500);
+        }
         const trimmed = text.length > 1000 ? text.slice(0, 997) + "..." : text; // GroupMe's message length cap
         const gmRes = await fetch("https://api.groupme.com/v3/bots/post", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ bot_id: env.GROUPME_BOT_ID, text: trimmed }),
+          body: JSON.stringify({ bot_id: botId, text: trimmed }),
         });
         if (!gmRes.ok) {
           const errText = await gmRes.text().catch(() => "");

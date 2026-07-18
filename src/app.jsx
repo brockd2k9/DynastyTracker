@@ -340,13 +340,23 @@ async function callClaude(prompt) {
   }
 }
 
-async function postToGroupMe(text) {
+async function postToGroupMe(text, persona) {
   const r = await fetch("/api/groupme-post", {
     method: "POST",
     headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ text }),
+    body: JSON.stringify({ text, persona }),
   });
   if (!r.ok) { const e = await r.json().catch(()=>({})); throw new Error(e?.error || `GroupMe post failed (${r.status})`); }
+}
+
+// Generates and posts a short in-character tweet from a TWEET_PERSONAS entry, routed to that
+// persona's own GroupMe bot server-side (see /api/groupme-post's persona -> GROUPME_PERSONA_BOTS lookup).
+async function postPersonaTweet(persona, context) {
+  const prompt = `You are ${persona.name}, ${persona.title}. Your voice: ${persona.style}\n\nWrite ONE short tweet (under 260 characters, sound like a real tweet — no hashtags unless it feels natural, no surrounding quotation marks) reacting to this dynasty college football league update:\n\n${context}\n\nRespond with ONLY the tweet text, nothing else.`;
+  const raw = (await callClaude(prompt)).trim();
+  const tweet = raw.replace(/^["“]+|["”]+$/g, "").trim();
+  if (!tweet || tweet === "No content returned.") throw new Error(`${persona.name} didn't return a tweet — try again`);
+  await postToGroupMe(tweet, persona.name);
 }
 
 const ff = "'Helvetica Neue',Arial,sans-serif";
@@ -4596,6 +4606,47 @@ const REPORTERS = [
   },
 ];
 
+// GroupMe personality "tweets" — short hot takes posted by dedicated bots, one persona per
+// real GroupMe bot_id (see worker.js's /api/groupme-post and GROUPME_PERSONA_BOTS). Distinct
+// from REPORTERS, which write full articles for the in-app Content Hub.
+const TWEET_PERSONAS = [
+  {
+    name: "Stephen A. Smith",
+    title: "First Take",
+    avatar: "SAS",
+    color: "#b8002e",
+    style: "loud, bombastic, and prone to declaring things with maximum emphasis. You speak in short, punchy proclamations, repeat key phrases for effect ('Let me tell ya something'), and treat every result as a referendum on someone's legacy or respect level. You love phrases like 'Come on, man' and 'This is not a good look.' You are never uncertain.",
+  },
+  {
+    name: "Skip Bayless",
+    title: "Undisputed",
+    avatar: "SB",
+    color: "#0f4c81",
+    style: "contrarian and allergic to consensus. You crown and dethrone teams weekly based on vibes more than stats, obsess over who has the 'clutch gene,' and dig in on a take even after being proven wrong — you just pivot to a new angle instead of admitting it. You dismiss analytics in favor of 'what I saw with my own eyes.'",
+  },
+  {
+    name: "Pat McAfee",
+    title: "The Pat McAfee Show",
+    avatar: "PM",
+    color: "#e8871e",
+    style: "explosively high-energy and bro-ish, ALL CAPS energy even when the words are lowercase. You hype up big plays like they're the greatest thing you've ever seen, throw out 'BIG TIME' and 'that's HUGE' constantly, and treat the whole league like a party. You're quick to anoint an underdog the new favorite of the show.",
+  },
+  {
+    name: "Kirk Herbstreit",
+    title: "College GameDay",
+    avatar: "KH",
+    color: "#2c4a7c",
+    style: "measured, football-smart, and a little sentimental. You talk about a team's 'DNA' and 'identity,' give real credit to good coaching and toughness, and occasionally get genuinely emotional about a program's story. You're the voice of reason but still have real opinions — you just deliver them calmly.",
+  },
+  {
+    name: "Marty Smith",
+    title: "In the Fast Lane",
+    avatar: "MS",
+    color: "#6b4a1e",
+    style: "folksy, Southern-charm, and full of homespun metaphors pulled from NASCAR, country music, and back-road wisdom. You talk about grit and toughness, drop phrases like 'that's real deal, y'all' and 'I love this so much,' and treat every underdog story like the plot of a country song.",
+  },
+];
+
 // ── Content Hub Tab ───────────────────────────────────────────────────────
 
 async function compressImage(file, maxW=900, quality=0.78) {
@@ -4650,6 +4701,8 @@ function ContentHub({sorted,entries,week,season,year,leagueName,history,leader,a
   const [genError,setGenError] = useState(null);
   const [selectedReporter,setSelectedReporter] = useState(0);
   const [contentType,setContentType] = useState("powerrankings");
+  const [takePersona,setTakePersona] = useState(null);
+  const [takeStatus,setTakeStatus] = useState(null);
   const [breakingSubject,setBreakingSubject] = useState("");
   const [breakingGuidance,setBreakingGuidance] = useState("");
   const [articleGuidance,setArticleGuidance] = useState("");
@@ -4669,6 +4722,22 @@ function ContentHub({sorted,entries,week,season,year,leagueName,history,leader,a
   const [bibleSaved,setBibleSaved] = useState(false);
   const [extracting,setExtracting] = useState(false);
   useEffect(()=>{if(setup?.leagueBible?.profiles?.length)setBibleProfiles(setup.leagueBible.profiles);if(setup?.leagueBible?.storylines!==undefined)setBibleStorylines(setup.leagueBible.storylines);},[setup?.leagueBible]);
+
+  async function postHotTake() {
+    const persona = takePersona || TWEET_PERSONAS[Math.floor(Math.random()*TWEET_PERSONAS.length)];
+    if(!window.confirm(`Post a take as ${persona.name} to GroupMe?\nThis will use the Claude API.`))return;
+    setTakeStatus("posting");
+    try{
+      const top3=sorted.slice(0,3).map((e,i)=>`${i+1}. ${e.teamName} (${e.userName}) ${calcTotal(e)}pts`).join(", ");
+      const context=`${leagueName} — Season ${season}, Week ${week}. Current standings: ${top3}.`;
+      await postPersonaTweet(persona,context);
+      setTakeStatus("sent");
+      setTimeout(()=>setTakeStatus(null),4000);
+    }catch(e){
+      setTakeStatus(null);
+      alert("Failed to post take: "+e.message);
+    }
+  }
 
   async function publishArticle(finalArticle) {
     if(!window.confirm("Publish this article?\n\nThis will also run a brief Claude API call to extract storyline highlights for the League Bible.")) return;
@@ -4929,6 +4998,26 @@ function ContentHub({sorted,entries,week,season,year,leagueName,history,leader,a
         <div style={{borderTop:"1px solid #eee",padding:"10px 14px",background:"#f9f9f9",display:"flex",alignItems:"center",gap:10}}>
           <div style={{width:28,height:28,borderRadius:"50%",background:reporter.color,display:"flex",alignItems:"center",justifyContent:"center",fontSize:10,fontWeight:800,color:"#fff",flexShrink:0}}>{reporter.avatar}</div>
           <div style={{fontSize:11,color:"#555"}}><strong style={{color:"#111"}}>{reporter.name}</strong> is writing — {reporter.style.split(".")[0]}.</div>
+        </div>
+      </Card>
+
+      {/* League Hot Takes — GroupMe personality tweets */}
+      <Card style={{overflow:"hidden"}}>
+        <CardHead bg="#111">📣 League Hot Takes (GroupMe)</CardHead>
+        <div style={{padding:14}}>
+          <div style={{fontSize:12,color:"#666",lineHeight:1.5,marginBottom:12}}>Post a short in-character tweet reacting to the current standings straight to GroupMe. Each personality posts as its own bot — one also fires automatically after every week you submit &amp; advance.</div>
+          <div style={{display:"flex",flexWrap:"wrap",gap:8,marginBottom:12}}>
+            <button onClick={()=>setTakePersona(null)} style={{padding:"6px 12px",borderRadius:20,border:"1px solid",borderColor:takePersona===null?"#111":"#ddd",background:takePersona===null?"#111":"#fff",color:takePersona===null?"#fff":"#555",cursor:"pointer",fontSize:12,fontFamily:ff,fontWeight:700}}>🎲 Random</button>
+            {TWEET_PERSONAS.map(p=>(
+              <button key={p.name} onClick={()=>setTakePersona(p)} style={{display:"flex",alignItems:"center",gap:6,padding:"5px 12px 5px 5px",borderRadius:20,border:"1px solid",borderColor:takePersona?.name===p.name?p.color:"#ddd",background:takePersona?.name===p.name?`${p.color}12`:"#fff",cursor:"pointer",fontSize:12,fontFamily:ff,fontWeight:700,color:takePersona?.name===p.name?p.color:"#555"}}>
+                <span style={{width:22,height:22,borderRadius:"50%",background:p.color,color:"#fff",display:"flex",alignItems:"center",justifyContent:"center",fontSize:9,fontWeight:800,flexShrink:0}}>{p.avatar}</span>
+                {p.name}
+              </button>
+            ))}
+          </div>
+          <button onClick={postHotTake} disabled={takeStatus==="posting"} style={{background:takeStatus==="posting"?"#ccc":(takePersona?.color||"#111"),color:"#fff",border:"none",borderRadius:2,padding:"10px 20px",cursor:takeStatus==="posting"?"not-allowed":"pointer",fontFamily:ff,fontSize:13,fontWeight:800,textTransform:"uppercase"}}>
+            {takeStatus==="posting"?"Posting...":takeStatus==="sent"?"✓ Posted":`📣 Post Take as ${takePersona?takePersona.name.split(" ")[0]:"Random"}`}
+          </button>
         </div>
       </Card>
 
@@ -5515,6 +5604,15 @@ export default function App() {
       const standingsLines = sortedAfter.map((e,i)=>`${i+1}. ${e.teamName} — ${calcTotal(e)}pts (${e.wins}-${e.losses})`).join("\n");
       const text = `🏈 WEEK ${completedWeek} RESULTS — ${leagueName}\n\n${recap&&recap!=="No content returned."?recap:"Results are in."}\n\n📊 STANDINGS\n${standingsLines}`;
       await postToGroupMe(text);
+      // A random personality reacts to the week — separate try/catch so a failure here
+      // never undoes the recap that just posted successfully above.
+      try {
+        const persona = TWEET_PERSONAS[Math.floor(Math.random()*TWEET_PERSONAS.length)];
+        const takeContext = `Week ${completedWeek} results: ${gameLines||"see standings"}. Standings leader: ${sortedAfter[0]?.teamName||"—"} with ${sortedAfter[0]?calcTotal(sortedAfter[0]):0} pts.`;
+        await postPersonaTweet(persona, takeContext);
+      } catch(e2) {
+        console.error("Persona tweet failed:", e2);
+      }
     } catch(e) {
       console.error("GroupMe week recap failed:", e);
     }
