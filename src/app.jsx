@@ -5618,6 +5618,7 @@ export default function App() {
       // A random personality reacts to the week — separate try/catch so a failure here
       // never undoes the recap that just posted successfully above.
       try {
+        await sleep(3200); // clear callClaude's cooldown window after the recap call above
         const persona = TWEET_PERSONAS[Math.floor(Math.random()*TWEET_PERSONAS.length)];
         const takeContext = `Week ${completedWeek} results: ${gameLines||"see standings"}. Standings leader: ${sortedAfter[0]?.teamName||"—"} with ${sortedAfter[0]?calcTotal(sortedAfter[0]):0} pts.`;
         await postPersonaTweet(persona, takeContext);
