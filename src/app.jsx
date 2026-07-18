@@ -341,6 +341,10 @@ async function callClaude(prompt) {
   }
 }
 
+// Matches callClaude's CALL_COOLDOWN_MS (3000ms) — anything chained right after a callClaude
+// resolves needs to wait this long before calling it again, or _checkSafeguards throws.
+const sleep = ms => new Promise(res=>setTimeout(res,ms));
+
 async function postToGroupMe(text) {
   const r = await fetch("/api/groupme-post", {
     method: "POST",
@@ -5588,7 +5592,7 @@ export default function App() {
       const newWeek=targetWeek+1;
       setWeek(newWeek);
       setTimeout(()=>saveToDb({week:newWeek,entries:nextEntries}),100);
-      triggerAutoWeeklyArticles(targetWeek,newWeek,nextEntries).then(()=>postWeekRecapToGroupMe(targetWeek,nextEntries)).catch(e=>console.error("Auto weekly articles failed:",e));
+      triggerAutoWeeklyArticles(targetWeek,newWeek,nextEntries).then(()=>sleep(3200)).then(()=>postWeekRecapToGroupMe(targetWeek,nextEntries)).catch(e=>console.error("Auto weekly articles failed:",e));
     }
     else{setTimeout(()=>saveToDb({entries:nextEntries}),100);}
   }
@@ -5613,7 +5617,7 @@ export default function App() {
       const newWeek=targetWeek+1;
       setWeek(newWeek);
       setTimeout(()=>saveToDb({week:newWeek,entries:nextEntries}),100);
-      triggerAutoWeeklyArticles(targetWeek,newWeek,nextEntries).then(()=>postWeekRecapToGroupMe(targetWeek,nextEntries)).catch(e=>console.error("Auto weekly articles failed:",e));
+      triggerAutoWeeklyArticles(targetWeek,newWeek,nextEntries).then(()=>sleep(3200)).then(()=>postWeekRecapToGroupMe(targetWeek,nextEntries)).catch(e=>console.error("Auto weekly articles failed:",e));
     }
     else{setTimeout(()=>saveToDb({entries:nextEntries}),100);}
   }
