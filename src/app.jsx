@@ -2853,6 +2853,21 @@ Return only the JSON, no explanation. Map what you see: passing yards→passing.
     const updated={...setup,playerStats:{...(setup?.playerStats||{}),[selUser]:{...(setup?.playerStats?.[selUser]||{}),[selYear]:merged}}};
     setSetup(updated);saveToDb({setup:updated});setSaved(true);setTimeout(()=>setSaved(false),2000);
   }
+  // recomputePlayerStatsFromArchive only ever touches the single year a box score was just
+  // scanned into — years archived before a stat category (e.g. Team Stats) existed never get
+  // backfilled automatically, so this walks every year in the archive and rebuilds all of them.
+  const [rebuilding, setRebuilding] = useState(false);
+  function rebuildFromArchive(){
+    const archive=setup?.gameArchive||[];
+    const years=[...new Set(archive.map(g=>g.year))];
+    if(!years.length){window.alert("No archived box scores found.");return;}
+    if(!window.confirm(`Rebuild player/team stats for ${years.length} season(s) from the game archive? This overwrites any manually-entered stats for years that have archived box scores.`))return;
+    setRebuilding(true);
+    let ps=setup?.playerStats||{};
+    years.forEach(y=>{ps=recomputePlayerStatsFromArchive(archive,ps,y);});
+    const updated={...setup,playerStats:ps};
+    setSetup(updated);saveToDb({setup:updated});setRebuilding(false);
+  }
   const inp=(cat,field,label)=>(
     <div style={{display:"flex",flexDirection:"column",gap:3}}>
       <label style={{fontSize:10,color:"#888",fontWeight:700,textTransform:"uppercase",letterSpacing:0.5,fontFamily:ff}}>{label}</label>
@@ -2869,6 +2884,7 @@ Return only the JSON, no explanation. Map what you see: passing yards→passing.
         <select value={selYear} onChange={e=>setSelYear(Number(e.target.value))} style={{padding:"7px 10px",border:"1px solid #ccc",borderRadius:2,fontFamily:ff,fontSize:13,width:90}}>
           {yearOpts.map(y=><option key={y} value={y}>{y}</option>)}
         </select>
+        <button onClick={rebuildFromArchive} disabled={rebuilding} style={{padding:"7px 14px",background:rebuilding?"#888":"#1a3a6b",color:"#fff",border:"none",borderRadius:2,cursor:rebuilding?"not-allowed":"pointer",fontFamily:ff,fontSize:12,fontWeight:800,textTransform:"uppercase"}}>{rebuilding?"Rebuilding…":"↻ Rebuild From Game Archive"}</button>
       </div>
       {/* Screenshot upload */}
       <Card>
