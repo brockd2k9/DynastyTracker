@@ -2150,6 +2150,9 @@ const STAT_STREAK_DEFS=[
   {key:"rush100",label:"100+ Rush Yd Games",pred:g=>(g.stats.rushing?.yds||0)>=100},
   {key:"rushTD",label:"Rush TD Games",pred:g=>(g.stats.rushing?.tds||0)>=1},
   {key:"hasInt",label:"Interception Games",pred:g=>(g.stats.passing?.int||0)>=1},
+  {key:"rushDefUnder100",label:"Held Opp Under 100 Rush Yds",pred:g=>(g.oppStats?.rushing?.yds??Infinity)<100},
+  {key:"passDefUnder200",label:"Held Opp Under 200 Pass Yds",pred:g=>(g.oppStats?.passing?.yds??Infinity)<200},
+  {key:"turnoverForced",label:"Turnover Forced",pred:g=>(g.oppStats?.misc?.turnovers||0)>=1},
 ];
 function longestStatStreak(games,pred){
   let max=0,cur=0,startIdx=0,bestStart=0,bestEnd=0;
@@ -2230,8 +2233,10 @@ function LeagueRecordBook({history,currentEntries,season,year,permanentUsers,set
     const getUserGames=(name)=>getUserLogs(name).map(w=>{
       const archivedGame=(gameArchive||[]).find(g=>g.year===w.year&&g.week===w.week&&(g.team1.name===w.teamName||g.team2.name===w.teamName));
       if(!archivedGame)return null;
-      const stats=archivedGame.team1.name===w.teamName?archivedGame.team1:archivedGame.team2;
-      return{...w,stats};
+      const isTeam1=archivedGame.team1.name===w.teamName;
+      const stats=isTeam1?archivedGame.team1:archivedGame.team2;
+      const oppStats=isTeam1?archivedGame.team2:archivedGame.team1;
+      return{...w,stats,oppStats};
     }).filter(Boolean);
     const statStreaks={};
     STAT_STREAK_DEFS.forEach(def=>{
@@ -2613,8 +2618,10 @@ function ProfileTab({history,setupRows,currentEntries,season,year,permanentUsers
             const profileGames=allLogs.map(w=>{
               const archivedGame=(gameArchive||[]).find(g=>g.year===w.year&&g.week===w.week&&(g.team1.name===w.teamName||g.team2.name===w.teamName));
               if(!archivedGame)return null;
-              const stats=archivedGame.team1.name===w.teamName?archivedGame.team1:archivedGame.team2;
-              return{...w,stats};
+              const isTeam1=archivedGame.team1.name===w.teamName;
+              const stats=isTeam1?archivedGame.team1:archivedGame.team2;
+              const oppStats=isTeam1?archivedGame.team2:archivedGame.team1;
+              return{...w,stats,oppStats};
             }).filter(Boolean);
             return(
             <div style={{display:"flex",flexDirection:"column",gap:16}}>
