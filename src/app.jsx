@@ -1495,7 +1495,7 @@ function ClassicGamesCard({classicGames, gameArchive, setupRows}) {
 }
 
 // ── History Tab ───────────────────────────────────────────────────────────
-function HistoryTab({history, setHistory, saveToDb, commUnlocked, entries, setEntries, season, week, setWeek, yearRosters, permanentUsers, currentEntries, year, setupRows, gameArchive, classicGames}) {
+function HistoryTab({history, setHistory, saveToDb, commUnlocked, entries, setEntries, season, week, setWeek, yearRosters, permanentUsers, currentEntries, year, setupRows, gameArchive, classicGames, playerStats}) {
   // Apply per-year team overrides from yearRosters to a standings array (username never changes)
   function applyRoster(standings, yr) {
     const roster = yearRosters?.[yr];
@@ -1552,7 +1552,7 @@ function HistoryTab({history, setHistory, saveToDb, commUnlocked, entries, setEn
 
   return (
     <div style={{display:"flex",flexDirection:"column",gap:14}}>
-      <LeagueRecordBook history={history} currentEntries={currentEntries||entries||[]} season={season} year={year} permanentUsers={permanentUsers} setupRows={setupRows||[]} gameArchive={gameArchive}/>
+      <LeagueRecordBook history={history} currentEntries={currentEntries||entries||[]} season={season} year={year} permanentUsers={permanentUsers} setupRows={setupRows||[]} gameArchive={gameArchive} playerStats={playerStats}/>
 
       {/* Live Season Editor */}
       {commUnlocked&&entries?.length>0&&<Card style={{borderTop:`3px solid ${RED}`,overflow:"hidden"}}>
@@ -2136,7 +2136,7 @@ function longestStatStreak(games,pred){
   return {len:max,span,teamName:games[bestStart]?.teamName||""};
 }
 
-function LeagueRecordBook({history,currentEntries,season,year,permanentUsers,setupRows,gameArchive}) {
+function LeagueRecordBook({history,currentEntries,season,year,permanentUsers,setupRows,gameArchive,playerStats}) {
   const isMobile=useIsMobile();
   const [lrYear,setLrYear]=useState(null);
   const allUsers=(permanentUsers?.length?permanentUsers.map(u=>({userId:u.id,userName:u.defaultName,teamName:(setupRows||[]).find(r=>r.userId===u.id)?.teamName||u.teamName||""})):setupRows)||[];
@@ -2172,9 +2172,24 @@ function LeagueRecordBook({history,currentEntries,season,year,permanentUsers,set
 
   function getLR(filterYear=null){
     const recs={};
-    allUsers.forEach(u=>{try{const curEntry=currentEntries.find(e=>u.userId?e.userId===u.userId:e.userName===u.userName);const displayName=curEntry?.userName||u.userName;recs[displayName]=getProfile(u.userId||null,u.userName);}catch{}});
+    const displayToId={};
+    allUsers.forEach(u=>{try{const curEntry=currentEntries.find(e=>u.userId?e.userId===u.userId:e.userName===u.userName);const displayName=curEntry?.userName||u.userName;recs[displayName]=getProfile(u.userId||null,u.userName);displayToId[displayName]=u.userId||null;}catch{}});
     const e=Object.entries(recs).filter(([,p])=>p);
     if(!e.length)return{};
+    // Career passing totals pulled from playerStats (season-by-season box score aggregates), summed
+    // across all years or narrowed to filterYear when a single season is selected.
+    const getPassingTotals=(userId)=>{
+      const stats=playerStats?.[userId]||{};
+      const yearsToSum=filterYear!=null?[filterYear]:Object.keys(stats).map(Number);
+      return yearsToSum.reduce((acc,y)=>{const p=stats[y]?.passing;if(!p)return acc;return{att:acc.att+(p.att||0),comp:acc.comp+(p.comp||0),tds:acc.tds+(p.tds||0),int:acc.int+(p.int||0),yds:acc.yds+(p.yds||0)};},{att:0,comp:0,tds:0,int:0,yds:0});
+    };
+    const passingEntries=e.map(([name])=>[name,getPassingTotals(displayToId[name])]);
+    const mostPassAtt=[...passingEntries].sort((a,b)=>b[1].att-a[1].att)[0];
+    const mostPassComp=[...passingEntries].sort((a,b)=>b[1].comp-a[1].comp)[0];
+    const mostPassTD=[...passingEntries].sort((a,b)=>b[1].tds-a[1].tds)[0];
+    const mostInt=[...passingEntries].sort((a,b)=>b[1].int-a[1].int)[0];
+    const bestCompPct=[...passingEntries].filter(([,t])=>t.att>0).sort((a,b)=>(b[1].comp/b[1].att)-(a[1].comp/a[1].att))[0];
+    const bestYPC=[...passingEntries].filter(([,t])=>t.comp>0).sort((a,b)=>(b[1].yds/b[1].comp)-(a[1].yds/a[1].comp))[0];
     const getUserLogs=(name)=>{const prof=recs[name];if(!prof)return[];const logs=[];prof.seasons.filter(s=>!s.isHistorical&&(filterYear==null||s.year===filterYear)).forEach(s=>{(s.weekLog||[]).forEach(w=>logs.push({...w,season:s.seasonNum,year:s.year,teamName:s.teamName}));});if(!filterYear&&prof.cur)(prof.cur.weekLog||[]).forEach(w=>logs.push({...w,season,year,teamName:prof.cur.teamName}));return logs;};
     // Join each weekLog entry with its archived box score (if one was scanned) so stat-based
     // streaks (pass yards, rush TDs, turnovers, etc.) have something to test.
@@ -2205,7 +2220,7 @@ function LeagueRecordBook({history,currentEntries,season,year,permanentUsers,set
     const bestStreakSeason=[...e].map(([name])=>({name,data:streakSeason[name]})).filter(x=>x.data).sort((a,b)=>b.data.len-a.data.len)[0];
     const getYearStats=(prof)=>{if(!filterYear)return prof;const s=prof.seasons.find(s=>s.year===filterYear);const w=(s?.weekLog||[]);return{totalWins:s?.wins||0,totalLosses:s?.losses||0,totalPts:s?.total||0,championships:s?.champion?1:0,winPct:(s&&(s.wins+s.losses)>0)?((s.wins/(s.wins+s.losses))*100).toFixed(1):"0",bowlWins:s?(s.bowlWins!=null?s.bowlWins:(s.bowlResult==="win"?1:0)):0,careerPlayoffWins:s?.playoffWins||0,careerPlayoffLosses:s?.playoffLosses||0,rankedWins:w.filter(wk=>wk.result==="win"&&(wk.ranked25||wk.ranked10)).length};};
     const eys=e.map(([name,prof])=>[name,getYearStats(prof)]);
-    return{mostWins:[...eys].sort((a,b)=>b[1].totalWins-a[1].totalWins)[0],mostLosses:[...eys].sort((a,b)=>b[1].totalLosses-a[1].totalLosses)[0],mostPts:[...eys].sort((a,b)=>b[1].totalPts-a[1].totalPts)[0],mostChamps:[...eys].sort((a,b)=>b[1].championships-a[1].championships)[0],bestWinPct:[...eys].filter(([,p])=>p.totalWins+p.totalLosses>0).sort((a,b)=>parseFloat(b[1].winPct)-parseFloat(a[1].winPct))[0],mostBowlWins:[...eys].sort((a,b)=>b[1].bowlWins-a[1].bowlWins)[0],mostPlayoffApp:[...eys].sort((a,b)=>(b[1].careerPlayoffWins+b[1].careerPlayoffLosses)-(a[1].careerPlayoffWins+a[1].careerPlayoffLosses))[0],mostRW:[...eys].sort((a,b)=>b[1].rankedWins-a[1].rankedWins)[0],mostConfApp,mostNattyApp,bestSeason,worstSeason,mostSeasonLosses,mostH2HWins,longestH2HStreak,bestStreakAllTime,bestStreakSeason,statStreaks};
+    return{mostWins:[...eys].sort((a,b)=>b[1].totalWins-a[1].totalWins)[0],mostLosses:[...eys].sort((a,b)=>b[1].totalLosses-a[1].totalLosses)[0],mostPts:[...eys].sort((a,b)=>b[1].totalPts-a[1].totalPts)[0],mostChamps:[...eys].sort((a,b)=>b[1].championships-a[1].championships)[0],bestWinPct:[...eys].filter(([,p])=>p.totalWins+p.totalLosses>0).sort((a,b)=>parseFloat(b[1].winPct)-parseFloat(a[1].winPct))[0],mostBowlWins:[...eys].sort((a,b)=>b[1].bowlWins-a[1].bowlWins)[0],mostPlayoffApp:[...eys].sort((a,b)=>(b[1].careerPlayoffWins+b[1].careerPlayoffLosses)-(a[1].careerPlayoffWins+a[1].careerPlayoffLosses))[0],mostRW:[...eys].sort((a,b)=>b[1].rankedWins-a[1].rankedWins)[0],mostConfApp,mostNattyApp,bestSeason,worstSeason,mostSeasonLosses,mostH2HWins,longestH2HStreak,bestStreakAllTime,bestStreakSeason,statStreaks,mostPassAtt,mostPassComp,mostPassTD,mostInt,bestCompPct,bestYPC};
   }
 
   const lr=getLR(lrYear);
@@ -2232,6 +2247,13 @@ function LeagueRecordBook({history,currentEntries,season,year,permanentUsers,set
         {lr.mostPlayoffApp&&(lr.mostPlayoffApp[1].careerPlayoffWins+lr.mostPlayoffApp[1].careerPlayoffLosses)>0&&<RR label="Most Playoff Games" holder={lr.mostPlayoffApp[0]} val={(lr.mostPlayoffApp[1].careerPlayoffWins+lr.mostPlayoffApp[1].careerPlayoffLosses)+"×"}/>}
         {lr.mostConfApp?.n>0&&<RR label="Most Conf Champ Apps" holder={lr.mostConfApp.name} val={lr.mostConfApp.n+"×"}/>}
         {lr.mostNattyApp?.n>0&&<RR label="Most Natty Apps" holder={lr.mostNattyApp.name} val={lr.mostNattyApp.n+"×"}/>}
+        <div style={{gridColumn:"1/-1",padding:"10px 0 2px",fontSize:10,fontWeight:800,color:"#aaa",textTransform:"uppercase",letterSpacing:1,borderBottom:"1px solid #f0f0f0",marginBottom:2}}>PASSING RECORDS</div>
+        {lr.mostPassAtt&&lr.mostPassAtt[1].att>0&&<RR label="Pass Attempts" holder={lr.mostPassAtt[0]} val={lr.mostPassAtt[1].att+" ATT"}/>}
+        {lr.mostPassComp&&lr.mostPassComp[1].comp>0&&<RR label="Pass Completions" holder={lr.mostPassComp[0]} val={lr.mostPassComp[1].comp+" COMP"}/>}
+        {lr.bestCompPct&&<RR label="Completion Percentage" holder={lr.bestCompPct[0]} val={((lr.bestCompPct[1].comp/lr.bestCompPct[1].att)*100).toFixed(1)+"%"}/>}
+        {lr.mostPassTD&&lr.mostPassTD[1].tds>0&&<RR label="Passing Touchdowns" holder={lr.mostPassTD[0]} val={lr.mostPassTD[1].tds+" TD"}/>}
+        {lr.mostInt&&lr.mostInt[1].int>0&&<RR label="Interceptions" holder={lr.mostInt[0]} val={lr.mostInt[1].int+" INT"}/>}
+        {lr.bestYPC&&<RR label="Yards Per Completion" holder={lr.bestYPC[0]} val={(lr.bestYPC[1].yds/lr.bestYPC[1].comp).toFixed(1)}/>}
         <div style={{gridColumn:"1/-1",padding:"10px 0 2px",fontSize:10,fontWeight:800,color:"#aaa",textTransform:"uppercase",letterSpacing:1,borderBottom:"1px solid #f0f0f0",marginBottom:2}}>SINGLE SEASON RECORDS</div>
         {lr.bestSeason&&<RR label="Best Season (UvU)" holder={lr.bestSeason.name} val={`${lr.bestSeason.w}W-${lr.bestSeason.l}L`} sub={`${lr.bestSeason.teamName} · ${lr.bestSeason.year}`}/>}
         {lr.worstSeason&&<RR label="Worst Season (UvU)" holder={lr.worstSeason.name} val={`${lr.worstSeason.w}W-${lr.worstSeason.l}L`} sub={`${lr.worstSeason.teamName} · ${lr.worstSeason.year}`}/>}
@@ -6001,7 +6023,7 @@ export default function App() {
             )}
           </>)}
 
-          {tab==="History"&&<HistoryTab history={history} setHistory={setHistory} saveToDb={saveToDb} commUnlocked={commUnlocked} yearRosters={setup?.yearRosters} permanentUsers={setup?.permanentUsers} currentEntries={entries} season={season} year={year} setupRows={setup?.rows||[]} gameArchive={setup?.gameArchive} classicGames={setup?.classicGames}/>}
+          {tab==="History"&&<HistoryTab history={history} setHistory={setHistory} saveToDb={saveToDb} commUnlocked={commUnlocked} yearRosters={setup?.yearRosters} permanentUsers={setup?.permanentUsers} currentEntries={entries} season={season} year={year} setupRows={setup?.rows||[]} gameArchive={setup?.gameArchive} classicGames={setup?.classicGames} playerStats={setup?.playerStats}/>}
           {tab==="Profiles"&&<ProfileTab history={history} setupRows={(setup?.rows||[]).filter(r=>r.active!==false)} currentEntries={activeEntries} season={season} year={year} permanentUsers={setup?.permanentUsers?.filter(u=>(setup?.rows||[]).some(r=>r.userId===u.id&&r.active!==false))} sel={profileSel} setSel={setProfileSel} pTab={profilePTab} setPTab={setProfilePTab} articles={articles} setActiveArticle={setActiveArticle} playerStats={setup?.playerStats} gameArchive={setup?.gameArchive}/>}
           {tab==="Schedule"&&<ScheduleTab schedule={schedule} entries={activeEntries} week={week} season={season} year={year} setup={setup} setupRows={setup?.rows||[]} history={history}/>}
           {tab==="Rules"&&(()=>{
@@ -6119,7 +6141,7 @@ export default function App() {
           {["Enter Results","Season History","Schedule","Content","Player Stats","League Setup"].map(t=><button key={t} onClick={()=>setCommTab(t)} style={{padding:"11px 18px",background:"transparent",border:"none",borderBottom:commTab===t?`3px solid ${RED}`:"3px solid transparent",color:commTab===t?"#fff":"#888",cursor:"pointer",fontSize:12,fontWeight:700,fontFamily:ff,textTransform:"uppercase",letterSpacing:0.5,whiteSpace:"nowrap"}}>{t}</button>)}
         </div>
         <div style={{maxWidth:800,margin:"0 auto",padding:"20px 14px"}}>
-          {commTab==="Season History"&&<HistoryTab history={history} setHistory={setHistory} saveToDb={saveToDb} commUnlocked={true} entries={entries} setEntries={setEntries} season={season} week={week} setWeek={setWeek} yearRosters={setup?.yearRosters} permanentUsers={setup?.permanentUsers} currentEntries={entries} year={year} setupRows={setup?.rows||[]} gameArchive={setup?.gameArchive} classicGames={setup?.classicGames}/>}
+          {commTab==="Season History"&&<HistoryTab history={history} setHistory={setHistory} saveToDb={saveToDb} commUnlocked={true} entries={entries} setEntries={setEntries} season={season} week={week} setWeek={setWeek} yearRosters={setup?.yearRosters} permanentUsers={setup?.permanentUsers} currentEntries={entries} year={year} setupRows={setup?.rows||[]} gameArchive={setup?.gameArchive} classicGames={setup?.classicGames} playerStats={setup?.playerStats}/>}
           {commTab==="Enter Results"&&<EnterResultsPanel entries={activeEntries} weekResults={weekResults} setWeekResults={setWeekResults} week={week} setWeek={setWeek} applyBulkResults={applyBulkResults} applyWeekResults={applyWeekResults} postSeasonInputs={postSeasonInputs} setPSI={setPSI} applyPostSeason={applyPostSeason} finalizeSeason={finalizeSeason} season={season} setSeason={setSeason} year={year} setYear={setYear} teamNames={teamNames} schedule={schedule} history={history} onImportHistory={importHistoricalSeason} setupRows={setup?.rows||[]} saveToDb={saveToDb} setup={setup} setSetup={setSetup}/>}
           {commTab==="Schedule"&&<SchedulePanel entries={activeEntries} schedule={schedule} setSchedule={setSchedule}/>}
 {commTab==="Content"&&<ContentHub sorted={sorted} entries={activeEntries} week={week} season={season} year={year} leagueName={leagueName} history={history} leader={leader} articles={articles} setArticles={setArticles} setActiveArticle={setActiveArticle} schedule={schedule} setup={setup} setSetup={setSetup} saveToDb={saveToDb}/>}
