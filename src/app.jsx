@@ -836,11 +836,56 @@ function teamScoringTrend(gameArchive, year, teamName) {
   return games ? {ppgFor:(forPts/games).toFixed(1), ppgAgainst:(againstPts/games).toFixed(1), games} : null;
 }
 
+// Finds the commissioner-uploaded box score for a specific week's matchup, if one has been
+// submitted yet — the same signal ScheduleTab.getGameResult uses to flip a schedule row from
+// "upcoming" to "final". Used to switch a matchup preview to a result view once a box score
+// exists, instead of leaving the pre-game odds/spread showing (and silently drifting as the
+// just-played game's score feeds back into the season trend averages).
+function findArchivedGame(gameArchive, year, week, team1, team2) {
+  return (gameArchive||[]).find(g=>g.year===Number(year)&&g.week===Number(week)&&
+    ((g.team1?.name===team1&&g.team2?.name===team2)||(g.team1?.name===team2&&g.team2?.name===team1))
+  ) || null;
+}
+
+// Final-score result view for a matchup that already has an uploaded box score — swaps in for
+// MatchupPreview's betting odds once a game is no longer a preview.
+function MatchupResult({archivedGame, logoFor}) {
+  const {team1: mine, team2: opp} = archivedGame;
+  const wMine = mine.score > opp.score, wOpp = opp.score > mine.score;
+  return (
+    <div style={{background:"#111",padding:0}}>
+      <div style={{display:"flex",alignItems:"stretch",background:"#1a1a1a"}}>
+        <div style={{flex:1,padding:"12px 14px",textAlign:"right"}}>
+          {logoFor(mine.name)&&<img src={logoFor(mine.name)} alt="" style={{height:24,width:"auto",maxWidth:"100%",objectFit:"contain",marginBottom:4}} onError={e=>{e.target.style.display="none";}}/>}
+          <div style={{fontSize:13,fontWeight:wMine?900:600,color:wMine?"#fff":"#888"}}>{mine.name}</div>
+          <div style={{fontSize:24,fontWeight:900,color:wMine?"#fff":"#888",lineHeight:1.1}}>{mine.score}</div>
+        </div>
+        <div style={{padding:"12px 8px",display:"flex",alignItems:"center",justifyContent:"center"}}>
+          <div style={{fontSize:9,fontWeight:800,color:"#555",textTransform:"uppercase",letterSpacing:1}}>Final</div>
+        </div>
+        <div style={{flex:1,padding:"12px 14px",textAlign:"left"}}>
+          {logoFor(opp.name)&&<img src={logoFor(opp.name)} alt="" style={{height:24,width:"auto",maxWidth:"100%",objectFit:"contain",marginBottom:4}} onError={e=>{e.target.style.display="none";}}/>}
+          <div style={{fontSize:13,fontWeight:wOpp?900:600,color:wOpp?"#fff":"#888"}}>{opp.name}</div>
+          <div style={{fontSize:24,fontWeight:900,color:wOpp?"#fff":"#888",lineHeight:1.1}}>{opp.score}</div>
+        </div>
+      </div>
+      <div style={{padding:12,fontSize:11}}>
+        <BoxScoreDetail team1={mine} team2={opp} dark/>
+      </div>
+    </div>
+  );
+}
+
 // Same betting-line info shown on the Game of the Week card (Moneyline/Key Stat/Spread/O-U),
 // packaged for reuse on any matchup — including CPU games, where there's no dynasty entry for
 // the opponent, so a neutral placeholder record stands in (estimateWinProb/estimateSpread then
-// lean entirely on scored-game trend data when it's available).
-function MatchupPreview({team1, team2, sorted, gameArchive, year, history, logoFor}) {
+// lean entirely on scored-game trend data when it's available). Once a box score has been
+// uploaded for this exact week's matchup, this switches to MatchupResult instead of showing
+// pre-game odds.
+function MatchupPreview({team1, team2, sorted, gameArchive, year, week, history, logoFor}) {
+  const archivedGame = findArchivedGame(gameArchive, year, week, team1, team2);
+  if (archivedGame) return <MatchupResult archivedGame={archivedGame} logoFor={logoFor}/>;
+
   const NEUTRAL = {wins:0,losses:0,gamePts:0,rankedBonusPts:0,h2h:{}};
   const entry1 = sorted.find(t=>t.teamName===team1);
   const entry2 = sorted.find(t=>t.teamName===team2);
@@ -927,6 +972,7 @@ function WeekMatchupsCard({schedule,week,sorted,leagueName,season,setActiveArtic
   const gotwSpread1 = (gotwT1Entry&&gotwT2Entry) ? estimateSpread(gotwT1Entry,gotwT2Entry,gotwTrend1,gotwTrend2) : 3.5;
   const gotwTotal = gameOfWeek ? estimateTotal(gotwTrend1,gotwTrend2) : null;
   const gotwH2H = gotwT1Entry?.h2h?.[gameOfWeek?.team2];
+  const gotwArchived = gameOfWeek && findArchivedGame(gameArchive, year, week, gameOfWeek.team1, gameOfWeek.team2);
 
   const generateGOTWPreview = async () => {
     if(!gameOfWeek) return;
@@ -1007,34 +1053,40 @@ function WeekMatchupsCard({schedule,week,sorted,leagueName,season,setActiveArtic
                 <div style={{fontSize:12,color:"#555",marginTop:2}}>{sorted.find(t=>t.teamName===gameOfWeek.team2)?.wins||0}W-{sorted.find(t=>t.teamName===gameOfWeek.team2)?.losses||0}L</div>
               </div>
             </div>
-            <div style={{marginTop:12,display:"grid",gridTemplateColumns:"1fr 1fr",gap:8}}>
-              <div style={{background:"#f0f4ff",borderRadius:2,padding:"8px 10px"}}>
-                <div style={{fontSize:9,fontWeight:800,color:"#666",textTransform:"uppercase",letterSpacing:1,marginBottom:4}}>Moneyline</div>
-                <div style={{fontSize:12,fontWeight:700,color:"#111",display:"flex",justifyContent:"space-between",gap:6}}><span style={{overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{gameOfWeek.team1}</span><span style={{flexShrink:0}}>{fmtOdds(gotwOdds1)}</span></div>
-                <div style={{fontSize:12,fontWeight:700,color:"#111",display:"flex",justifyContent:"space-between",gap:6,marginTop:2}}><span style={{overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{gameOfWeek.team2}</span><span style={{flexShrink:0}}>{fmtOdds(gotwOdds2)}</span></div>
+            {gotwArchived ? (
+              <div style={{marginTop:12,marginLeft:-16,marginRight:-16,marginBottom:-14}}>
+                <MatchupResult archivedGame={gotwArchived} logoFor={logoFor}/>
               </div>
-              <div style={{background:"#f0f4ff",borderRadius:2,padding:"8px 10px"}}>
-                <div style={{fontSize:9,fontWeight:800,color:"#666",textTransform:"uppercase",letterSpacing:1,marginBottom:4}}>Key Stat</div>
-                {(gotwTrend1||gotwTrend2) ? (<>
-                  {gotwTrend1&&<div style={{fontSize:11,fontWeight:700,color:"#111"}}>{gameOfWeek.team1}: {gotwTrend1.ppgFor} PPG</div>}
-                  {gotwTrend2&&<div style={{fontSize:11,fontWeight:700,color:"#111",marginTop:2}}>{gameOfWeek.team2}: {gotwTrend2.ppgFor} PPG</div>}
-                </>) : gotwH2H ? (
-                  <div style={{fontSize:11,fontWeight:700,color:"#111"}}>{gameOfWeek.team1} is {gotwH2H.wins}-{gotwH2H.losses} all-time vs {gameOfWeek.team2}</div>
-                ) : (
-                  <div style={{fontSize:11,color:"#999",fontStyle:"italic"}}>No history yet</div>
-                )}
+            ) : (<>
+              <div style={{marginTop:12,display:"grid",gridTemplateColumns:"1fr 1fr",gap:8}}>
+                <div style={{background:"#f0f4ff",borderRadius:2,padding:"8px 10px"}}>
+                  <div style={{fontSize:9,fontWeight:800,color:"#666",textTransform:"uppercase",letterSpacing:1,marginBottom:4}}>Moneyline</div>
+                  <div style={{fontSize:12,fontWeight:700,color:"#111",display:"flex",justifyContent:"space-between",gap:6}}><span style={{overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{gameOfWeek.team1}</span><span style={{flexShrink:0}}>{fmtOdds(gotwOdds1)}</span></div>
+                  <div style={{fontSize:12,fontWeight:700,color:"#111",display:"flex",justifyContent:"space-between",gap:6,marginTop:2}}><span style={{overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{gameOfWeek.team2}</span><span style={{flexShrink:0}}>{fmtOdds(gotwOdds2)}</span></div>
+                </div>
+                <div style={{background:"#f0f4ff",borderRadius:2,padding:"8px 10px"}}>
+                  <div style={{fontSize:9,fontWeight:800,color:"#666",textTransform:"uppercase",letterSpacing:1,marginBottom:4}}>Key Stat</div>
+                  {(gotwTrend1||gotwTrend2) ? (<>
+                    {gotwTrend1&&<div style={{fontSize:11,fontWeight:700,color:"#111"}}>{gameOfWeek.team1}: {gotwTrend1.ppgFor} PPG</div>}
+                    {gotwTrend2&&<div style={{fontSize:11,fontWeight:700,color:"#111",marginTop:2}}>{gameOfWeek.team2}: {gotwTrend2.ppgFor} PPG</div>}
+                  </>) : gotwH2H ? (
+                    <div style={{fontSize:11,fontWeight:700,color:"#111"}}>{gameOfWeek.team1} is {gotwH2H.wins}-{gotwH2H.losses} all-time vs {gameOfWeek.team2}</div>
+                  ) : (
+                    <div style={{fontSize:11,color:"#999",fontStyle:"italic"}}>No history yet</div>
+                  )}
+                </div>
+                <div style={{background:"#f0f4ff",borderRadius:2,padding:"8px 10px"}}>
+                  <div style={{fontSize:9,fontWeight:800,color:"#666",textTransform:"uppercase",letterSpacing:1,marginBottom:4}}>Spread</div>
+                  <div style={{fontSize:12,fontWeight:700,color:"#111",display:"flex",justifyContent:"space-between",gap:6}}><span style={{overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{gameOfWeek.team1}</span><span style={{flexShrink:0}}>{gotwSpread1>0?`+${gotwSpread1}`:gotwSpread1}</span></div>
+                  <div style={{fontSize:12,fontWeight:700,color:"#111",display:"flex",justifyContent:"space-between",gap:6,marginTop:2}}><span style={{overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{gameOfWeek.team2}</span><span style={{flexShrink:0}}>{-gotwSpread1>0?`+${-gotwSpread1}`:-gotwSpread1}</span></div>
+                </div>
+                <div style={{background:"#f0f4ff",borderRadius:2,padding:"8px 10px"}}>
+                  <div style={{fontSize:9,fontWeight:800,color:"#666",textTransform:"uppercase",letterSpacing:1,marginBottom:4}}>Over/Under</div>
+                  <div style={{fontSize:12,fontWeight:700,color:"#111"}}>O/U {gotwTotal}</div>
+                </div>
               </div>
-              <div style={{background:"#f0f4ff",borderRadius:2,padding:"8px 10px"}}>
-                <div style={{fontSize:9,fontWeight:800,color:"#666",textTransform:"uppercase",letterSpacing:1,marginBottom:4}}>Spread</div>
-                <div style={{fontSize:12,fontWeight:700,color:"#111",display:"flex",justifyContent:"space-between",gap:6}}><span style={{overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{gameOfWeek.team1}</span><span style={{flexShrink:0}}>{gotwSpread1>0?`+${gotwSpread1}`:gotwSpread1}</span></div>
-                <div style={{fontSize:12,fontWeight:700,color:"#111",display:"flex",justifyContent:"space-between",gap:6,marginTop:2}}><span style={{overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{gameOfWeek.team2}</span><span style={{flexShrink:0}}>{-gotwSpread1>0?`+${-gotwSpread1}`:-gotwSpread1}</span></div>
-              </div>
-              <div style={{background:"#f0f4ff",borderRadius:2,padding:"8px 10px"}}>
-                <div style={{fontSize:9,fontWeight:800,color:"#666",textTransform:"uppercase",letterSpacing:1,marginBottom:4}}>Over/Under</div>
-                <div style={{fontSize:12,fontWeight:700,color:"#111"}}>O/U {gotwTotal}</div>
-              </div>
-            </div>
-            {setTab&&<button onClick={()=>setTab("Redzone")} style={{marginTop:12,width:"100%",background:"#111",color:"#fff",border:"none",borderRadius:2,padding:"10px 14px",cursor:"pointer",fontFamily:"'Helvetica Neue',Arial,sans-serif",fontSize:12,fontWeight:800,textTransform:"uppercase",letterSpacing:0.5,display:"flex",alignItems:"center",justifyContent:"center",gap:8}}>📺 Watch on RedZone</button>}
+              {setTab&&<button onClick={()=>setTab("Redzone")} style={{marginTop:12,width:"100%",background:"#111",color:"#fff",border:"none",borderRadius:2,padding:"10px 14px",cursor:"pointer",fontFamily:"'Helvetica Neue',Arial,sans-serif",fontSize:12,fontWeight:800,textTransform:"uppercase",letterSpacing:0.5,display:"flex",alignItems:"center",justifyContent:"center",gap:8}}>📺 Watch on RedZone</button>}
+            </>)}
             {existingGOTW&&<div style={{marginTop:12,padding:"10px 14px",background:"#f0f4ff",borderRadius:2,border:"1px solid #c5d0e8",cursor:"pointer",display:"flex",justifyContent:"space-between",alignItems:"center",gap:10}} onClick={()=>setActiveArticle(existingGOTW)}>
               <span style={{fontSize:13,fontWeight:700,color:"#1a3a6b"}}>{articleHeadline(existingGOTW.text)}</span>
               <span style={{fontSize:12,color:"#1a3a6b",fontWeight:700,flexShrink:0}}>Read →</span>
@@ -1074,7 +1126,7 @@ function WeekMatchupsCard({schedule,week,sorted,leagueName,season,setActiveArtic
                   }
                   {!isBye&&<span style={{fontSize:10,color:"#ccc",flexShrink:0,marginLeft:6}}>{isOpen?"▲":"▼"}</span>}
                 </div>
-                {isOpen&&!isBye&&<MatchupPreview team1={team} team2={opp2} sorted={sorted} gameArchive={gameArchive} year={year} history={history} logoFor={logoFor}/>}
+                {isOpen&&!isBye&&<MatchupPreview team1={team} team2={opp2} sorted={sorted} gameArchive={gameArchive} year={year} week={week} history={history} logoFor={logoFor}/>}
               </div>
             );
           })}
