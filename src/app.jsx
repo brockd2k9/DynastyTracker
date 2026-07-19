@@ -2224,6 +2224,44 @@ function LeagueRecordBook({history,currentEntries,season,year,permanentUsers,set
     const mostRushYds=[...rushingEntries].sort((a,b)=>b[1].yds-a[1].yds)[0];
     const mostRushTD=[...rushingEntries].sort((a,b)=>b[1].tds-a[1].tds)[0];
     const bestYPCarry=[...rushingEntries].filter(([,t])=>t.att>0).sort((a,b)=>(b[1].yds/b[1].att)-(a[1].yds/a[1].att))[0];
+    // Quarter-by-quarter records, read directly off each archived box score's quarters:[] array
+    // (only games where all 4 regulation quarters were scanned are counted) and matched to a
+    // coach by userId, the same way the archive is walked in recomputePlayerStatsFromArchive.
+    const idToDisplay={};
+    Object.entries(displayToId).forEach(([name,id])=>{if(id)idToDisplay[id]=name;});
+    const qStats={};
+    e.forEach(([name])=>{qStats[name]={leadHalfW:0,leadHalfL:0,trailHalfW:0,trailHalfL:0,qSum:[0,0,0,0],qGames:0,fourthQComebacks:0,biggestComeback:null,biggest4thQComeback:null};});
+    let mostQuarterPts=null;
+    (gameArchive||[]).filter(g=>filterYear==null||g.year===filterYear).forEach(g=>{
+      [[g.team1,g.team2],[g.team2,g.team1]].forEach(([team,opp])=>{
+        const name=idToDisplay[team.userId];
+        const qs=name&&qStats[name];
+        if(!qs)return;
+        const tq=team.quarters||[], oq=opp.quarters||[];
+        if(tq.length<4||oq.length<4)return;
+        const tCum=[tq[0],tq[0]+tq[1],tq[0]+tq[1]+tq[2]];
+        const oCum=[oq[0],oq[0]+oq[1],oq[0]+oq[1]+oq[2]];
+        const teamWon=(team.score||0)>(opp.score||0);
+        if(tCum[1]>oCum[1]){if(teamWon)qs.leadHalfW++;else qs.leadHalfL++;}
+        else if(tCum[1]<oCum[1]){if(teamWon)qs.trailHalfW++;else qs.trailHalfL++;}
+        if(teamWon){
+          const maxDeficit=Math.max(oCum[0]-tCum[0],oCum[1]-tCum[1],oCum[2]-tCum[2]);
+          if(maxDeficit>0&&(!qs.biggestComeback||maxDeficit>qs.biggestComeback.deficit))qs.biggestComeback={deficit:maxDeficit,opponent:opp.name,year:g.year,week:g.week,score:`${team.score}-${opp.score}`};
+          const q4Deficit=oCum[2]-tCum[2];
+          if(q4Deficit>0){
+            qs.fourthQComebacks++;
+            if(!qs.biggest4thQComeback||q4Deficit>qs.biggest4thQComeback.deficit)qs.biggest4thQComeback={deficit:q4Deficit,opponent:opp.name,year:g.year,week:g.week,score:`${team.score}-${opp.score}`};
+          }
+        }
+        for(let i=0;i<4;i++)qs.qSum[i]+=tq[i];
+        qs.qGames++;
+        tq.forEach((pts,qi)=>{if(!mostQuarterPts||pts>mostQuarterPts.pts)mostQuarterPts={name,pts,quarter:qi+1,opponent:opp.name,year:g.year,week:g.week};});
+      });
+    });
+    const qEntries=Object.entries(qStats);
+    const bestComeback=qEntries.filter(([,s])=>s.biggestComeback).sort((a,b)=>b[1].biggestComeback.deficit-a[1].biggestComeback.deficit)[0];
+    const best4thQComeback=qEntries.filter(([,s])=>s.biggest4thQComeback).sort((a,b)=>b[1].biggest4thQComeback.deficit-a[1].biggest4thQComeback.deficit)[0];
+    const most4thQComebacks=qEntries.filter(([,s])=>s.fourthQComebacks>0).sort((a,b)=>b[1].fourthQComebacks-a[1].fourthQComebacks)[0];
     const getUserLogs=(name)=>{const prof=recs[name];if(!prof)return[];const logs=[];prof.seasons.filter(s=>!s.isHistorical&&(filterYear==null||s.year===filterYear)).forEach(s=>{(s.weekLog||[]).forEach(w=>logs.push({...w,season:s.seasonNum,year:s.year,teamName:s.teamName}));});if(!filterYear&&prof.cur)(prof.cur.weekLog||[]).forEach(w=>logs.push({...w,season,year,teamName:prof.cur.teamName}));return logs;};
     // Join each weekLog entry with its archived box score (if one was scanned) so stat-based
     // streaks (pass yards, rush TDs, turnovers, etc.) have something to test.
@@ -2254,13 +2292,15 @@ function LeagueRecordBook({history,currentEntries,season,year,permanentUsers,set
     const bestStreakSeason=[...e].map(([name])=>({name,data:streakSeason[name]})).filter(x=>x.data).sort((a,b)=>b.data.len-a.data.len)[0];
     const getYearStats=(prof)=>{if(!filterYear)return prof;const s=prof.seasons.find(s=>s.year===filterYear);const w=(s?.weekLog||[]);return{totalWins:s?.wins||0,totalLosses:s?.losses||0,totalPts:s?.total||0,championships:s?.champion?1:0,winPct:(s&&(s.wins+s.losses)>0)?((s.wins/(s.wins+s.losses))*100).toFixed(1):"0",bowlWins:s?(s.bowlWins!=null?s.bowlWins:(s.bowlResult==="win"?1:0)):0,careerPlayoffWins:s?.playoffWins||0,careerPlayoffLosses:s?.playoffLosses||0,rankedWins:w.filter(wk=>wk.result==="win"&&(wk.ranked25||wk.ranked10)).length};};
     const eys=e.map(([name,prof])=>[name,getYearStats(prof)]);
-    return{mostWins:[...eys].sort((a,b)=>b[1].totalWins-a[1].totalWins)[0],mostLosses:[...eys].sort((a,b)=>b[1].totalLosses-a[1].totalLosses)[0],mostPts:[...eys].sort((a,b)=>b[1].totalPts-a[1].totalPts)[0],mostChamps:[...eys].sort((a,b)=>b[1].championships-a[1].championships)[0],bestWinPct:[...eys].filter(([,p])=>p.totalWins+p.totalLosses>0).sort((a,b)=>parseFloat(b[1].winPct)-parseFloat(a[1].winPct))[0],mostBowlWins:[...eys].sort((a,b)=>b[1].bowlWins-a[1].bowlWins)[0],mostPlayoffApp:[...eys].sort((a,b)=>(b[1].careerPlayoffWins+b[1].careerPlayoffLosses)-(a[1].careerPlayoffWins+a[1].careerPlayoffLosses))[0],mostRW:[...eys].sort((a,b)=>b[1].rankedWins-a[1].rankedWins)[0],mostConfApp,mostNattyApp,bestSeason,worstSeason,mostSeasonLosses,mostH2HWins,longestH2HStreak,bestStreakAllTime,bestStreakSeason,statStreaks,mostPassAtt,mostPassComp,mostPassTD,mostInt,bestCompPct,bestYPC,mostRushAtt,mostRushYds,mostRushTD,bestYPCarry};
+    return{mostWins:[...eys].sort((a,b)=>b[1].totalWins-a[1].totalWins)[0],mostLosses:[...eys].sort((a,b)=>b[1].totalLosses-a[1].totalLosses)[0],mostPts:[...eys].sort((a,b)=>b[1].totalPts-a[1].totalPts)[0],mostChamps:[...eys].sort((a,b)=>b[1].championships-a[1].championships)[0],bestWinPct:[...eys].filter(([,p])=>p.totalWins+p.totalLosses>0).sort((a,b)=>parseFloat(b[1].winPct)-parseFloat(a[1].winPct))[0],mostBowlWins:[...eys].sort((a,b)=>b[1].bowlWins-a[1].bowlWins)[0],mostPlayoffApp:[...eys].sort((a,b)=>(b[1].careerPlayoffWins+b[1].careerPlayoffLosses)-(a[1].careerPlayoffWins+a[1].careerPlayoffLosses))[0],mostRW:[...eys].sort((a,b)=>b[1].rankedWins-a[1].rankedWins)[0],mostConfApp,mostNattyApp,bestSeason,worstSeason,mostSeasonLosses,mostH2HWins,longestH2HStreak,bestStreakAllTime,bestStreakSeason,statStreaks,mostPassAtt,mostPassComp,mostPassTD,mostInt,bestCompPct,bestYPC,mostRushAtt,mostRushYds,mostRushTD,bestYPCarry,bestComeback,best4thQComeback,most4thQComebacks,mostQuarterPts,qEntries};
   }
 
   const lr=getLR(lrYear);
   if(!Object.keys(lr).length)return null;
   const RR=({label,holder,val,sub})=>{const u=allUsers.find(u=>u.userName===holder);return(<div style={{display:"flex",justifyContent:"space-between",alignItems:"center",padding:"9px 0",borderBottom:"1px solid #f0f0f0"}}><span style={{fontSize:12,color:"#555",flex:1}}>{label}</span><div style={{textAlign:"right",flexShrink:0}}><div style={{fontSize:13,color:"#111",fontWeight:700}}><Name userId={u?.userId} userName={holder}>{holder}</Name></div><div style={{fontSize:11,color:RED,fontWeight:700}}>{val}</div>{sub&&<div style={{fontSize:10,color:"#aaa"}}>{sub}</div>}</div></div>);};
+  const qRows=(lr.qEntries||[]).filter(([,s])=>s.qGames>0).sort((a,b)=>a[0].localeCompare(b[0]));
   return(
+    <>
     <Card style={{overflow:"hidden"}}><CardHead bg="#111">📖 League Record Book</CardHead>
       <div style={{padding:"10px 14px 4px",display:"flex",alignItems:"center",gap:8,flexWrap:"wrap",borderBottom:"1px solid #f0f0f0"}}>
         <span style={{fontSize:11,fontWeight:700,color:"#555",textTransform:"uppercase",letterSpacing:0.5}}>Filter:</span>
@@ -2293,6 +2333,11 @@ function LeagueRecordBook({history,currentEntries,season,year,permanentUsers,set
         {lr.mostRushYds&&lr.mostRushYds[1].yds>0&&<RR label="Rushing Yards" holder={lr.mostRushYds[0]} val={lr.mostRushYds[1].yds.toLocaleString()+" YDS"}/>}
         {lr.mostRushTD&&lr.mostRushTD[1].tds>0&&<RR label="Rushing Touchdowns" holder={lr.mostRushTD[0]} val={lr.mostRushTD[1].tds+" TD"}/>}
         {lr.bestYPCarry&&<RR label="Yards Per Carry" holder={lr.bestYPCarry[0]} val={(lr.bestYPCarry[1].yds/lr.bestYPCarry[1].att).toFixed(1)}/>}
+        <div style={{gridColumn:"1/-1",padding:"10px 0 2px",fontSize:10,fontWeight:800,color:"#aaa",textTransform:"uppercase",letterSpacing:1,borderBottom:"1px solid #f0f0f0",marginBottom:2}}>COMEBACKS & QUARTERS</div>
+        {lr.bestComeback&&<RR label="Biggest Comeback Win" holder={lr.bestComeback[0]} val={lr.bestComeback[1].biggestComeback.deficit+" PT DEFICIT"} sub={`${lr.bestComeback[1].biggestComeback.score} vs ${lr.bestComeback[1].biggestComeback.opponent} · ${lr.bestComeback[1].biggestComeback.year}`}/>}
+        {lr.best4thQComeback&&<RR label="Biggest 4th Quarter Comeback" holder={lr.best4thQComeback[0]} val={lr.best4thQComeback[1].biggest4thQComeback.deficit+" PT DEFICIT"} sub={`${lr.best4thQComeback[1].biggest4thQComeback.score} vs ${lr.best4thQComeback[1].biggest4thQComeback.opponent} · ${lr.best4thQComeback[1].biggest4thQComeback.year}`}/>}
+        {lr.most4thQComebacks&&<RR label="Most 4th Quarter Comeback Wins" holder={lr.most4thQComebacks[0]} val={lr.most4thQComebacks[1].fourthQComebacks+"×"}/>}
+        {lr.mostQuarterPts&&<RR label="Most Points In A Quarter" holder={lr.mostQuarterPts.name} val={`${lr.mostQuarterPts.pts} PTS (Q${lr.mostQuarterPts.quarter})`} sub={`vs ${lr.mostQuarterPts.opponent} · ${lr.mostQuarterPts.year}`}/>}
         <div style={{gridColumn:"1/-1",padding:"10px 0 2px",fontSize:10,fontWeight:800,color:"#aaa",textTransform:"uppercase",letterSpacing:1,borderBottom:"1px solid #f0f0f0",marginBottom:2}}>SINGLE SEASON RECORDS</div>
         {lr.bestSeason&&<RR label="Best Season (UvU)" holder={lr.bestSeason.name} val={`${lr.bestSeason.w}W-${lr.bestSeason.l}L`} sub={`${lr.bestSeason.teamName} · ${lr.bestSeason.year}`}/>}
         {lr.worstSeason&&<RR label="Worst Season (UvU)" holder={lr.worstSeason.name} val={`${lr.worstSeason.w}W-${lr.worstSeason.l}L`} sub={`${lr.worstSeason.teamName} · ${lr.worstSeason.year}`}/>}
@@ -2307,6 +2352,30 @@ function LeagueRecordBook({history,currentEntries,season,year,permanentUsers,set
         {lr.longestH2HStreak&&lr.longestH2HStreak.len>0&&<RR label="Longest Streak vs Opponent" holder={lr.longestH2HStreak.name} val={lr.longestH2HStreak.len+"W"} sub={`vs ${lr.longestH2HStreak.opp}`}/>}
       </div>
     </Card>
+    {qRows.length>0&&<Card style={{overflow:"hidden"}}><CardHead bg="#111">📊 Quarter-By-Quarter Records</CardHead>
+      <div style={{padding:"4px 14px 6px",fontSize:10,color:"#aaa",fontStyle:"italic",borderBottom:"1px solid #f5f5f5"}}>Only games with a full box score (all 4 quarters scanned) are counted.</div>
+      <div style={{overflowX:"auto"}}>
+        <table style={{width:"100%",borderCollapse:"collapse",fontSize:isMobile?11:12}}>
+          <thead><tr style={{borderBottom:`2px solid ${RED}`,background:"#f7f7f7"}}>
+            {["Coach","Lead @ Half","Trail @ Half","4th Q Comebacks","Avg Q1","Avg Q2","Avg Q3","Avg Q4"].map(h=><th key={h} style={{padding:"6px 8px",textAlign:h==="Coach"?"left":"center",color:"#555",fontSize:9,letterSpacing:0.5,textTransform:"uppercase",fontWeight:800,whiteSpace:"nowrap"}}>{h}</th>)}
+          </tr></thead>
+          <tbody>{qRows.map(([name,s],i)=>{
+            const u=allUsers.find(u=>u.userName===name);
+            return(<tr key={name} style={{borderBottom:"1px solid #eee",background:i%2===0?"#fff":"#fafafa"}}>
+              <td style={{padding:"6px 8px",fontWeight:700,whiteSpace:"nowrap"}}><Name userId={u?.userId} userName={name}>{name}</Name></td>
+              <td style={{padding:"6px 8px",textAlign:"center",color:"#007a00"}}>{s.leadHalfW}-{s.leadHalfL}</td>
+              <td style={{padding:"6px 8px",textAlign:"center",color:RED}}>{s.trailHalfW}-{s.trailHalfL}</td>
+              <td style={{padding:"6px 8px",textAlign:"center"}}>{s.fourthQComebacks}</td>
+              <td style={{padding:"6px 8px",textAlign:"center"}}>{(s.qSum[0]/s.qGames).toFixed(1)}</td>
+              <td style={{padding:"6px 8px",textAlign:"center"}}>{(s.qSum[1]/s.qGames).toFixed(1)}</td>
+              <td style={{padding:"6px 8px",textAlign:"center"}}>{(s.qSum[2]/s.qGames).toFixed(1)}</td>
+              <td style={{padding:"6px 8px",textAlign:"center"}}>{(s.qSum[3]/s.qGames).toFixed(1)}</td>
+            </tr>);
+          })}</tbody>
+        </table>
+      </div>
+    </Card>}
+    </>
   );
 }
 
