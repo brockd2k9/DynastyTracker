@@ -2389,10 +2389,6 @@ function YearStatsTab({history,currentEntries,season,year,setupRows,permanentUse
   },[selYear]);
   if(!allUsers.length)return null;
   const activeKey=selSeasonKey??(hasCurrent?"current":(finalizedSeasons.length?`s${finalizedSeasons[finalizedSeasons.length-1].seasonNum}`:null));
-  const activeEntry=activeKey==="current"?null:finalizedSeasons.find(s=>`s${s.seasonNum}`===activeKey);
-  const standingsRows=activeKey==="current"
-    ?[...(currentEntries||[])].sort((a,b)=>calcTotal(b)-calcTotal(a))
-    :(activeEntry?[...activeEntry.finalStandings].sort((a,b)=>calcTotal(b)-calcTotal(a)):[]);
   // Stat leaders come from playerStats, which is only bucketed by year (not by seasonNum) since
   // box scores are matched by year+week — so leaders below reflect the whole year, not just the
   // season selected above.
@@ -2428,27 +2424,6 @@ function YearStatsTab({history,currentEntries,season,year,setupRows,permanentUse
             <button key={s.key} onClick={()=>setSelSeasonKey(s.key)} style={{padding:"4px 10px",borderRadius:2,border:"1px solid",borderColor:activeKey===s.key?"#1a3a6b":"#ddd",background:activeKey===s.key?"#1a3a6b":"#fff",color:activeKey===s.key?"#fff":"#555",cursor:"pointer",fontSize:11,fontFamily:ff,fontWeight:700}}>{s.label}</button>
           ))}
         </div>}
-      </Card>
-      <Card style={{overflow:"hidden"}}>
-        <CardHead>Standings</CardHead>
-        {!standingsRows.length
-          ?<div style={{padding:"30px 20px",textAlign:"center",color:"#888",fontSize:12}}>No standings for this season yet.</div>
-          :<div style={{overflowX:"auto"}}>
-            <table style={{width:"100%",borderCollapse:"collapse",fontSize:isMobile?12:13}}>
-              <thead><tr style={{background:"#f7f7f7",borderBottom:`2px solid ${RED}`}}>
-                {["RK","SCHOOL","PTS","W-L","CONF"].map(h=><th key={h} style={{padding:isMobile?"8px 6px":"9px 7px",textAlign:h==="SCHOOL"?"left":"center",color:"#555",fontSize:8,letterSpacing:1,textTransform:"uppercase",fontWeight:800,whiteSpace:"nowrap",borderRight:"1px solid #eee"}}>{h}</th>)}
-              </tr></thead>
-              <tbody>{standingsRows.map((t,i)=>(
-                <tr key={t.teamName} style={{borderBottom:"1px solid #eee",background:i===0?"#fff8f8":i%2===0?"#fafafa":"#fff"}}>
-                  <td style={{padding:isMobile?"8px 6px":"10px 7px",textAlign:"center",fontWeight:900,fontSize:isMobile?13:14,color:i===0?RED:"#bbb",borderRight:"1px solid #eee"}}>{i+1}</td>
-                  <td style={{padding:isMobile?"8px 6px":"10px 7px",fontWeight:i===0?800:600,color:"#111",whiteSpace:"nowrap",borderRight:"1px solid #eee"}}><Name userId={t.userId} userName={t.userName}>{t.teamName}</Name><div style={{fontSize:10,color:"#888",fontWeight:400}}>{t.userName}</div></td>
-                  <td style={{padding:isMobile?"8px 6px":"10px 7px",textAlign:"center",fontWeight:900,color:i===0?RED:"#111",fontSize:isMobile?14:16,borderRight:"1px solid #eee"}}>{calcTotal(t)}</td>
-                  <td style={{padding:isMobile?"8px 6px":"10px 7px",textAlign:"center",color:"#555",fontWeight:600,borderRight:"1px solid #eee",whiteSpace:"nowrap"}}>{t.wins}-{t.losses}</td>
-                  <td style={{padding:isMobile?"8px 6px":"10px 7px",textAlign:"center",color:"#1a3a6b",fontWeight:700,whiteSpace:"nowrap"}}>{t.confWins||0}-{t.confLosses||0}</td>
-                </tr>
-              ))}</tbody>
-            </table>
-          </div>}
       </Card>
       <div style={{fontSize:10,color:"#aaa",fontStyle:"italic",padding:"0 4px"}}>Stat leaders below are tracked per year (not split further by season if a year has more than one).</div>
       <div style={{display:"grid",gridTemplateColumns:isMobile?"1fr":"1fr 1fr 1fr",gap:14}}>
