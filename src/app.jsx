@@ -2369,6 +2369,102 @@ function LeagueRecordBook({history,currentEntries,season,year,permanentUsers,set
   );
 }
 
+// ── Year Stats ────────────────────────────────────────────────────────────
+// Career > Year > Season(s) in that year. A single year can hold more than one finalized
+// season if the commissioner advances seasonNum without bumping the year, so the year picker
+// and season picker are two separate, nested controls.
+function YearStatsTab({history,currentEntries,season,year,setupRows,permanentUsers,playerStats}) {
+  const isMobile=useIsMobile();
+  const allUsers=(permanentUsers?.length?permanentUsers.map(u=>({userId:u.id,userName:u.defaultName,teamName:(setupRows||[]).find(r=>r.userId===u.id)?.teamName||u.teamName||""})):setupRows)||[];
+  const allYears=[...new Set([...history.map(s=>s.year),year])].sort((a,b)=>b-a);
+  const [selYear,setSelYear]=useState(year);
+  const [selSeasonKey,setSelSeasonKey]=useState(null);
+  const finalizedSeasons=history.filter(s=>s.year===selYear).sort((a,b)=>(a.seasonNum||0)-(b.seasonNum||0));
+  const hasCurrent=selYear===year;
+  const seasonTabs=[...finalizedSeasons.map(s=>({key:`s${s.seasonNum}`,label:`Season ${s.seasonNum}`})),...(hasCurrent?[{key:"current",label:`Season ${season} (Current)`}]:[])];
+  useEffect(()=>{
+    const defaultKey=hasCurrent?"current":(finalizedSeasons.length?`s${finalizedSeasons[finalizedSeasons.length-1].seasonNum}`:null);
+    setSelSeasonKey(defaultKey);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  },[selYear]);
+  if(!allUsers.length)return null;
+  const activeKey=selSeasonKey??(hasCurrent?"current":(finalizedSeasons.length?`s${finalizedSeasons[finalizedSeasons.length-1].seasonNum}`:null));
+  const activeEntry=activeKey==="current"?null:finalizedSeasons.find(s=>`s${s.seasonNum}`===activeKey);
+  const standingsRows=activeKey==="current"
+    ?[...(currentEntries||[])].sort((a,b)=>calcTotal(b)-calcTotal(a))
+    :(activeEntry?[...activeEntry.finalStandings].sort((a,b)=>calcTotal(b)-calcTotal(a)):[]);
+  // Stat leaders come from playerStats, which is only bucketed by year (not by seasonNum) since
+  // box scores are matched by year+week — so leaders below reflect the whole year, not just the
+  // season selected above.
+  const leaders=allUsers.map(u=>{
+    const curEntry=(currentEntries||[]).find(e=>u.userId?e.userId===u.userId:e.userName===u.userName);
+    const displayName=curEntry?.userName||u.userName;
+    const stats=playerStats?.[u.userId]?.[selYear]||EMPTY_STATS();
+    return{userId:u.userId,name:displayName,passing:stats.passing,rushing:stats.rushing,team:stats.team};
+  });
+  const LeaderList=({title,valFn,suffix="",asc=false})=>{
+    const rows=[...leaders].filter(l=>valFn(l)>0).sort((a,b)=>asc?valFn(a)-valFn(b):valFn(b)-valFn(a)).slice(0,5);
+    if(!rows.length)return null;
+    return(<Card><CardHead bg="#333">{title}</CardHead><div style={{padding:"4px 0"}}>
+      {rows.map((l,i)=><div key={l.userId||l.name} style={{display:"flex",justifyContent:"space-between",alignItems:"center",padding:"7px 12px",borderBottom:"1px solid #f5f5f5"}}>
+        <span style={{fontSize:12,color:i===0?"#111":"#555",fontWeight:i===0?700:400}}>{i+1}. <Name userId={l.userId} userName={l.name}>{l.name}</Name></span>
+        <span style={{fontSize:13,fontWeight:800,color:RED}}>{valFn(l).toLocaleString()}{suffix}</span>
+      </div>)}
+    </div></Card>);
+  };
+  return(
+    <div style={{display:"flex",flexDirection:"column",gap:14}}>
+      <Card style={{overflow:"hidden"}}>
+        <CardHead bg="#111">📅 Year Stats</CardHead>
+        <div style={{padding:"10px 14px 4px",display:"flex",alignItems:"center",gap:8,flexWrap:"wrap",borderBottom:"1px solid #f0f0f0"}}>
+          <span style={{fontSize:11,fontWeight:700,color:"#555",textTransform:"uppercase",letterSpacing:0.5}}>Year:</span>
+          {allYears.map(y=>(
+            <button key={y} onClick={()=>setSelYear(y)} style={{padding:"4px 10px",borderRadius:2,border:"1px solid",borderColor:selYear===y?RED:"#ddd",background:selYear===y?RED:"#fff",color:selYear===y?"#fff":"#555",cursor:"pointer",fontSize:11,fontFamily:ff,fontWeight:700}}>{y}</button>
+          ))}
+        </div>
+        {seasonTabs.length>0&&<div style={{padding:"8px 14px 10px",display:"flex",alignItems:"center",gap:8,flexWrap:"wrap"}}>
+          <span style={{fontSize:11,fontWeight:700,color:"#555",textTransform:"uppercase",letterSpacing:0.5}}>Season:</span>
+          {seasonTabs.map(s=>(
+            <button key={s.key} onClick={()=>setSelSeasonKey(s.key)} style={{padding:"4px 10px",borderRadius:2,border:"1px solid",borderColor:activeKey===s.key?"#1a3a6b":"#ddd",background:activeKey===s.key?"#1a3a6b":"#fff",color:activeKey===s.key?"#fff":"#555",cursor:"pointer",fontSize:11,fontFamily:ff,fontWeight:700}}>{s.label}</button>
+          ))}
+        </div>}
+      </Card>
+      <Card style={{overflow:"hidden"}}>
+        <CardHead>Standings</CardHead>
+        {!standingsRows.length
+          ?<div style={{padding:"30px 20px",textAlign:"center",color:"#888",fontSize:12}}>No standings for this season yet.</div>
+          :<div style={{overflowX:"auto"}}>
+            <table style={{width:"100%",borderCollapse:"collapse",fontSize:isMobile?12:13}}>
+              <thead><tr style={{background:"#f7f7f7",borderBottom:`2px solid ${RED}`}}>
+                {["RK","SCHOOL","PTS","W-L","CONF"].map(h=><th key={h} style={{padding:isMobile?"8px 6px":"9px 7px",textAlign:h==="SCHOOL"?"left":"center",color:"#555",fontSize:8,letterSpacing:1,textTransform:"uppercase",fontWeight:800,whiteSpace:"nowrap",borderRight:"1px solid #eee"}}>{h}</th>)}
+              </tr></thead>
+              <tbody>{standingsRows.map((t,i)=>(
+                <tr key={t.teamName} style={{borderBottom:"1px solid #eee",background:i===0?"#fff8f8":i%2===0?"#fafafa":"#fff"}}>
+                  <td style={{padding:isMobile?"8px 6px":"10px 7px",textAlign:"center",fontWeight:900,fontSize:isMobile?13:14,color:i===0?RED:"#bbb",borderRight:"1px solid #eee"}}>{i+1}</td>
+                  <td style={{padding:isMobile?"8px 6px":"10px 7px",fontWeight:i===0?800:600,color:"#111",whiteSpace:"nowrap",borderRight:"1px solid #eee"}}><Name userId={t.userId} userName={t.userName}>{t.teamName}</Name><div style={{fontSize:10,color:"#888",fontWeight:400}}>{t.userName}</div></td>
+                  <td style={{padding:isMobile?"8px 6px":"10px 7px",textAlign:"center",fontWeight:900,color:i===0?RED:"#111",fontSize:isMobile?14:16,borderRight:"1px solid #eee"}}>{calcTotal(t)}</td>
+                  <td style={{padding:isMobile?"8px 6px":"10px 7px",textAlign:"center",color:"#555",fontWeight:600,borderRight:"1px solid #eee",whiteSpace:"nowrap"}}>{t.wins}-{t.losses}</td>
+                  <td style={{padding:isMobile?"8px 6px":"10px 7px",textAlign:"center",color:"#1a3a6b",fontWeight:700,whiteSpace:"nowrap"}}>{t.confWins||0}-{t.confLosses||0}</td>
+                </tr>
+              ))}</tbody>
+            </table>
+          </div>}
+      </Card>
+      <div style={{fontSize:10,color:"#aaa",fontStyle:"italic",padding:"0 4px"}}>Stat leaders below are tracked per year (not split further by season if a year has more than one).</div>
+      <div style={{display:"grid",gridTemplateColumns:isMobile?"1fr":"1fr 1fr 1fr",gap:14}}>
+        <LeaderList title="Passing Yards" valFn={l=>l.passing?.yds||0}/>
+        <LeaderList title="Passing TDs" valFn={l=>l.passing?.tds||0}/>
+        <LeaderList title="Interceptions Thrown" valFn={l=>l.passing?.int||0}/>
+        <LeaderList title="Rushing Yards" valFn={l=>l.rushing?.yds||0}/>
+        <LeaderList title="Rushing TDs" valFn={l=>l.rushing?.tds||0}/>
+        <LeaderList title="Takeaways" valFn={l=>l.team?.takeaways||0}/>
+        <LeaderList title="Off Pts/Game" valFn={l=>(l.team?.games||0)>0?Math.round((l.team.offPts/l.team.games)*10)/10:0}/>
+        <LeaderList title="Def Pts/Game (Best)" valFn={l=>(l.team?.games||0)>0?Math.round((l.team.defPts/l.team.games)*10)/10:0} asc/>
+      </div>
+    </div>
+  );
+}
+
 function ProfileTab({history,setupRows,currentEntries,season,year,permanentUsers,sel,setSel,pTab,setPTab,articles,setActiveArticle,playerStats,gameArchive}) {
   const isMobile = useIsMobile();
   const [expandedSeasons,setExpandedSeasons] = useState({});
@@ -5550,7 +5646,7 @@ export default function App() {
   // Deep link: /?tab=<name> jumps straight to that tab (used by the /redzone share-preview page)
   useEffect(()=>{
     const targetTab = new URLSearchParams(window.location.search).get("tab");
-    const validTabs = ["Home","Standings","Schedule","History","Profiles","Rules","Redzone","Discord"];
+    const validTabs = ["Home","Standings","Schedule","History","YearStats","Profiles","Rules","Redzone","Discord"];
     if (targetTab && validTabs.includes(targetTab)) {
       setTab(targetTab);
       window.history.replaceState({}, "", window.location.pathname);
@@ -6047,7 +6143,7 @@ export default function App() {
 
       {/* Nav tabs */}
       <div style={{background:RED,display:"flex",alignItems:"center",overflowX:"auto",WebkitOverflowScrolling:"touch"}}>
-        {(isMobile?[["Home","Home"],["Standings","Standings"],["Schedule","Schedule"],["Record Book","History"],["Profiles","Profiles"],["Rules","Rules"],["RedZone","Redzone"],["Discord","Discord"]]:[["Home","Home"],["Standings","Standings"],["Schedule","Schedule"],["Record Book","History"],["Profiles","Profiles"],["Rules","Rules"],["RedZone","Redzone"],["Join Discord","Discord"]]).map(([label,val])=>(
+        {(isMobile?[["Home","Home"],["Standings","Standings"],["Schedule","Schedule"],["Record Book","History"],["Year Stats","YearStats"],["Profiles","Profiles"],["Rules","Rules"],["RedZone","Redzone"],["Discord","Discord"]]:[["Home","Home"],["Standings","Standings"],["Schedule","Schedule"],["Record Book","History"],["Year Stats","YearStats"],["Profiles","Profiles"],["Rules","Rules"],["RedZone","Redzone"],["Join Discord","Discord"]]).map(([label,val])=>(
           <button key={val} onClick={()=>setTab(val)} style={{flex:"0 0 auto",padding:isMobile?"0 10px":"0 14px",height:isMobile?38:40,background:tab===val?"rgba(255,255,255,0.18)":"transparent",border:"none",borderBottom:tab===val?"3px solid #fff":"3px solid transparent",color:"#fff",cursor:"pointer",fontSize:isMobile?10:11,fontWeight:tab===val?800:500,fontFamily:ff,textTransform:"uppercase",letterSpacing:0.3,whiteSpace:"nowrap"}}>{label}</button>
         ))}
       </div>
@@ -6084,7 +6180,7 @@ export default function App() {
         {/* Left sidebar - desktop only */}
         {isMobile?null:<div style={{display:"flex",flexDirection:"column",gap:12}}>
           <Card><CardHead>Dynasty Info</CardHead><div style={{padding:"8px 0"}}>{[["Season",season],["Year",year],["Week",week>13?"Post":week],["Teams",entries.length]].map(([l,v])=><div key={l} style={{display:"flex",justifyContent:"space-between",padding:"6px 12px",borderBottom:"1px solid #f5f5f5"}}><span style={{fontSize:12,color:"#888"}}>{l}</span><span style={{fontSize:12,fontWeight:700,color:"#111"}}>{v}</span></div>)}</div></Card>
-          <Card><CardHead>Quick Links</CardHead><div style={{padding:"4px 0"}}>{["Home","Standings","Schedule","History","Profiles","Rules","Redzone","Discord"].map(l=><div key={l} onClick={()=>setTab(l)} style={{padding:"8px 12px",fontSize:12,color:RED,cursor:"pointer",borderBottom:"1px solid #f5f5f5",fontWeight:500}}>🏈 {l==="History"?"Record Book":l}</div>)}</div></Card>
+          <Card><CardHead>Quick Links</CardHead><div style={{padding:"4px 0"}}>{["Home","Standings","Schedule","History","YearStats","Profiles","Rules","Redzone","Discord"].map(l=><div key={l} onClick={()=>setTab(l)} style={{padding:"8px 12px",fontSize:12,color:RED,cursor:"pointer",borderBottom:"1px solid #f5f5f5",fontWeight:500}}>🏈 {l==="History"?"Record Book":l==="YearStats"?"Year Stats":l}</div>)}</div></Card>
           <Card><CardHead bg={RED}>Points Leader</CardHead>{sorted.length===0?<div style={{padding:"14px 12px",textAlign:"center",color:"#bbb",fontSize:12}}>Not started</div>:sorted.slice(0,1).map(t=><div key={t.teamName} style={{padding:"14px 12px",textAlign:"center"}}><div style={{fontSize:26,fontWeight:900,color:RED}}>{calcTotal(t)}</div><div style={{fontSize:14,fontWeight:700,color:"#111",marginTop:2}}>{t.teamName}</div><div style={{fontSize:11,color:"#555",marginTop:4}}>{t.wins}W - {t.losses}L</div></div>)}</Card>
         </div>}
 
@@ -6102,7 +6198,7 @@ export default function App() {
             </Card>
           ):(
             <Card style={{padding:isMobile?"10px 12px":"14px 16px",borderLeft:`4px solid ${RED}`}}>
-              <div style={{fontSize:isMobile?15:18,fontWeight:900,color:"#111",textTransform:"uppercase"}}>{tab==="Standings"?"Dynasty Standings":tab==="Schedule"?"Season Schedule":tab==="History"?"League Record Book":tab==="Profiles"?"Player Profiles":tab==="Redzone"?"Dynasty RedZone":tab==="Discord"?"Join Discord & Voice Chat":"League Rules"}</div>
+              <div style={{fontSize:isMobile?15:18,fontWeight:900,color:"#111",textTransform:"uppercase"}}>{tab==="Standings"?"Dynasty Standings":tab==="Schedule"?"Season Schedule":tab==="History"?"League Record Book":tab==="YearStats"?"Year Stats":tab==="Profiles"?"Player Profiles":tab==="Redzone"?"Dynasty RedZone":tab==="Discord"?"Join Discord & Voice Chat":"League Rules"}</div>
               <div style={{fontSize:10,color:"#888",marginTop:2}}>{leagueName} · S{season} · {year} · {week>13?"Post":`Wk ${week}`}</div>
             </Card>
           )}
@@ -6226,6 +6322,7 @@ export default function App() {
           </>)}
 
           {tab==="History"&&<HistoryTab history={history} setHistory={setHistory} saveToDb={saveToDb} commUnlocked={commUnlocked} yearRosters={setup?.yearRosters} permanentUsers={setup?.permanentUsers} currentEntries={entries} season={season} year={year} setupRows={setup?.rows||[]} gameArchive={setup?.gameArchive} classicGames={setup?.classicGames} playerStats={setup?.playerStats}/>}
+          {tab==="YearStats"&&<YearStatsTab history={history} currentEntries={activeEntries} season={season} year={year} setupRows={setup?.rows||[]} permanentUsers={setup?.permanentUsers} playerStats={setup?.playerStats}/>}
           {tab==="Profiles"&&<ProfileTab history={history} setupRows={(setup?.rows||[]).filter(r=>r.active!==false)} currentEntries={activeEntries} season={season} year={year} permanentUsers={setup?.permanentUsers?.filter(u=>(setup?.rows||[]).some(r=>r.userId===u.id&&r.active!==false))} sel={profileSel} setSel={setProfileSel} pTab={profilePTab} setPTab={setProfilePTab} articles={articles} setActiveArticle={setActiveArticle} playerStats={setup?.playerStats} gameArchive={setup?.gameArchive}/>}
           {tab==="Schedule"&&<ScheduleTab schedule={schedule} entries={activeEntries} week={week} season={season} year={year} setup={setup} setupRows={setup?.rows||[]} history={history}/>}
           {tab==="Rules"&&(()=>{
