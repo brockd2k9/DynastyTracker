@@ -5587,6 +5587,37 @@ export default function App() {
     }
   }
 
+  // Posts the upcoming week's marquee matchup with odds (spread/total/moneyline) to GroupMe.
+  // Reuses the same deterministic pricing math as the in-app Game of the Week card (pickGOTW,
+  // estimateSpread, estimateTotal, estimateWinProb/probToAmericanOdds) instead of asking Claude
+  // to invent numbers — only the hype blurb around them comes from Claude.
+  async function postGameOfWeekPreview(newWeek, entriesAfter) {
+    try {
+      const activeAfter = entriesAfter.filter(e=>(e.userId&&activeUserIds.has(e.userId))||(!e.userId&&activeUserNames.has(e.userName)));
+      const sortedAfter = [...activeAfter].sort((a,b)=>calcTotal(b)-calcTotal(a));
+      const games = buildGamesList(schedule, newWeek);
+      const confGames = games.filter(g=>g.opp!=="BYE"&&!isCPUOpp(g.opp));
+      const gotw = pickGOTW(confGames, sortedAfter);
+      if (!gotw) return; // no dynasty-vs-dynasty game this week (bye/CPU-only or post-season) — nothing to preview
+      const t1 = sortedAfter.find(t=>t.teamName===gotw.team1);
+      const t2 = sortedAfter.find(t=>t.teamName===gotw.team2);
+      const trend1 = teamScoringTrend(setup?.gameArchive, year, gotw.team1);
+      const trend2 = teamScoringTrend(setup?.gameArchive, year, gotw.team2);
+      const prob1 = (t1&&t2) ? estimateWinProb(t1,t2,history,trend1,trend2) : 0.5;
+      const ml1 = probToAmericanOdds(prob1), ml2 = probToAmericanOdds(1-prob1);
+      const spread1 = (t1&&t2) ? estimateSpread(t1,t2,trend1,trend2) : -3.5;
+      const spread2 = -spread1;
+      const total = estimateTotal(trend1,trend2);
+      const fmtSpread = n => n>0?`+${n}`:`${n}`;
+      const prompt = `You are a sharp Vegas-style sportsbook analyst hyping up the Game of the Week for a dynasty college football league group chat. Write a punchy 2-3 sentence tease — mention the stakes, talk your line with confidence, no hedging. No headline, no markdown, just the blurb.\n\nGame of the Week (Week ${newWeek}): ${gotw.team1} (#${gotw.rank1} in dynasty points, ${t1?.wins||0}-${t1?.losses||0}) vs ${gotw.team2} (#${gotw.rank2} in dynasty points, ${t2?.wins||0}-${t2?.losses||0}).\nSpread: ${gotw.team1} ${fmtSpread(spread1)} / ${gotw.team2} ${fmtSpread(spread2)}. O/U ${total}. Moneyline: ${gotw.team1} ${fmtOdds(ml1)} / ${gotw.team2} ${fmtOdds(ml2)}.`;
+      const blurb = (await callClaude(prompt)).trim();
+      const text = `🎰 GAME OF THE WEEK — Week ${newWeek}\n${gotw.team1} (#${gotw.rank1} · ${t1?.wins||0}-${t1?.losses||0}) vs ${gotw.team2} (#${gotw.rank2} · ${t2?.wins||0}-${t2?.losses||0})\n\n${blurb&&blurb!=="No content returned."?blurb:""}\n\n📊 THE LINE\nSpread: ${gotw.team1} ${fmtSpread(spread1)} / ${gotw.team2} ${fmtSpread(spread2)}\nO/U: ${total}\nML: ${gotw.team1} ${fmtOdds(ml1)} / ${gotw.team2} ${fmtOdds(ml2)}`;
+      await postToGroupMe(text);
+    } catch(e) {
+      console.error("GroupMe GOTW preview failed:", e);
+    }
+  }
+
   function applyWeekResults(targetWeek=week) {
     const thisWeekSchedule = schedule[targetWeek] || {};
     // Build a map of results entered this week
@@ -5648,7 +5679,7 @@ export default function App() {
       const newWeek=targetWeek+1;
       setWeek(newWeek);
       setTimeout(()=>saveToDb({week:newWeek,entries:nextEntries}),100);
-      triggerAutoWeeklyArticles(targetWeek,newWeek,nextEntries).then(()=>sleep(3200)).then(()=>postWeekRecapToGroupMe(targetWeek,nextEntries)).catch(e=>console.error("Auto weekly articles failed:",e));
+      triggerAutoWeeklyArticles(targetWeek,newWeek,nextEntries).then(()=>sleep(3200)).then(()=>postWeekRecapToGroupMe(targetWeek,nextEntries)).then(()=>sleep(3200)).then(()=>postGameOfWeekPreview(newWeek,nextEntries)).catch(e=>console.error("Auto weekly articles failed:",e));
     }
     else{setTimeout(()=>saveToDb({entries:nextEntries}),100);}
   }
@@ -5673,7 +5704,7 @@ export default function App() {
       const newWeek=targetWeek+1;
       setWeek(newWeek);
       setTimeout(()=>saveToDb({week:newWeek,entries:nextEntries}),100);
-      triggerAutoWeeklyArticles(targetWeek,newWeek,nextEntries).then(()=>sleep(3200)).then(()=>postWeekRecapToGroupMe(targetWeek,nextEntries)).catch(e=>console.error("Auto weekly articles failed:",e));
+      triggerAutoWeeklyArticles(targetWeek,newWeek,nextEntries).then(()=>sleep(3200)).then(()=>postWeekRecapToGroupMe(targetWeek,nextEntries)).then(()=>sleep(3200)).then(()=>postGameOfWeekPreview(newWeek,nextEntries)).catch(e=>console.error("Auto weekly articles failed:",e));
     }
     else{setTimeout(()=>saveToDb({entries:nextEntries}),100);}
   }
