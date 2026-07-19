@@ -2379,6 +2379,7 @@ function YearStatsTab({history,currentEntries,season,year,setupRows,permanentUse
   const allYears=[...new Set([...history.map(s=>s.year),year])].sort((a,b)=>b-a);
   const [selYear,setSelYear]=useState(year);
   const [selSeasonKey,setSelSeasonKey]=useState(null);
+  const [expanded,setExpanded]=useState({});
   const finalizedSeasons=history.filter(s=>s.year===selYear).sort((a,b)=>(a.seasonNum||0)-(b.seasonNum||0));
   const hasCurrent=selYear===year;
   const seasonTabs=[...finalizedSeasons.map(s=>({key:`s${s.seasonNum}`,label:`Season ${s.seasonNum}`})),...(hasCurrent?[{key:"current",label:`Season ${season} (Current)`}]:[])];
@@ -2402,13 +2403,16 @@ function YearStatsTab({history,currentEntries,season,year,setupRows,permanentUse
   const hasTeamGames=l=>(l.team?.games||0)>0;
   const LeaderList=({title,valFn,suffix="",asc=false,filterFn,renderVal})=>{
     const ff2=filterFn||(l=>valFn(l)>0);
-    const rows=[...leaders].filter(ff2).sort((a,b)=>asc?valFn(a)-valFn(b):valFn(b)-valFn(a)).slice(0,5);
-    if(!rows.length)return null;
+    const all=[...leaders].filter(ff2).sort((a,b)=>asc?valFn(a)-valFn(b):valFn(b)-valFn(a));
+    if(!all.length)return null;
+    const isOpen=!!expanded[title];
+    const rows=isOpen?all:all.slice(0,5);
     return(<Card><CardHead bg="#333">{title}</CardHead><div style={{padding:"4px 0"}}>
       {rows.map((l,i)=><div key={l.userId||l.name} style={{display:"flex",justifyContent:"space-between",alignItems:"center",padding:"7px 12px",borderBottom:"1px solid #f5f5f5"}}>
         <span style={{fontSize:12,color:i===0?"#111":"#555",fontWeight:i===0?700:400}}>{i+1}. <Name userId={l.userId} userName={l.name}>{l.name}</Name></span>
         <span style={{fontSize:13,fontWeight:800,color:RED}}>{renderVal?renderVal(l):valFn(l).toLocaleString()+suffix}</span>
       </div>)}
+      {all.length>5&&<button onClick={()=>setExpanded(prev=>({...prev,[title]:!prev[title]}))} style={{width:"100%",padding:"8px",background:"none",border:"none",borderTop:"1px solid #f0f0f0",color:RED,fontSize:11,fontWeight:800,cursor:"pointer",fontFamily:ff,textTransform:"uppercase",letterSpacing:0.5}}>{isOpen?"Show Less ▲":`Show All (${all.length}) ▼`}</button>}
     </div></Card>);
   };
   const SectionLabel=({children})=><div style={{fontSize:10,fontWeight:800,color:"#aaa",textTransform:"uppercase",letterSpacing:1,padding:"2px 4px"}}>{children}</div>;
