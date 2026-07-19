@@ -1539,6 +1539,7 @@ function HistoryTab({history, setHistory, saveToDb, commUnlocked, entries, setEn
       if(!gotConf.has(un)){confT[un]=(confT[un]||0)+1;}
     });}
   });
+  (currentEntries||entries||[]).forEach(t=>{allWins[t.userName]=(allWins[t.userName]||0)+(t.wins||0);});
   const wList=Object.entries(allWins).sort((a,b)=>b[1]-a[1]);
 
   // Sort history by year descending
