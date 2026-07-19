@@ -850,6 +850,7 @@ function findArchivedGame(gameArchive, year, week, team1, team2) {
 // Final-score result view for a matchup that already has an uploaded box score — swaps in for
 // MatchupPreview's betting odds once a game is no longer a preview.
 function MatchupResult({archivedGame, logoFor}) {
+  const [showStats, setShowStats] = useState(false);
   const {team1: mine, team2: opp} = archivedGame;
   const wMine = mine.score > opp.score, wOpp = opp.score > mine.score;
   return (
@@ -869,9 +870,12 @@ function MatchupResult({archivedGame, logoFor}) {
           <div style={{fontSize:24,fontWeight:900,color:wOpp?"#fff":"#888",lineHeight:1.1}}>{opp.score}</div>
         </div>
       </div>
-      <div style={{padding:12,fontSize:11}}>
+      <button onClick={()=>setShowStats(s=>!s)} style={{width:"100%",background:"transparent",border:"none",borderTop:"1px solid #333",padding:"8px 14px",cursor:"pointer",fontSize:10,fontWeight:800,color:"#888",textTransform:"uppercase",letterSpacing:1,fontFamily:"'Helvetica Neue',Arial,sans-serif",display:"flex",alignItems:"center",justifyContent:"center",gap:6}}>
+        {showStats?"Hide Box Score":"Show Box Score"} {showStats?"▲":"▼"}
+      </button>
+      {showStats&&<div style={{padding:12,fontSize:11}}>
         <BoxScoreDetail team1={mine} team2={opp} dark/>
-      </div>
+      </div>}
     </div>
   );
 }
