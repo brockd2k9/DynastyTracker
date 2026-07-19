@@ -2375,7 +2375,13 @@ function LeagueRecordBook({history,currentEntries,season,year,permanentUsers,set
 // and season picker are two separate, nested controls.
 function YearStatsTab({history,currentEntries,season,year,setupRows,permanentUsers,playerStats,gameArchive}) {
   const isMobile=useIsMobile();
-  const allUsers=(permanentUsers?.length?permanentUsers.map(u=>({userId:u.id,userName:u.defaultName,teamName:(setupRows||[]).find(r=>r.userId===u.id)?.teamName||u.teamName||""})):setupRows)||[];
+  // Merge permanentUsers with setupRows the same way ProfileTab does — a plain fallback
+  // (permanentUsers only, when non-empty) silently dropped any coach who's in setupRows but
+  // not yet a permanentUser, making them vanish from every leaderboard on this page.
+  const puList=(permanentUsers||[]).map(u=>({userId:u.id,userName:u.defaultName,teamName:(setupRows||[]).find(r=>r.userId===u.id)?.teamName||u.teamName||""}));
+  const puIds=new Set(puList.map(u=>u.userId));
+  const extraRows=(setupRows||[]).filter(r=>r.userId&&!puIds.has(r.userId)).map(r=>({userId:r.userId,userName:r.userName,teamName:r.teamName}));
+  const allUsers=[...puList,...extraRows].filter(u=>u.userName);
   const allYears=[...new Set([...history.map(s=>s.year),year])].sort((a,b)=>b-a);
   const [selYear,setSelYear]=useState(year);
   const [selSeasonKey,setSelSeasonKey]=useState(null);
