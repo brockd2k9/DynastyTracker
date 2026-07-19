@@ -344,6 +344,9 @@ async function callClaude(prompt) {
 // Matches callClaude's CALL_COOLDOWN_MS (3000ms) — anything chained right after a callClaude
 // resolves needs to wait this long before calling it again, or _checkSafeguards throws.
 const sleep = ms => new Promise(res=>setTimeout(res,ms));
+// Deliberate gap between the week recap/standings post and the Game of the Week post, so the
+// two don't land in GroupMe back-to-back — well clear of CALL_COOLDOWN_MS on its own.
+const GOTW_STAGGER_MS = 30000;
 
 async function postToGroupMe(text) {
   const r = await fetch("/api/groupme-post", {
@@ -5680,7 +5683,7 @@ export default function App() {
       const newWeek=targetWeek+1;
       setWeek(newWeek);
       setTimeout(()=>saveToDb({week:newWeek,entries:nextEntries}),100);
-      triggerAutoWeeklyArticles(targetWeek,newWeek,nextEntries).then(()=>sleep(3200)).then(()=>postWeekRecapToGroupMe(targetWeek,nextEntries)).then(()=>sleep(3200)).then(()=>postGameOfWeekPreview(newWeek,nextEntries)).catch(e=>console.error("Auto weekly articles failed:",e));
+      triggerAutoWeeklyArticles(targetWeek,newWeek,nextEntries).then(()=>sleep(3200)).then(()=>postWeekRecapToGroupMe(targetWeek,nextEntries)).then(()=>sleep(GOTW_STAGGER_MS)).then(()=>postGameOfWeekPreview(newWeek,nextEntries)).catch(e=>console.error("Auto weekly articles failed:",e));
     }
     else{setTimeout(()=>saveToDb({entries:nextEntries}),100);}
   }
@@ -5705,7 +5708,7 @@ export default function App() {
       const newWeek=targetWeek+1;
       setWeek(newWeek);
       setTimeout(()=>saveToDb({week:newWeek,entries:nextEntries}),100);
-      triggerAutoWeeklyArticles(targetWeek,newWeek,nextEntries).then(()=>sleep(3200)).then(()=>postWeekRecapToGroupMe(targetWeek,nextEntries)).then(()=>sleep(3200)).then(()=>postGameOfWeekPreview(newWeek,nextEntries)).catch(e=>console.error("Auto weekly articles failed:",e));
+      triggerAutoWeeklyArticles(targetWeek,newWeek,nextEntries).then(()=>sleep(3200)).then(()=>postWeekRecapToGroupMe(targetWeek,nextEntries)).then(()=>sleep(GOTW_STAGGER_MS)).then(()=>postGameOfWeekPreview(newWeek,nextEntries)).catch(e=>console.error("Auto weekly articles failed:",e));
     }
     else{setTimeout(()=>saveToDb({entries:nextEntries}),100);}
   }
