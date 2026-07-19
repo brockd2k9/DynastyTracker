@@ -2373,7 +2373,7 @@ function LeagueRecordBook({history,currentEntries,season,year,permanentUsers,set
 // Career > Year > Season(s) in that year. A single year can hold more than one finalized
 // season if the commissioner advances seasonNum without bumping the year, so the year picker
 // and season picker are two separate, nested controls.
-function YearStatsTab({history,currentEntries,season,year,setupRows,permanentUsers,playerStats}) {
+function YearStatsTab({history,currentEntries,season,year,setupRows,permanentUsers,playerStats,gameArchive}) {
   const isMobile=useIsMobile();
   const allUsers=(permanentUsers?.length?permanentUsers.map(u=>({userId:u.id,userName:u.defaultName,teamName:(setupRows||[]).find(r=>r.userId===u.id)?.teamName||u.teamName||""})):setupRows)||[];
   const allYears=[...new Set([...history.map(s=>s.year),year])].sort((a,b)=>b-a);
@@ -2396,18 +2396,24 @@ function YearStatsTab({history,currentEntries,season,year,setupRows,permanentUse
     const curEntry=(currentEntries||[]).find(e=>u.userId?e.userId===u.userId:e.userName===u.userName);
     const displayName=curEntry?.userName||u.userName;
     const stats=playerStats?.[u.userId]?.[selYear]||EMPTY_STATS();
-    return{userId:u.userId,name:displayName,passing:stats.passing,rushing:stats.rushing,team:stats.team};
+    const qs=computeQuarterStats(gameArchive,u.userId,selYear);
+    return{userId:u.userId,name:displayName,passing:stats.passing,rushing:stats.rushing,team:stats.team,qs};
   });
-  const LeaderList=({title,valFn,suffix="",asc=false})=>{
-    const rows=[...leaders].filter(l=>valFn(l)>0).sort((a,b)=>asc?valFn(a)-valFn(b):valFn(b)-valFn(a)).slice(0,5);
+  const hasTeamGames=l=>(l.team?.games||0)>0;
+  const LeaderList=({title,valFn,suffix="",asc=false,filterFn,renderVal})=>{
+    const ff2=filterFn||(l=>valFn(l)>0);
+    const rows=[...leaders].filter(ff2).sort((a,b)=>asc?valFn(a)-valFn(b):valFn(b)-valFn(a)).slice(0,5);
     if(!rows.length)return null;
     return(<Card><CardHead bg="#333">{title}</CardHead><div style={{padding:"4px 0"}}>
       {rows.map((l,i)=><div key={l.userId||l.name} style={{display:"flex",justifyContent:"space-between",alignItems:"center",padding:"7px 12px",borderBottom:"1px solid #f5f5f5"}}>
         <span style={{fontSize:12,color:i===0?"#111":"#555",fontWeight:i===0?700:400}}>{i+1}. <Name userId={l.userId} userName={l.name}>{l.name}</Name></span>
-        <span style={{fontSize:13,fontWeight:800,color:RED}}>{valFn(l).toLocaleString()}{suffix}</span>
+        <span style={{fontSize:13,fontWeight:800,color:RED}}>{renderVal?renderVal(l):valFn(l).toLocaleString()+suffix}</span>
       </div>)}
     </div></Card>);
   };
+  const SectionLabel=({children})=><div style={{fontSize:10,fontWeight:800,color:"#aaa",textTransform:"uppercase",letterSpacing:1,padding:"2px 4px"}}>{children}</div>;
+  const leaderGrid={display:"grid",gridTemplateColumns:isMobile?"1fr":"1fr 1fr 1fr",gap:14};
+  const qRows=leaders.filter(l=>(l.qs?.qGames||0)>0).sort((a,b)=>a.name.localeCompare(b.name));
   return(
     <div style={{display:"flex",flexDirection:"column",gap:14}}>
       <Card style={{overflow:"hidden"}}>
@@ -2425,17 +2431,71 @@ function YearStatsTab({history,currentEntries,season,year,setupRows,permanentUse
           ))}
         </div>}
       </Card>
-      <div style={{fontSize:10,color:"#aaa",fontStyle:"italic",padding:"0 4px"}}>Stat leaders below are tracked per year (not split further by season if a year has more than one).</div>
-      <div style={{display:"grid",gridTemplateColumns:isMobile?"1fr":"1fr 1fr 1fr",gap:14}}>
+      <div style={{fontSize:10,color:"#aaa",fontStyle:"italic",padding:"0 4px"}}>Stats below are tracked per year (not split further by season if a year has more than one).</div>
+
+      <SectionLabel>Passing</SectionLabel>
+      <div style={leaderGrid}>
         <LeaderList title="Passing Yards" valFn={l=>l.passing?.yds||0}/>
         <LeaderList title="Passing TDs" valFn={l=>l.passing?.tds||0}/>
         <LeaderList title="Interceptions Thrown" valFn={l=>l.passing?.int||0}/>
+      </div>
+
+      <SectionLabel>Rushing</SectionLabel>
+      <div style={leaderGrid}>
         <LeaderList title="Rushing Yards" valFn={l=>l.rushing?.yds||0}/>
         <LeaderList title="Rushing TDs" valFn={l=>l.rushing?.tds||0}/>
-        <LeaderList title="Takeaways" valFn={l=>l.team?.takeaways||0}/>
-        <LeaderList title="Off Pts/Game" valFn={l=>(l.team?.games||0)>0?Math.round((l.team.offPts/l.team.games)*10)/10:0}/>
-        <LeaderList title="Def Pts/Game (Best)" valFn={l=>(l.team?.games||0)>0?Math.round((l.team.defPts/l.team.games)*10)/10:0} asc/>
       </div>
+
+      <SectionLabel>Scoring & Yards</SectionLabel>
+      <div style={leaderGrid}>
+        <LeaderList title="Off Pts/Game" valFn={l=>l.team.offPts/l.team.games} filterFn={hasTeamGames} renderVal={l=>(l.team.offPts/l.team.games).toFixed(1)}/>
+        <LeaderList title="Def Pts/Game (Best)" valFn={l=>l.team.defPts/l.team.games} filterFn={hasTeamGames} asc renderVal={l=>(l.team.defPts/l.team.games).toFixed(1)}/>
+        <LeaderList title="Offensive Yards" valFn={l=>l.team?.offYds||0} filterFn={hasTeamGames}/>
+        <LeaderList title="Defensive Yards (Best)" valFn={l=>l.team?.defYds||0} filterFn={hasTeamGames} asc/>
+      </div>
+
+      <SectionLabel>Efficiency</SectionLabel>
+      <div style={leaderGrid}>
+        <LeaderList title="3rd Down %" valFn={l=>(l.team.thirdConv/l.team.thirdAtt)*100} filterFn={l=>(l.team?.thirdAtt||0)>0} renderVal={l=>((l.team.thirdConv/l.team.thirdAtt)*100).toFixed(1)+"%"}/>
+        <LeaderList title="4th Down Attempts" valFn={l=>l.team?.fourthAtt||0} filterFn={hasTeamGames}/>
+        <LeaderList title="4th Down Conversion %" valFn={l=>(l.team.fourthConv/l.team.fourthAtt)*100} filterFn={l=>(l.team?.fourthAtt||0)>0} renderVal={l=>((l.team.fourthConv/l.team.fourthAtt)*100).toFixed(1)+"%"}/>
+        <LeaderList title="2 Point Attempts" valFn={l=>l.team?.twoPtAtt||0} filterFn={hasTeamGames}/>
+        <LeaderList title="2 Point Conversion %" valFn={l=>(l.team.twoPtConv/l.team.twoPtAtt)*100} filterFn={l=>(l.team?.twoPtAtt||0)>0} renderVal={l=>((l.team.twoPtConv/l.team.twoPtAtt)*100).toFixed(1)+"%"}/>
+      </div>
+
+      <SectionLabel>Turnovers</SectionLabel>
+      <div style={leaderGrid}>
+        <LeaderList title="Takeaways" valFn={l=>l.team?.takeaways||0} filterFn={hasTeamGames}/>
+        <LeaderList title="Giveaways (Fewest)" valFn={l=>l.team?.giveaways||0} filterFn={hasTeamGames} asc/>
+        <LeaderList title="Turnover Differential" valFn={l=>l.team.takeaways-l.team.giveaways} filterFn={hasTeamGames} renderVal={l=>{const d=l.team.takeaways-l.team.giveaways;return(d>0?`+${d}`:String(d));}}/>
+      </div>
+
+      <SectionLabel>Comebacks & Halftime</SectionLabel>
+      <div style={leaderGrid}>
+        <LeaderList title="4th Quarter Comebacks" valFn={l=>l.qs?.fourthQComebacks||0} suffix="×" filterFn={l=>(l.qs?.qGames||0)>0}/>
+        <LeaderList title="Comeback Wins" valFn={l=>l.qs?.comebackWins||0} suffix="×" filterFn={l=>(l.qs?.qGames||0)>0}/>
+        <LeaderList title="Record When Leading at Half" valFn={l=>l.qs?.leadHalfW||0} filterFn={l=>(l.qs?.qGames||0)>0} renderVal={l=>`${l.qs.leadHalfW}-${l.qs.leadHalfL}`}/>
+        <LeaderList title="Avg Time of Possession" valFn={l=>l.qs.topGames>0?l.qs.topSecSum/l.qs.topGames:0} filterFn={l=>(l.qs?.topGames||0)>0} renderVal={l=>formatTOP(l.qs.topSecSum/l.qs.topGames)}/>
+      </div>
+
+      {qRows.length>0&&<>
+        <SectionLabel>Quarter By Quarter (Avg Points Scored)</SectionLabel>
+        <Card style={{overflow:"hidden"}}>
+          <div style={{overflowX:"auto"}}>
+            <table style={{width:"100%",borderCollapse:"collapse",fontSize:isMobile?11:12}}>
+              <thead><tr style={{borderBottom:`2px solid ${RED}`,background:"#f7f7f7"}}>
+                {["Coach","Avg Q1","Avg Q2","Avg Q3","Avg Q4"].map(h=><th key={h} style={{padding:"6px 8px",textAlign:h==="Coach"?"left":"center",color:"#555",fontSize:9,letterSpacing:0.5,textTransform:"uppercase",fontWeight:800,whiteSpace:"nowrap"}}>{h}</th>)}
+              </tr></thead>
+              <tbody>{qRows.map((l,i)=>(
+                <tr key={l.userId||l.name} style={{borderBottom:"1px solid #eee",background:i%2===0?"#fff":"#fafafa"}}>
+                  <td style={{padding:"6px 8px",fontWeight:700,whiteSpace:"nowrap"}}><Name userId={l.userId} userName={l.name}>{l.name}</Name></td>
+                  {[0,1,2,3].map(qi=><td key={qi} style={{padding:"6px 8px",textAlign:"center"}}>{(l.qs.qSum[qi]/l.qs.qGames).toFixed(1)}</td>)}
+                </tr>
+              ))}</tbody>
+            </table>
+          </div>
+        </Card>
+      </>}
     </div>
   );
 }
@@ -2843,8 +2903,18 @@ function StatRow({label, val, sub}) {
 }
 // Quarter-by-quarter stats for one coach, read directly off each archived box score's
 // quarters:[] array (only games where all 4 regulation quarters were scanned are counted).
+function parseTOP(str){
+  if(!str||typeof str!=="string")return null;
+  const m=str.match(/^(\d+):(\d{2})$/);
+  if(!m)return null;
+  return parseInt(m[1],10)*60+parseInt(m[2],10);
+}
+function formatTOP(sec){
+  const s=Math.round(sec);
+  return `${Math.floor(s/60)}:${String(s%60).padStart(2,"0")}`;
+}
 function computeQuarterStats(gameArchive, userId, filterYear) {
-  const qs={leadHalfW:0,leadHalfL:0,trailHalfW:0,trailHalfL:0,qSum:[0,0,0,0],qGames:0,fourthQComebacks:0,biggestComeback:null,biggest4thQComeback:null,mostQuarterPts:null};
+  const qs={leadHalfW:0,leadHalfL:0,trailHalfW:0,trailHalfL:0,qSum:[0,0,0,0],qGames:0,fourthQComebacks:0,comebackWins:0,biggestComeback:null,biggest4thQComeback:null,mostQuarterPts:null,topSecSum:0,topGames:0};
   (gameArchive||[]).filter(g=>filterYear==null||g.year===filterYear).forEach(g=>{
     [[g.team1,g.team2],[g.team2,g.team1]].forEach(([team,opp])=>{
       if(!userId||team.userId!==userId)return;
@@ -2857,7 +2927,10 @@ function computeQuarterStats(gameArchive, userId, filterYear) {
       else if(tCum[1]<oCum[1]){if(teamWon)qs.trailHalfW++;else qs.trailHalfL++;}
       if(teamWon){
         const maxDeficit=Math.max(oCum[0]-tCum[0],oCum[1]-tCum[1],oCum[2]-tCum[2]);
-        if(maxDeficit>0&&(!qs.biggestComeback||maxDeficit>qs.biggestComeback.deficit))qs.biggestComeback={deficit:maxDeficit,opponent:opp.name,year:g.year,week:g.week,score:`${team.score}-${opp.score}`};
+        if(maxDeficit>0){
+          qs.comebackWins++;
+          if(!qs.biggestComeback||maxDeficit>qs.biggestComeback.deficit)qs.biggestComeback={deficit:maxDeficit,opponent:opp.name,year:g.year,week:g.week,score:`${team.score}-${opp.score}`};
+        }
         const q4Deficit=oCum[2]-tCum[2];
         if(q4Deficit>0){
           qs.fourthQComebacks++;
@@ -2867,6 +2940,8 @@ function computeQuarterStats(gameArchive, userId, filterYear) {
       for(let i=0;i<4;i++)qs.qSum[i]+=tq[i];
       qs.qGames++;
       tq.forEach((pts,qi)=>{if(!qs.mostQuarterPts||pts>qs.mostQuarterPts.pts)qs.mostQuarterPts={pts,quarter:qi+1,opponent:opp.name,year:g.year,week:g.week};});
+      const topSec=parseTOP(team.misc?.timeOfPossession);
+      if(topSec!=null){qs.topSecSum+=topSec;qs.topGames++;}
     });
   });
   return qs;
@@ -6297,7 +6372,7 @@ export default function App() {
           </>)}
 
           {tab==="History"&&<HistoryTab history={history} setHistory={setHistory} saveToDb={saveToDb} commUnlocked={commUnlocked} yearRosters={setup?.yearRosters} permanentUsers={setup?.permanentUsers} currentEntries={entries} season={season} year={year} setupRows={setup?.rows||[]} gameArchive={setup?.gameArchive} classicGames={setup?.classicGames} playerStats={setup?.playerStats}/>}
-          {tab==="YearStats"&&<YearStatsTab history={history} currentEntries={activeEntries} season={season} year={year} setupRows={setup?.rows||[]} permanentUsers={setup?.permanentUsers} playerStats={setup?.playerStats}/>}
+          {tab==="YearStats"&&<YearStatsTab history={history} currentEntries={activeEntries} season={season} year={year} setupRows={setup?.rows||[]} permanentUsers={setup?.permanentUsers} playerStats={setup?.playerStats} gameArchive={setup?.gameArchive}/>}
           {tab==="Profiles"&&<ProfileTab history={history} setupRows={(setup?.rows||[]).filter(r=>r.active!==false)} currentEntries={activeEntries} season={season} year={year} permanentUsers={setup?.permanentUsers?.filter(u=>(setup?.rows||[]).some(r=>r.userId===u.id&&r.active!==false))} sel={profileSel} setSel={setProfileSel} pTab={profilePTab} setPTab={setProfilePTab} articles={articles} setActiveArticle={setActiveArticle} playerStats={setup?.playerStats} gameArchive={setup?.gameArchive}/>}
           {tab==="Schedule"&&<ScheduleTab schedule={schedule} entries={activeEntries} week={week} season={season} year={year} setup={setup} setupRows={setup?.rows||[]} history={history}/>}
           {tab==="Rules"&&(()=>{
