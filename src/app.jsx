@@ -2377,6 +2377,9 @@ function ProfileTab({history,setupRows,currentEntries,season,year,permanentUsers
 
   const user=sel?allUsers.find(u=>(u.userId||u.userName)===sel):null;
   const profile=user?getProfile(user.userId||null,user.userName):null;
+  const userPlayerStats=playerStats?.[user?.userId]||{};
+  const careerBoxStats=Object.keys(userPlayerStats).map(Number).reduce((acc,y)=>sumStats(acc,userPlayerStats[y]), EMPTY_STATS());
+  const careerPassing=careerBoxStats.passing, careerRushing=careerBoxStats.rushing, careerTeam=careerBoxStats.team;
   const SB=({label,val,color="#111",sub})=><div style={{background:"#f7f7f7",borderRadius:2,padding:"12px 8px",textAlign:"center",border:"1px solid #eee"}}><div style={{fontSize:19,fontWeight:900,color}}>{val}</div>{sub&&<div style={{fontSize:10,color:"#999"}}>{sub}</div>}<div style={{fontSize:9,color:"#aaa",textTransform:"uppercase",letterSpacing:1,marginTop:3,fontWeight:700}}>{label}</div></div>;
 
   return (
@@ -2416,14 +2419,14 @@ function ProfileTab({history,setupRows,currentEntries,season,year,permanentUsers
               <SB label="Win %" val={profile.winPct+"%"}/>
               <SB label="Best Finish" val={profile.bestFinish?`#${profile.bestFinish}`:"—"} color={RED}/>
               <SB label="Seasons" val={profile.seasons.length+(profile.cur?1:0)}/>
-              <SB label="Natty Wins" val={profile.nattyWins} color="#1a3a6b"/>
-              <SB label="Conf Titles" val={profile.confTitles} color="#555"/>
             </div></div>
             <div><SL>Bowl & Playoff</SL><div style={{display:"grid",gridTemplateColumns:isMobile?"1fr 1fr":"repeat(auto-fill,minmax(110px,1fr))",gap:8}}>
               <SB label="Bowl Apps" val={profile.bowlAppearances}/>
               <SB label="Bowl Record" val={profile.bowlAppearances>0?`${profile.bowlWins}-${profile.bowlLosses}`:"—"} color={profile.bowlWins>profile.bowlLosses?"#007a00":RED}/>
               <SB label="Playoff W" val={profile.careerPlayoffWins} color="#007a00"/>
               <SB label="Playoff L" val={profile.careerPlayoffLosses} color={RED}/>
+              <SB label="Natty Wins" val={profile.nattyWins} color="#1a3a6b"/>
+              <SB label="Conf Titles" val={profile.confTitles} color="#555"/>
             </div></div>
             <div><SL>Ranked Record</SL><div style={{display:"grid",gridTemplateColumns:isMobile?"1fr 1fr":"repeat(auto-fill,minmax(110px,1fr))",gap:8}}>
               <SB label="Top 25 Wins" val={profile.careerTop25Wins} color="#cc7700"/>
@@ -2435,6 +2438,22 @@ function ProfileTab({history,setupRows,currentEntries,season,year,permanentUsers
               <SB label="Forfeit Wins" val={profile.forfeitWins} color="#b8860b"/>
               <SB label="Forfeit Losses" val={profile.forfeitLosses} color="#b8860b"/>
             </div></div>}
+            <div><SL>Passing</SL><div style={{display:"grid",gridTemplateColumns:isMobile?"1fr 1fr":"repeat(auto-fill,minmax(110px,1fr))",gap:8}}>
+              <SB label="Completions" val={careerPassing.comp}/>
+              <SB label="Attempts" val={careerPassing.att}/>
+              <SB label="Completion %" val={careerPassing.att>0?`${careerPassing.comp}/${careerPassing.att} · ${((careerPassing.comp/careerPassing.att)*100).toFixed(1)}%`:"—"}/>
+              <SB label="Passing TDs" val={careerPassing.tds} color="#007a00"/>
+              <SB label="Interceptions" val={careerPassing.int} color={RED}/>
+            </div></div>
+            <div><SL>Rushing</SL><div style={{display:"grid",gridTemplateColumns:isMobile?"1fr 1fr":"repeat(auto-fill,minmax(110px,1fr))",gap:8}}>
+              <SB label="Rushing Attempts" val={careerRushing.att}/>
+              <SB label="Rushing Yards" val={careerRushing.yds.toLocaleString()}/>
+              <SB label="Rushing TDs" val={careerRushing.tds} color="#007a00"/>
+            </div></div>
+            <div><SL>Team</SL><div style={{display:"grid",gridTemplateColumns:isMobile?"1fr 1fr":"repeat(auto-fill,minmax(110px,1fr))",gap:8}}>
+              <SB label="Off Pts/Game" val={careerTeam.games>0?(careerTeam.offPts/careerTeam.games).toFixed(1):"—"} color="#007a00"/>
+              <SB label="Def Pts/Game" val={careerTeam.games>0?(careerTeam.defPts/careerTeam.games).toFixed(1):"—"} color={RED}/>
+            </div></div>
           </div>}
 
           {pTab==="h2h"&&(()=>{
