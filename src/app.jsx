@@ -5968,6 +5968,7 @@ export default function App() {
       await postToGroupMe(text);
     } catch(e) {
       console.error("GroupMe week recap failed:", e);
+      alert("GroupMe week recap failed to post: "+e.message);
     }
   }
 
@@ -5999,6 +6000,7 @@ export default function App() {
       await postToGroupMe(text);
     } catch(e) {
       console.error("GroupMe GOTW preview failed:", e);
+      alert("GroupMe Game of the Week preview failed to post: "+e.message);
     }
   }
 
