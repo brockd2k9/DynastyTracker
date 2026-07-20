@@ -4246,6 +4246,31 @@ function EnterResultsPanel({entries,weekResults,setWeekResults,week,setWeek,appl
     finally{setScanning(null); if(fileRefs.current[key])fileRefs.current[key].value="";}
   }
 
+  // The vision scan occasionally reads both teams' stat columns correctly but attaches the
+  // whole block to the wrong team name (see buildBoxScoreSidePrompt's comment on this failure
+  // mode) — most often when the two names are similar enough (e.g. "Oregon" vs "Oregon State")
+  // that reconcileBoxScoreTeams' name-similarity check picks the wrong side too. This swaps the
+  // stat content between team1/team2 while keeping each side's real name/userId pinned in place,
+  // so the commissioner can fix a mismatched scan without re-scanning from scratch.
+  function swapBoxScoreSides(archivedGame){
+    if(!window.confirm(`Swap ${archivedGame.team1.name} and ${archivedGame.team2.name}'s stats?\nUse this if the box score scan attached the wrong team's stats to each side.`)) return;
+    const {name:n1,userId:u1,...rest1}=archivedGame.team1;
+    const {name:n2,userId:u2,...rest2}=archivedGame.team2;
+    const team1={name:n1,userId:u1,...rest2};
+    const team2={name:n2,userId:u2,...rest1};
+    const archive=setup?.gameArchive||[];
+    const newArchive=archive.map(g=>g.id===archivedGame.id?{...g,team1,team2}:g);
+    const newPlayerStats=recomputePlayerStatsFromArchive(newArchive,setup?.playerStats||{},year);
+    const updatedSetup={...setup,gameArchive:newArchive,playerStats:newPlayerStats};
+    setSetup(updatedSetup); saveToDb({setup:updatedSetup});
+    const t1wins=team1.score>team2.score;
+    setWeekResults(prev=>prev.map(r=>{
+      if(r.teamName===team1.name) return{...r,result:t1wins?"win":"loss"};
+      if(r.teamName===team2.name) return{...r,result:t1wins?"loss":"win"};
+      return r;
+    }));
+  }
+
   const btnStyle=(active,color="#007a00")=>({padding:"5px 12px",borderRadius:2,border:"1px solid",borderColor:active?color:"#ddd",background:active?`${color}18`:"#fff",color:active?color:"#888",cursor:"pointer",fontSize:11,fontFamily:ff,fontWeight:800,textTransform:"uppercase"});
 
   function submitAndFlash(targetWeek,goBack){
@@ -4379,6 +4404,7 @@ function EnterResultsPanel({entries,weekResults,setWeekResults,week,setWeek,appl
                     <div style={{display:"flex",alignItems:"center",gap:14,marginTop:6,flexWrap:"wrap"}}>
                       <button onClick={()=>setExpandedBox(p=>({...p,[key]:!p[key]}))} style={{background:"none",border:"none",color:"#1a3a6b",fontWeight:700,fontSize:10,textTransform:"uppercase",letterSpacing:0.5,cursor:"pointer",padding:0,fontFamily:ff}}>{expandedBox[key]?"▲ Hide full box score":"▼ Full box score"}</button>
                       <button onClick={()=>submitScoreToGroupMe(key,archivedGame.team1,archivedGame.team2)} disabled={gmStatus[key]==="sending"} style={{background:gmStatus[key]==="sent"?"#f0f8f0":"none",border:"1px solid #1a3a6b",color:gmStatus[key]==="sent"?"#007a00":"#1a3a6b",fontWeight:700,fontSize:10,textTransform:"uppercase",letterSpacing:0.5,cursor:gmStatus[key]==="sending"?"wait":"pointer",padding:"3px 8px",borderRadius:2,fontFamily:ff}}>{gmStatus[key]==="sending"?"Posting...":gmStatus[key]==="sent"?"✓ Posted to GroupMe":"📢 Submit Score to GroupMe"}</button>
+                      <button onClick={()=>swapBoxScoreSides(archivedGame)} title="Use this if the scan attached the wrong team's stats to each side" style={{background:"none",border:"none",color:"#b8860b",fontWeight:700,fontSize:10,textTransform:"uppercase",letterSpacing:0.5,cursor:"pointer",padding:0,fontFamily:ff}}>🔄 Swap Sides</button>
                     </div>
                     {expandedBox[key]&&<div style={{marginTop:8}}><BoxScoreDetail team1={archivedGame.team1} team2={archivedGame.team2}/></div>}
                   </div>}
@@ -4480,6 +4506,7 @@ function EnterResultsPanel({entries,weekResults,setWeekResults,week,setWeek,appl
                     <div style={{display:"flex",alignItems:"center",gap:14,marginTop:6,flexWrap:"wrap"}}>
                       <button onClick={()=>setExpandedBox(p=>({...p,[key]:!p[key]}))} style={{background:"none",border:"none",color:"#1a3a6b",fontWeight:700,fontSize:10,textTransform:"uppercase",letterSpacing:0.5,cursor:"pointer",padding:0,fontFamily:ff}}>{expandedBox[key]?"▲ Hide full box score":"▼ Full box score"}</button>
                       <button onClick={()=>submitScoreToGroupMe(key,myTeamData,cpuTeamData)} disabled={gmStatus[key]==="sending"} style={{background:gmStatus[key]==="sent"?"#f0f8f0":"none",border:"1px solid #1a3a6b",color:gmStatus[key]==="sent"?"#007a00":"#1a3a6b",fontWeight:700,fontSize:10,textTransform:"uppercase",letterSpacing:0.5,cursor:gmStatus[key]==="sending"?"wait":"pointer",padding:"3px 8px",borderRadius:2,fontFamily:ff}}>{gmStatus[key]==="sending"?"Posting...":gmStatus[key]==="sent"?"✓ Posted to GroupMe":"📢 Submit Score to GroupMe"}</button>
+                      <button onClick={()=>swapBoxScoreSides(archivedGame)} title="Use this if the scan attached the wrong team's stats to each side" style={{background:"none",border:"none",color:"#b8860b",fontWeight:700,fontSize:10,textTransform:"uppercase",letterSpacing:0.5,cursor:"pointer",padding:0,fontFamily:ff}}>🔄 Swap Sides</button>
                     </div>
                     {expandedBox[key]&&<div style={{marginTop:8}}><BoxScoreDetail team1={myTeamData} team2={cpuTeamData}/></div>}
                   </div>}
