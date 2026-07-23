@@ -6008,7 +6008,12 @@ export default function App() {
         : activeAfter.map(e=>{const log=(e.weekLog||[]).find(l=>l.week===completedWeek);return log&&log.result==="win"?`${e.teamName} beat ${log.opponent}`:null;}).filter(Boolean).join("; ");
       const prompt = `Write a punchy 3-4 sentence recap of Week ${completedWeek} for a dynasty college football league group chat. Conversational, like a quick group chat update — not a formal article. No headline, no markdown, just the recap paragraph.\n\nGames this week: ${gameLines||"No games logged."}\n\nStandings leader: ${sortedAfter[0]?.teamName||"—"} with ${sortedAfter[0]?calcTotal(sortedAfter[0]):0} pts.`;
       const recap = (await callClaude(prompt)).trim();
-      const standingsLines = sortedAfter.map((e,i)=>`${i+1}. ${e.teamName} — ${calcTotal(e)}pts (${e.wins}-${e.losses})`).join("\n");
+      const leaderPts = sortedAfter[0]?calcTotal(sortedAfter[0]):0;
+      const standingsLines = sortedAfter.map((e,i)=>{
+        const pts = calcTotal(e);
+        const back = i===0 ? "" : `, -${leaderPts-pts}`;
+        return `${i+1}. ${e.teamName} — ${pts}pts (${e.wins}-${e.losses}${back})`;
+      }).join("\n");
       const text = `🏈 WEEK ${completedWeek} RESULTS — ${leagueName}\n\n${recap&&recap!=="No content returned."?recap:"Results are in."}\n\n📊 STANDINGS\n${standingsLines}`;
       await postToGroupMe(text);
     } catch(e) {
