@@ -4507,7 +4507,7 @@ function HistoricalImportPanel({setupRows, history, onImport}) {
 }
 
 // ── EnterResultsPanel ─────────────────────────────────────────────────────
-function EnterResultsPanel({entries,weekResults,setWeekResults,week,setWeek,applyBulkResults,applyWeekResults,postSeasonInputs,setPSI,applyPostSeason,finalizeSeason,season,setSeason,year,setYear,teamNames,schedule,history,onImportHistory,setupRows,saveToDb,setup,setSetup}) {
+function EnterResultsPanel({entries,weekResults,setWeekResults,week,setWeek,applyBulkResults,applyWeekResults,postSeasonInputs,setPSI,applyPostSeason,finalizeSeason,season,setSeason,year,setYear,teamNames,schedule,history,onImportHistory,setupRows,saveToDb,setup,setSetup,postWeekRecapToGroupMe,postGameOfWeekPreview}) {
   const pc = {...DEFAULT_PTS_CONFIG,...(setup?.pointsConfig||{})}; // live points config, for accurate in-progress point hints below
   const [entryWeek,setEntryWeek] = useState(week);
   const [resultsTab,setResultsTab] = useState("weekly");
@@ -4516,7 +4516,22 @@ function EnterResultsPanel({entries,weekResults,setWeekResults,week,setWeek,appl
   const [submitMsg,setSubmitMsg] = useState("");
   const [expandedBox,setExpandedBox] = useState({});
   const [gmStatus,setGmStatus] = useState({});
+  const [gmResendStatus,setGmResendStatus] = useState(null);
   const fileRefs = useRef({});
+
+  // Manual fallback for the auto GroupMe post that's supposed to fire on week advance — resends
+  // the just-completed week's recap/standings, then (after the same stagger gap used
+  // automatically) the upcoming week's Game of the Week preview. Both post functions already
+  // catch and alert() their own failures, so there's nothing more to report here on completion —
+  // just clear the "Sending..." state either way.
+  async function resendGroupMeUpdate(){
+    if(!window.confirm(`Resend to GroupMe: Week ${week-1} recap + standings, then the Week ${week} Game of the Week preview?\nThis will use the Claude API multiple times.`))return;
+    setGmResendStatus("sending");
+    await postWeekRecapToGroupMe(week-1, entries);
+    await sleep(GOTW_STAGGER_MS);
+    await postGameOfWeekPreview(week, entries);
+    setGmResendStatus(null);
+  }
 
   async function submitScoreToGroupMe(key,team1,team2){
     if(!window.confirm(`Post ${team1.name} ${team1.score} - ${team2.score} ${team2.name} to GroupMe with an AI recap?\nThis will use the Claude API.`))return;
@@ -4924,6 +4939,9 @@ function EnterResultsPanel({entries,weekResults,setWeekResults,week,setWeek,appl
             {entryWeek>=week?`Submit Week ${entryWeek} & Advance to Week ${entryWeek+1} →`:`Submit Week ${entryWeek} →`}
           </button>
         </div>
+        {week>0&&<button onClick={resendGroupMeUpdate} disabled={gmResendStatus==="sending"} style={{marginTop:10,background:"none",border:"1px solid #1a3a6b",color:"#1a3a6b",fontWeight:700,fontSize:11,textTransform:"uppercase",letterSpacing:0.5,cursor:gmResendStatus==="sending"?"wait":"pointer",padding:"7px 14px",borderRadius:2,fontFamily:ff}}>
+          {gmResendStatus==="sending"?"Sending to GroupMe...":`📤 Resend Week ${week-1} GroupMe Update`}
+        </button>}
       </>}
       {entryWeek>=14&&postSeasonInputs&&(()=>{
         const psi=postSeasonInputs;
@@ -6528,7 +6546,7 @@ export default function App() {
         </div>
         <div style={{maxWidth:800,margin:"0 auto",padding:"20px 14px"}}>
           {commTab==="Season History"&&<HistoryTab history={history} setHistory={setHistory} saveToDb={saveToDb} commUnlocked={true} entries={entries} setEntries={setEntries} season={season} week={week} setWeek={setWeek} yearRosters={setup?.yearRosters} permanentUsers={setup?.permanentUsers} currentEntries={entries} year={year} setupRows={setup?.rows||[]} gameArchive={setup?.gameArchive} classicGames={setup?.classicGames} playerStats={setup?.playerStats}/>}
-          {commTab==="Enter Results"&&<EnterResultsPanel entries={activeEntries} weekResults={weekResults} setWeekResults={setWeekResults} week={week} setWeek={setWeek} applyBulkResults={applyBulkResults} applyWeekResults={applyWeekResults} postSeasonInputs={postSeasonInputs} setPSI={setPSI} applyPostSeason={applyPostSeason} finalizeSeason={finalizeSeason} season={season} setSeason={setSeason} year={year} setYear={setYear} teamNames={teamNames} schedule={schedule} history={history} onImportHistory={importHistoricalSeason} setupRows={setup?.rows||[]} saveToDb={saveToDb} setup={setup} setSetup={setSetup}/>}
+          {commTab==="Enter Results"&&<EnterResultsPanel entries={activeEntries} weekResults={weekResults} setWeekResults={setWeekResults} week={week} setWeek={setWeek} applyBulkResults={applyBulkResults} applyWeekResults={applyWeekResults} postSeasonInputs={postSeasonInputs} setPSI={setPSI} applyPostSeason={applyPostSeason} finalizeSeason={finalizeSeason} season={season} setSeason={setSeason} year={year} setYear={setYear} teamNames={teamNames} schedule={schedule} history={history} onImportHistory={importHistoricalSeason} setupRows={setup?.rows||[]} saveToDb={saveToDb} setup={setup} setSetup={setSetup} postWeekRecapToGroupMe={postWeekRecapToGroupMe} postGameOfWeekPreview={postGameOfWeekPreview}/>}
           {commTab==="Schedule"&&<SchedulePanel entries={activeEntries} schedule={schedule} setSchedule={setSchedule}/>}
 {commTab==="Content"&&<ContentHub sorted={sorted} entries={activeEntries} week={week} season={season} year={year} leagueName={leagueName} history={history} leader={leader} articles={articles} setArticles={setArticles} setActiveArticle={setActiveArticle} schedule={schedule} setup={setup} setSetup={setSetup} saveToDb={saveToDb}/>}
           {commTab==="Player Stats"&&<PlayerStatsAdmin setup={setup} setSetup={setSetup} saveToDb={saveToDb} permanentUsers={setup?.permanentUsers||[]} year={year} ff={ff} RED={RED}/>}
