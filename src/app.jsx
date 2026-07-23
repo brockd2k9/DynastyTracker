@@ -2505,6 +2505,23 @@ function YearStatsTab({history,currentEntries,season,year,setupRows,permanentUse
             </table>
           </div>
         </Card>
+
+        <SectionLabel>Quarter By Quarter (Avg Points Allowed)</SectionLabel>
+        <Card style={{overflow:"hidden"}}>
+          <div style={{overflowX:"auto"}}>
+            <table style={{width:"100%",borderCollapse:"collapse",fontSize:isMobile?11:12}}>
+              <thead><tr style={{borderBottom:`2px solid ${RED}`,background:"#f7f7f7"}}>
+                {["Coach","Avg Q1","Avg Q2","Avg Q3","Avg Q4"].map(h=><th key={h} style={{padding:"6px 8px",textAlign:h==="Coach"?"left":"center",color:"#555",fontSize:9,letterSpacing:0.5,textTransform:"uppercase",fontWeight:800,whiteSpace:"nowrap"}}>{h}</th>)}
+              </tr></thead>
+              <tbody>{qRows.map((l,i)=>(
+                <tr key={l.userId||l.name} style={{borderBottom:"1px solid #eee",background:i%2===0?"#fff":"#fafafa"}}>
+                  <td style={{padding:"6px 8px",fontWeight:700,whiteSpace:"nowrap"}}><Name userId={l.userId} userName={l.name}>{l.name}</Name></td>
+                  {[0,1,2,3].map(qi=><td key={qi} style={{padding:"6px 8px",textAlign:"center"}}>{(l.qs.qSumAllowed[qi]/l.qs.qGames).toFixed(1)}</td>)}
+                </tr>
+              ))}</tbody>
+            </table>
+          </div>
+        </Card>
       </>}
     </div>
   );
@@ -2924,7 +2941,7 @@ function formatTOP(sec){
   return `${Math.floor(s/60)}:${String(s%60).padStart(2,"0")}`;
 }
 function computeQuarterStats(gameArchive, userId, filterYear) {
-  const qs={leadHalfW:0,leadHalfL:0,trailHalfW:0,trailHalfL:0,qSum:[0,0,0,0],qGames:0,fourthQComebacks:0,comebackWins:0,biggestComeback:null,biggest4thQComeback:null,mostQuarterPts:null,topSecSum:0,topGames:0};
+  const qs={leadHalfW:0,leadHalfL:0,trailHalfW:0,trailHalfL:0,qSum:[0,0,0,0],qSumAllowed:[0,0,0,0],qGames:0,fourthQComebacks:0,comebackWins:0,biggestComeback:null,biggest4thQComeback:null,mostQuarterPts:null,topSecSum:0,topGames:0};
   (gameArchive||[]).filter(g=>filterYear==null||g.year===filterYear).forEach(g=>{
     [[g.team1,g.team2],[g.team2,g.team1]].forEach(([team,opp])=>{
       if(!userId||team.userId!==userId)return;
@@ -2947,7 +2964,7 @@ function computeQuarterStats(gameArchive, userId, filterYear) {
           if(!qs.biggest4thQComeback||q4Deficit>qs.biggest4thQComeback.deficit)qs.biggest4thQComeback={deficit:q4Deficit,opponent:opp.name,year:g.year,week:g.week,score:`${team.score}-${opp.score}`};
         }
       }
-      for(let i=0;i<4;i++)qs.qSum[i]+=tq[i];
+      for(let i=0;i<4;i++){qs.qSum[i]+=tq[i];qs.qSumAllowed[i]+=oq[i];}
       qs.qGames++;
       tq.forEach((pts,qi)=>{if(!qs.mostQuarterPts||pts>qs.mostQuarterPts.pts)qs.mostQuarterPts={pts,quarter:qi+1,opponent:opp.name,year:g.year,week:g.week};});
       const topSec=parseTOP(team.misc?.timeOfPossession);
@@ -2994,6 +3011,7 @@ function PlayerStatsTab({userId, userName, playerStats, gameArchive, yearList, f
   const toDiffStr=toDiff>0?`+${toDiff}`:String(toDiff);
   const qStats=computeQuarterStats(gameArchive,userId,view==="career"?null:view);
   const avgQ=(i)=>qStats.qGames>0?(qStats.qSum[i]/qStats.qGames).toFixed(1):"-";
+  const avgQAllowed=(i)=>qStats.qGames>0?(qStats.qSumAllowed[i]/qStats.qGames).toFixed(1):"-";
   const btnStyle=(active)=>({padding:"6px 14px",border:"none",borderRadius:2,cursor:"pointer",fontFamily:ff,fontSize:11,fontWeight:800,textTransform:"uppercase",background:active?RED:"#eee",color:active?"#fff":"#555"});
   return (
     <div style={{display:"flex",flexDirection:"column",gap:12}}>
@@ -3073,6 +3091,10 @@ function PlayerStatsTab({userId, userName, playerStats, gameArchive, yearList, f
           <StatRow label="Avg Q2 Points" val={avgQ(1)}/>
           <StatRow label="Avg Q3 Points" val={avgQ(2)}/>
           <StatRow label="Avg Q4 Points" val={avgQ(3)}/>
+          <StatRow label="Avg Q1 Points Allowed" val={avgQAllowed(0)}/>
+          <StatRow label="Avg Q2 Points Allowed" val={avgQAllowed(1)}/>
+          <StatRow label="Avg Q3 Points Allowed" val={avgQAllowed(2)}/>
+          <StatRow label="Avg Q4 Points Allowed" val={avgQAllowed(3)}/>
         </>}
       </div>
     </div>
