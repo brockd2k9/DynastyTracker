@@ -5951,6 +5951,145 @@ function RightRail({sorted,articles,entries,week,season,leader,setActiveArticle,
   );
 }
 
+// ── Scores Ticker ────────────────────────────────────────────────────────
+// Continuous right-to-left marquee: a fixed "POINTS LEADERS" label, then the top 5 teams (with
+// each team's point gap to the team immediately above it), then a "LIVE SCORES" divider and every
+// submitted (archived box score) result for the currently active season/week only. Content is
+// rendered twice back-to-back and the track is translated exactly -50% so the loop has no visible
+// seam; the loop speed is measured off the real rendered width so it stays constant regardless of
+// how many teams/games are in it.
+function usePrefersReducedMotion() {
+  const [reduced, setReduced] = useState(() => typeof window !== "undefined" && window.matchMedia("(prefers-reduced-motion: reduce)").matches);
+  useEffect(() => {
+    const mq = window.matchMedia("(prefers-reduced-motion: reduce)");
+    const handler = () => setReduced(mq.matches);
+    mq.addEventListener ? mq.addEventListener("change", handler) : mq.addListener(handler);
+    return () => (mq.removeEventListener ? mq.removeEventListener("change", handler) : mq.removeListener(handler));
+  }, []);
+  return reduced;
+}
+function ScoresTicker({ sorted, setupRows, schedule, week, year, season, gameArchive }) {
+  const trackRef = useRef(null);
+  const [duration, setDuration] = useState(35);
+  const [paused, setPaused] = useState(false);
+  const reducedMotion = usePrefersReducedMotion();
+
+  const top5 = sorted.slice(0, 5).map((t, i) => ({
+    rank: i + 1,
+    teamName: t.teamName,
+    pts: calcTotal(t),
+    back: i === 0 ? null : calcTotal(sorted[i - 1]) - calcTotal(t),
+    logo: getPlayerImages(setupRows, t.userId, t.userName).teamLogo,
+  }));
+
+  // Every unique matchup scheduled this week that already has an archived (submitted) box
+  // score — exactly the same "has this game been played" signal ScheduleTab/WeekMatchupsCard
+  // use elsewhere, so the ticker never invents a result the rest of the site doesn't also show.
+  const weekGames = buildGamesList(schedule || {}, week)
+    .map(g => findArchivedGame(gameArchive, year, week, g.team, g.opp))
+    .filter(Boolean);
+
+  const logoFor = teamName => {
+    const entry = sorted.find(t => t.teamName === teamName);
+    return entry ? getPlayerImages(setupRows, entry.userId, entry.userName).teamLogo : null;
+  };
+
+  useEffect(() => {
+    const el = trackRef.current;
+    if (!el) return;
+    const measure = () => {
+      const w = el.scrollWidth / 2; // track renders two copies of the content back-to-back
+      if (w > 0) setDuration(Math.max(18, w / 55)); // ~55px/sec — slow enough to read
+    };
+    measure();
+    const ro = new ResizeObserver(measure);
+    ro.observe(el);
+    return () => ro.disconnect();
+  }, [sorted.length, weekGames.length]);
+
+  if (!sorted.length) {
+    return (
+      <div style={{ background: "#000", borderBottom: `2px solid ${RED}`, padding: "0 12px", height: 44, display: "flex", alignItems: "center" }}>
+        <span style={{ fontSize: 11, color: "#666", fontStyle: "italic" }}>Season not started</span>
+      </div>
+    );
+  }
+
+  const Sep = ({ strong }) => <span style={{ color: strong ? RED : "#444", fontWeight: 800, margin: "0 16px", flexShrink: 0 }}>|</span>;
+
+  const Content = ({ hidden }) => (
+    <div aria-hidden={hidden || undefined} style={{ display: "flex", alignItems: "center", flexShrink: 0 }}>
+      {top5.map((t, i) => (
+        <div key={t.rank} style={{ display: "flex", alignItems: "center", gap: 7, flexShrink: 0 }}>
+          {i > 0 && <Sep />}
+          <span style={{ fontSize: 11, fontWeight: 900, color: i === 0 ? RED : "#777" }}>{t.rank}</span>
+          {t.logo && <img src={t.logo} alt="" style={{ height: 18, width: 18, objectFit: "contain", flexShrink: 0 }} onError={e => { e.target.style.display = "none"; }} />}
+          <span style={{ fontSize: 12, fontWeight: 800, color: "#fff", textTransform: "uppercase", letterSpacing: 0.3, whiteSpace: "nowrap" }}>{t.teamName}</span>
+          <span style={{ fontSize: 13, fontWeight: 900, color: i === 0 ? "#e8c84a" : "#fff" }}>{t.pts}</span>
+          {t.back != null && <span style={{ fontSize: 10, fontWeight: 700, color: "#888", whiteSpace: "nowrap" }}>• {t.back} BACK</span>}
+        </div>
+      ))}
+      <Sep strong />
+      <span style={{ fontSize: 11, fontWeight: 900, color: RED, letterSpacing: 1.5, textTransform: "uppercase", flexShrink: 0 }}>Live Scores</span>
+      {weekGames.length === 0 ? (
+        <span style={{ fontSize: 11, fontWeight: 700, color: "#888", textTransform: "uppercase", letterSpacing: 0.5, marginLeft: 14, whiteSpace: "nowrap" }}>• No Scores Submitted</span>
+      ) : weekGames.map((g, i) => {
+        const { team1: a, team2: b } = g;
+        const aWon = (a.score || 0) > (b.score || 0), bWon = (b.score || 0) > (a.score || 0);
+        return (
+          <div key={`${a.name}-${b.name}-${i}`} style={{ display: "flex", alignItems: "center", gap: 6, flexShrink: 0, marginLeft: 14 }}>
+            {i > 0 && <Sep />}
+            {logoFor(a.name) && <img src={logoFor(a.name)} alt="" style={{ height: 16, width: 16, objectFit: "contain", flexShrink: 0 }} onError={e => { e.target.style.display = "none"; }} />}
+            <span style={{ fontSize: 12, fontWeight: aWon ? 900 : 600, color: aWon ? "#fff" : "#999", textTransform: "uppercase", whiteSpace: "nowrap" }}>{a.name} {a.score}</span>
+            <span style={{ fontSize: 11, color: "#555", fontWeight: 700 }}>—</span>
+            {logoFor(b.name) && <img src={logoFor(b.name)} alt="" style={{ height: 16, width: 16, objectFit: "contain", flexShrink: 0 }} onError={e => { e.target.style.display = "none"; }} />}
+            <span style={{ fontSize: 12, fontWeight: bWon ? 900 : 600, color: bWon ? "#fff" : "#999", textTransform: "uppercase", whiteSpace: "nowrap" }}>{b.name} {b.score}</span>
+            <span style={{ fontSize: 8, fontWeight: 800, color: "#4caf50", background: "rgba(76,175,80,0.12)", border: "1px solid rgba(76,175,80,0.35)", borderRadius: 2, padding: "2px 5px", textTransform: "uppercase", letterSpacing: 0.5, flexShrink: 0 }}>Final</span>
+          </div>
+        );
+      })}
+      <Sep strong />
+    </div>
+  );
+
+  return (
+    <div style={{ background: "#000", borderBottom: `2px solid ${RED}`, height: 44, display: "flex", alignItems: "stretch", overflow: "hidden" }}>
+      <style>{"@media (prefers-reduced-motion: reduce){.jud-ticker-track{animation:none !important}}"}</style>
+      <div style={{ flexShrink: 0, display: "flex", alignItems: "center", padding: "0 12px", background: "#000", borderRight: `2px solid ${RED}`, zIndex: 1 }}>
+        <span style={{ fontSize: 10, fontWeight: 900, color: "#fff", letterSpacing: 1.2, textTransform: "uppercase", whiteSpace: "nowrap" }}>Points Leaders</span>
+      </div>
+      <div
+        style={{ flex: 1, minWidth: 0, overflow: "hidden", position: "relative" }}
+        onMouseEnter={() => setPaused(true)}
+        onMouseLeave={() => setPaused(false)}
+        onTouchStart={() => setPaused(true)}
+        onTouchEnd={() => setPaused(false)}
+        onTouchCancel={() => setPaused(false)}
+      >
+        <div
+          ref={trackRef}
+          className="jud-ticker-track"
+          style={{
+            display: "flex",
+            alignItems: "center",
+            height: "100%",
+            width: "max-content",
+            willChange: "transform",
+            animationName: reducedMotion ? "none" : "jud-ticker-scroll",
+            animationDuration: `${duration}s`,
+            animationTimingFunction: "linear",
+            animationIterationCount: "infinite",
+            animationPlayState: paused ? "paused" : "running",
+          }}
+        >
+          <Content />
+          <Content hidden />
+        </div>
+      </div>
+      <style>{"@keyframes jud-ticker-scroll{from{transform:translateX(0)}to{transform:translateX(-50%)}}"}</style>
+    </div>
+  );
+}
 
 export default function App() {
   const [setup,setSetup] = useState(null);
@@ -6629,17 +6768,7 @@ export default function App() {
       </>)}
 
       {/* Scores ticker */}
-      <div style={{background:"#1a1a1a",borderBottom:"2px solid #cc0000",padding:"5px 10px",display:"flex",gap:0,overflowX:"auto",WebkitOverflowScrolling:"touch",alignItems:"center",scrollbarWidth:"none"}}>
-        <span style={{fontSize:8,color:RED,fontWeight:800,textTransform:"uppercase",letterSpacing:1.5,marginRight:10,flexShrink:0}}>SCORES</span>
-        {sorted.length===0&&<span style={{fontSize:11,color:"#666",fontStyle:"italic"}}>Season not started</span>}
-        {sorted.map((t,i)=>(
-          <div key={t.teamName} style={{display:"flex",alignItems:"center",gap:5,padding:"0 10px",borderRight:"1px solid #333",flexShrink:0,minWidth:isMobile?70:0}}>
-            <span style={{fontSize:9,fontWeight:800,color:i===0?RED:"#555",width:10}}>{i+1}</span>
-            <span style={{fontSize:11,fontWeight:700,color:"#fff",whiteSpace:"nowrap"}}>{isMobile?t.teamName.split(" ")[0]:t.teamName}</span>
-            <span style={{fontSize:12,fontWeight:900,color:i===0?"#e8c84a":"#999",marginLeft:3}}>{calcTotal(t)}</span>
-          </div>
-        ))}
-      </div>
+      <ScoresTicker sorted={sorted} setupRows={setup?.rows} schedule={effectiveSchedule} week={week} year={year} season={season} gameArchive={setup?.gameArchive}/>
 
       {/* Mobile top strip - top 3 leaders, scrollable */}
       {isMobile&&sorted.length>0&&(
