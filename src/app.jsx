@@ -6273,7 +6273,10 @@ function StandingsBoard({sorted, setupRows, leader}) {
             </div>
             <div style={{fontSize:10,color:"#888",marginTop:1,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{t.userName} · {t.wins}-{t.losses} • <span style={{color:"#1a3a6b"}}>{t.confWins||0}-{t.confLosses||0} CONF</span></div>
           </div>
-          <div style={{fontSize:isTop?20:17,fontWeight:900,color:isTop?RED:"#111",flexShrink:0}}>{tot}</div>
+          <div style={{textAlign:"center",flexShrink:0}}>
+            <div style={{fontSize:isTop?20:17,fontWeight:900,color:isTop?RED:"#111"}}>{tot}</div>
+            <div style={{fontSize:9,color:back===0?"#007a00":RED,fontWeight:700}}>{back===0?"—":`-${back}`}</div>
+          </div>
           <span style={{fontSize:11,color:"#ccc",flexShrink:0}}>{isOpen?"▲":"▼"}</span>
         </div>
         {isOpen&&(
