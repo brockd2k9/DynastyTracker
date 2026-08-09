@@ -2263,14 +2263,26 @@ function LeagueRecordBook({history,currentEntries,season,year,permanentUsers,set
     const mostRushYds=[...rushingEntries].sort((a,b)=>b[1].yds-a[1].yds)[0];
     const mostRushTD=[...rushingEntries].sort((a,b)=>b[1].tds-a[1].tds)[0];
     const bestYPCarry=[...rushingEntries].filter(([,t])=>t.att>0).sort((a,b)=>(b[1].yds/b[1].att)-(a[1].yds/a[1].att))[0];
+    // Best-effort year -> season-number lookup for records that playerStats/gameArchive only
+    // track per calendar year rather than per finalized season. A year can hold more than one
+    // season (see YearStatsTab above), so this only resolves when that coach had exactly one
+    // season in the given year — otherwise the year-level stat blends both and can't be
+    // attributed to just one, so it's left unlabeled rather than showing a misleading season #.
+    const resolveSeasonNum=(name,yr)=>{
+      const prof=recs[name];
+      if(!prof)return null;
+      const nums=new Set(prof.seasons.filter(s=>!s.isHistorical&&s.year===yr).map(s=>s.seasonNum));
+      if(prof.cur&&yr===year)nums.add(season);
+      return nums.size===1?[...nums][0]:null;
+    };
     // Single-season passing/rushing records: same fields as the career versions above, but each
     // (user, year) pair from playerStats is its own entry instead of being summed across years.
     const singleSeasonPassing=[], singleSeasonRushing=[];
     e.forEach(([name])=>{
       const stats=playerStats?.[displayToId[name]]||{};
       Object.keys(stats).map(Number).filter(y=>filterYear==null||y===filterYear).forEach(y=>{
-        if(stats[y]?.passing)singleSeasonPassing.push({name,year:y,...stats[y].passing});
-        if(stats[y]?.rushing)singleSeasonRushing.push({name,year:y,...stats[y].rushing});
+        if(stats[y]?.passing)singleSeasonPassing.push({name,year:y,seasonNum:resolveSeasonNum(name,y),...stats[y].passing});
+        if(stats[y]?.rushing)singleSeasonRushing.push({name,year:y,seasonNum:resolveSeasonNum(name,y),...stats[y].rushing});
       });
     });
     const ssMostPassAtt=[...singleSeasonPassing].sort((a,b)=>b.att-a.att)[0];
@@ -2304,7 +2316,7 @@ function LeagueRecordBook({history,currentEntries,season,year,permanentUsers,set
     let ssMost4thQComebacks=null;
     Object.entries(seasonComebacks).forEach(([key,n])=>{
       const [name,yr]=key.split("|");
-      if(!ssMost4thQComebacks||n>ssMost4thQComebacks.n)ssMost4thQComebacks={name,year:Number(yr),n};
+      if(!ssMost4thQComebacks||n>ssMost4thQComebacks.n)ssMost4thQComebacks={name,year:Number(yr),seasonNum:resolveSeasonNum(name,Number(yr)),n};
     });
     const getUserLogs=(name)=>{const prof=recs[name];if(!prof)return[];const logs=[];prof.seasons.filter(s=>!s.isHistorical&&(filterYear==null||s.year===filterYear)).forEach(s=>{(s.weekLog||[]).forEach(w=>logs.push({...w,season:s.seasonNum,year:s.year,teamName:s.teamName}));});if(!filterYear&&prof.cur)(prof.cur.weekLog||[]).forEach(w=>logs.push({...w,season,year,teamName:prof.cur.teamName}));return logs;};
     // Join each weekLog entry with its archived box score (if one was scanned) so stat-based
@@ -2324,10 +2336,10 @@ function LeagueRecordBook({history,currentEntries,season,year,permanentUsers,set
       statStreaks[def.key]=best;
     });
     const getWinStreakAllTime=(name)=>{const logs=getUserLogs(name);let max=0,cur=0,startIdx=0,bestStart=0,bestEnd=0;logs.forEach((w,i)=>{if(w.result==="win"){if(cur===0)startIdx=i;cur++;if(cur>max){max=cur;bestStart=startIdx;bestEnd=i;}}else cur=0;});if(!max)return null;const span=[...new Set(logs.slice(bestStart,bestEnd+1).map(w=>w.year))];return{len:max,years:span.join("–"),teamName:logs[bestStart]?.teamName||""};};
-    const getWinStreakSeason=(name)=>{const prof=recs[name];if(!prof)return null;let best=null;const allS=[...prof.seasons.filter(s=>!s.isHistorical&&(filterYear==null||s.year===filterYear))];if(!filterYear&&prof.cur)allS.push({...prof.cur,year,seasonNum:season,isHistorical:false});allS.forEach(s=>{let cur=0,max=0;(s.weekLog||[]).forEach(w=>{if(w.result==="win"){cur++;if(cur>max)max=cur;}else cur=0;});if(max>0&&(!best||max>best.len))best={len:max,year:s.year,teamName:s.teamName};});return best;};
+    const getWinStreakSeason=(name)=>{const prof=recs[name];if(!prof)return null;let best=null;const allS=[...prof.seasons.filter(s=>!s.isHistorical&&(filterYear==null||s.year===filterYear))];if(!filterYear&&prof.cur)allS.push({...prof.cur,year,seasonNum:season,isHistorical:false});allS.forEach(s=>{let cur=0,max=0;(s.weekLog||[]).forEach(w=>{if(w.result==="win"){cur++;if(cur>max)max=cur;}else cur=0;});if(max>0&&(!best||max>best.len))best={len:max,year:s.year,seasonNum:s.seasonNum,teamName:s.teamName};});return best;};
     const isUvU=(w)=>w.opponent&&!isCPUOpp(w.opponent)&&w.opponent!=="BYE"&&w.opponent!=="Unknown"&&w.opponent!=="";
     let bestSeason=null,worstSeason=null,mostSeasonLosses=null;
-    e.forEach(([name,prof])=>{const allS=[...prof.seasons.filter(s=>!s.isHistorical&&(filterYear==null||s.year===filterYear))];if(!filterYear&&prof.cur)allS.push({...prof.cur,year,seasonNum:season,isHistorical:false});allS.forEach(s=>{const uvuW=(s.weekLog||[]).filter(w=>isUvU(w)&&w.result==="win").length;const uvuL=(s.weekLog||[]).filter(w=>isUvU(w)&&w.result==="loss").length;if(uvuW+uvuL===0)return;const pct=uvuW/(uvuW+uvuL);if(!bestSeason||pct>bestSeason.pct||(pct===bestSeason.pct&&uvuW>bestSeason.w))bestSeason={name,w:uvuW,l:uvuL,pct,year:s.year,teamName:s.teamName};if(!worstSeason||pct<worstSeason.pct||(pct===worstSeason.pct&&uvuL>worstSeason.l))worstSeason={name,w:uvuW,l:uvuL,pct,year:s.year,teamName:s.teamName};const totL=(s.weekLog||[]).filter(w=>w.result==="loss").length;if(!mostSeasonLosses||totL>mostSeasonLosses.l)mostSeasonLosses={name,l:totL,year:s.year,teamName:s.teamName};});});
+    e.forEach(([name,prof])=>{const allS=[...prof.seasons.filter(s=>!s.isHistorical&&(filterYear==null||s.year===filterYear))];if(!filterYear&&prof.cur)allS.push({...prof.cur,year,seasonNum:season,isHistorical:false});allS.forEach(s=>{const uvuW=(s.weekLog||[]).filter(w=>isUvU(w)&&w.result==="win").length;const uvuL=(s.weekLog||[]).filter(w=>isUvU(w)&&w.result==="loss").length;if(uvuW+uvuL===0)return;const pct=uvuW/(uvuW+uvuL);if(!bestSeason||pct>bestSeason.pct||(pct===bestSeason.pct&&uvuW>bestSeason.w))bestSeason={name,w:uvuW,l:uvuL,pct,year:s.year,seasonNum:s.seasonNum,teamName:s.teamName};if(!worstSeason||pct<worstSeason.pct||(pct===worstSeason.pct&&uvuL>worstSeason.l))worstSeason={name,w:uvuW,l:uvuL,pct,year:s.year,seasonNum:s.seasonNum,teamName:s.teamName};const totL=(s.weekLog||[]).filter(w=>w.result==="loss").length;if(!mostSeasonLosses||totL>mostSeasonLosses.l)mostSeasonLosses={name,l:totL,year:s.year,seasonNum:s.seasonNum,teamName:s.teamName};});});
     // Built from getUserLogs (already year-filtered) rather than prof.h2hMerged, which is an
     // all-time aggregate computed once in getProfile() and would ignore the year filter entirely.
     let mostH2HWins=null;e.forEach(([name])=>{const byOpp={};getUserLogs(name).filter(isUvU).forEach(w=>{if(w.result==="win")byOpp[w.opponent]=(byOpp[w.opponent]||0)+1;});Object.entries(byOpp).forEach(([opp,wins])=>{if(!mostH2HWins||wins>mostH2HWins.wins)mostH2HWins={name,opp,wins};});});
@@ -2343,6 +2355,9 @@ function LeagueRecordBook({history,currentEntries,season,year,permanentUsers,set
 
   const lr=getLR(lrYear);
   if(!Object.keys(lr).length)return null;
+  // "2026" is ambiguous once a year holds more than one finalized season — labels it "2026 S1"
+  // when the season number is known (see resolveSeasonNum above), else fall back to just the year.
+  const ys=(yr,seasonNum)=>seasonNum?`${yr} S${seasonNum}`:String(yr);
   const RR=({label,holder,val,sub})=>{const u=allUsers.find(u=>u.userName===holder);return(<div style={{display:"flex",justifyContent:"space-between",alignItems:"center",padding:"9px 0",borderBottom:"1px solid #f0f0f0"}}><span style={{fontSize:12,color:"#555",flex:1}}>{label}</span><div style={{textAlign:"right",flexShrink:0}}><div style={{fontSize:13,color:"#111",fontWeight:700}}><Name userId={u?.userId} userName={holder}>{holder}</Name></div><div style={{fontSize:11,color:RED,fontWeight:700}}>{val}</div>{sub&&<div style={{fontSize:10,color:"#aaa"}}>{sub}</div>}</div></div>);};
   return(
     <Card style={{overflow:"hidden"}}><CardHead bg="#111">📖 League Record Book</CardHead>
@@ -2378,23 +2393,23 @@ function LeagueRecordBook({history,currentEntries,season,year,permanentUsers,set
         {lr.mostRushTD&&lr.mostRushTD[1].tds>0&&<RR label="Rushing Touchdowns" holder={lr.mostRushTD[0]} val={lr.mostRushTD[1].tds+" TD"}/>}
         {lr.bestYPCarry&&<RR label="Yards Per Carry" holder={lr.bestYPCarry[0]} val={(lr.bestYPCarry[1].yds/lr.bestYPCarry[1].att).toFixed(1)}/>}
         <div style={{gridColumn:"1/-1",padding:"10px 0 2px",fontSize:10,fontWeight:800,color:"#aaa",textTransform:"uppercase",letterSpacing:1,borderBottom:"1px solid #f0f0f0",marginBottom:2}}>SINGLE SEASON RECORDS</div>
-        {lr.bestSeason&&<RR label="Best Season (UvU)" holder={lr.bestSeason.name} val={`${lr.bestSeason.w}W-${lr.bestSeason.l}L`} sub={`${lr.bestSeason.teamName} · ${lr.bestSeason.year}`}/>}
-        {lr.worstSeason&&<RR label="Worst Season (UvU)" holder={lr.worstSeason.name} val={`${lr.worstSeason.w}W-${lr.worstSeason.l}L`} sub={`${lr.worstSeason.teamName} · ${lr.worstSeason.year}`}/>}
-        {lr.mostSeasonLosses&&lr.mostSeasonLosses.l>0&&<RR label="Most Losses in a Season" holder={lr.mostSeasonLosses.name} val={lr.mostSeasonLosses.l+"L"} sub={`${lr.mostSeasonLosses.teamName} · ${lr.mostSeasonLosses.year}`}/>}
-        {lr.ssMostPassAtt&&lr.ssMostPassAtt.att>0&&<RR label="Pass Attempts (Season)" holder={lr.ssMostPassAtt.name} val={lr.ssMostPassAtt.att+" ATT"} sub={String(lr.ssMostPassAtt.year)}/>}
-        {lr.ssMostPassComp&&lr.ssMostPassComp.comp>0&&<RR label="Pass Completions (Season)" holder={lr.ssMostPassComp.name} val={lr.ssMostPassComp.comp+" COMP"} sub={String(lr.ssMostPassComp.year)}/>}
-        {lr.ssBestCompPct&&<RR label="Completion Percentage (Season)" holder={lr.ssBestCompPct.name} val={((lr.ssBestCompPct.comp/lr.ssBestCompPct.att)*100).toFixed(1)+"%"} sub={String(lr.ssBestCompPct.year)}/>}
-        {lr.ssMostPassTD&&lr.ssMostPassTD.tds>0&&<RR label="Passing Touchdowns (Season)" holder={lr.ssMostPassTD.name} val={lr.ssMostPassTD.tds+" TD"} sub={String(lr.ssMostPassTD.year)}/>}
-        {lr.ssMostInt&&lr.ssMostInt.int>0&&<RR label="Interceptions (Season)" holder={lr.ssMostInt.name} val={lr.ssMostInt.int+" INT"} sub={String(lr.ssMostInt.year)}/>}
-        {lr.ssBestYPC&&<RR label="Yards Per Completion (Season)" holder={lr.ssBestYPC.name} val={(lr.ssBestYPC.yds/lr.ssBestYPC.comp).toFixed(1)} sub={String(lr.ssBestYPC.year)}/>}
-        {lr.ssMostRushAtt&&lr.ssMostRushAtt.att>0&&<RR label="Rushing Attempts (Season)" holder={lr.ssMostRushAtt.name} val={lr.ssMostRushAtt.att+" ATT"} sub={String(lr.ssMostRushAtt.year)}/>}
-        {lr.ssMostRushYds&&lr.ssMostRushYds.yds>0&&<RR label="Rushing Yards (Season)" holder={lr.ssMostRushYds.name} val={lr.ssMostRushYds.yds.toLocaleString()+" YDS"} sub={String(lr.ssMostRushYds.year)}/>}
-        {lr.ssMostRushTD&&lr.ssMostRushTD.tds>0&&<RR label="Rushing Touchdowns (Season)" holder={lr.ssMostRushTD.name} val={lr.ssMostRushTD.tds+" TD"} sub={String(lr.ssMostRushTD.year)}/>}
-        {lr.ssBestYPCarry&&<RR label="Yards Per Carry (Season)" holder={lr.ssBestYPCarry.name} val={(lr.ssBestYPCarry.yds/lr.ssBestYPCarry.att).toFixed(1)} sub={String(lr.ssBestYPCarry.year)}/>}
-        {lr.ssMost4thQComebacks&&<RR label="4th Quarter Comebacks (Season)" holder={lr.ssMost4thQComebacks.name} val={lr.ssMost4thQComebacks.n+"×"} sub={String(lr.ssMost4thQComebacks.year)}/>}
+        {lr.bestSeason&&<RR label="Best Season (UvU)" holder={lr.bestSeason.name} val={`${lr.bestSeason.w}W-${lr.bestSeason.l}L`} sub={`${lr.bestSeason.teamName} · ${ys(lr.bestSeason.year,lr.bestSeason.seasonNum)}`}/>}
+        {lr.worstSeason&&<RR label="Worst Season (UvU)" holder={lr.worstSeason.name} val={`${lr.worstSeason.w}W-${lr.worstSeason.l}L`} sub={`${lr.worstSeason.teamName} · ${ys(lr.worstSeason.year,lr.worstSeason.seasonNum)}`}/>}
+        {lr.mostSeasonLosses&&lr.mostSeasonLosses.l>0&&<RR label="Most Losses in a Season" holder={lr.mostSeasonLosses.name} val={lr.mostSeasonLosses.l+"L"} sub={`${lr.mostSeasonLosses.teamName} · ${ys(lr.mostSeasonLosses.year,lr.mostSeasonLosses.seasonNum)}`}/>}
+        {lr.ssMostPassAtt&&lr.ssMostPassAtt.att>0&&<RR label="Pass Attempts (Season)" holder={lr.ssMostPassAtt.name} val={lr.ssMostPassAtt.att+" ATT"} sub={ys(lr.ssMostPassAtt.year,lr.ssMostPassAtt.seasonNum)}/>}
+        {lr.ssMostPassComp&&lr.ssMostPassComp.comp>0&&<RR label="Pass Completions (Season)" holder={lr.ssMostPassComp.name} val={lr.ssMostPassComp.comp+" COMP"} sub={ys(lr.ssMostPassComp.year,lr.ssMostPassComp.seasonNum)}/>}
+        {lr.ssBestCompPct&&<RR label="Completion Percentage (Season)" holder={lr.ssBestCompPct.name} val={((lr.ssBestCompPct.comp/lr.ssBestCompPct.att)*100).toFixed(1)+"%"} sub={ys(lr.ssBestCompPct.year,lr.ssBestCompPct.seasonNum)}/>}
+        {lr.ssMostPassTD&&lr.ssMostPassTD.tds>0&&<RR label="Passing Touchdowns (Season)" holder={lr.ssMostPassTD.name} val={lr.ssMostPassTD.tds+" TD"} sub={ys(lr.ssMostPassTD.year,lr.ssMostPassTD.seasonNum)}/>}
+        {lr.ssMostInt&&lr.ssMostInt.int>0&&<RR label="Interceptions (Season)" holder={lr.ssMostInt.name} val={lr.ssMostInt.int+" INT"} sub={ys(lr.ssMostInt.year,lr.ssMostInt.seasonNum)}/>}
+        {lr.ssBestYPC&&<RR label="Yards Per Completion (Season)" holder={lr.ssBestYPC.name} val={(lr.ssBestYPC.yds/lr.ssBestYPC.comp).toFixed(1)} sub={ys(lr.ssBestYPC.year,lr.ssBestYPC.seasonNum)}/>}
+        {lr.ssMostRushAtt&&lr.ssMostRushAtt.att>0&&<RR label="Rushing Attempts (Season)" holder={lr.ssMostRushAtt.name} val={lr.ssMostRushAtt.att+" ATT"} sub={ys(lr.ssMostRushAtt.year,lr.ssMostRushAtt.seasonNum)}/>}
+        {lr.ssMostRushYds&&lr.ssMostRushYds.yds>0&&<RR label="Rushing Yards (Season)" holder={lr.ssMostRushYds.name} val={lr.ssMostRushYds.yds.toLocaleString()+" YDS"} sub={ys(lr.ssMostRushYds.year,lr.ssMostRushYds.seasonNum)}/>}
+        {lr.ssMostRushTD&&lr.ssMostRushTD.tds>0&&<RR label="Rushing Touchdowns (Season)" holder={lr.ssMostRushTD.name} val={lr.ssMostRushTD.tds+" TD"} sub={ys(lr.ssMostRushTD.year,lr.ssMostRushTD.seasonNum)}/>}
+        {lr.ssBestYPCarry&&<RR label="Yards Per Carry (Season)" holder={lr.ssBestYPCarry.name} val={(lr.ssBestYPCarry.yds/lr.ssBestYPCarry.att).toFixed(1)} sub={ys(lr.ssBestYPCarry.year,lr.ssBestYPCarry.seasonNum)}/>}
+        {lr.ssMost4thQComebacks&&<RR label="4th Quarter Comebacks (Season)" holder={lr.ssMost4thQComebacks.name} val={lr.ssMost4thQComebacks.n+"×"} sub={ys(lr.ssMost4thQComebacks.year,lr.ssMost4thQComebacks.seasonNum)}/>}
         <div style={{gridColumn:"1/-1",padding:"10px 0 2px",fontSize:10,fontWeight:800,color:"#aaa",textTransform:"uppercase",letterSpacing:1,borderBottom:"1px solid #f0f0f0",marginBottom:2}}>WIN STREAKS</div>
         {lr.bestStreakAllTime&&<RR label="Longest Win Streak All Time" holder={lr.bestStreakAllTime.name} val={lr.bestStreakAllTime.data.len+"G"} sub={lr.bestStreakAllTime.data.years?`${lr.bestStreakAllTime.data.teamName} · ${lr.bestStreakAllTime.data.years}`:""}/>}
-        {lr.bestStreakSeason&&<RR label="Longest Win Streak (Season)" holder={lr.bestStreakSeason.name} val={lr.bestStreakSeason.data.len+"G"} sub={`${lr.bestStreakSeason.data.teamName} · ${lr.bestStreakSeason.data.year}`}/>}
+        {lr.bestStreakSeason&&<RR label="Longest Win Streak (Season)" holder={lr.bestStreakSeason.name} val={lr.bestStreakSeason.data.len+"G"} sub={`${lr.bestStreakSeason.data.teamName} · ${ys(lr.bestStreakSeason.data.year,lr.bestStreakSeason.data.seasonNum)}`}/>}
         <div style={{gridColumn:"1/-1",padding:"10px 0 2px",fontSize:10,fontWeight:800,color:"#aaa",textTransform:"uppercase",letterSpacing:1,borderBottom:"1px solid #f0f0f0",marginBottom:2}}>STAT STREAKS</div>
         {STAT_STREAK_DEFS.map(def=>{const s=lr.statStreaks?.[def.key];return s&&<RR key={def.key} label={`Longest ${def.label} Streak`} holder={s.name} val={s.data.len+"G"} sub={s.data.span?`${s.data.teamName} · ${s.data.span}`:""}/>;})}
         <div style={{gridColumn:"1/-1",padding:"10px 0 2px",fontSize:10,fontWeight:800,color:"#aaa",textTransform:"uppercase",letterSpacing:1,borderBottom:"1px solid #f0f0f0",marginBottom:2}}>RIVALRY RECORDS (UvU)</div>
