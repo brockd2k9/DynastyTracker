@@ -2129,26 +2129,42 @@ function ScheduleTab({schedule,entries,week,season,year,setup,setupRows,history}
       </div>
     );
 
+    const arrow = played&&<span style={{fontSize:11,color:"#ccc"}}>{isOpen?"▲":"▼"}</span>;
+
     return (
       <div style={{border:"1px solid #eee",borderRadius:2,margin:"0 12px 8px",background:"#fff",overflow:"hidden"}}>
-        {/* game-row spans the full card width; matchup is a fit-content block auto-margined to
-            true center within it. The arrow lives in its own equal-width track on the other side
-            from an empty spacer track, so its presence never skews where matchup centers. */}
         <div
           onClick={played ? ()=>setExpanded(p=>({...p,[key]:!p[key]})) : undefined}
-          style={{display:"grid",gridTemplateColumns:"1fr auto 1fr",alignItems:"center",width:"100%",padding:isMobile?"12px 10px":"14px 16px",cursor:played?"pointer":"default",background:isOpen?"#fafafa":"transparent",boxSizing:"border-box"}}
+          style={isMobile
+            /* Mobile: a single flat grid across the row's own (deterministic, same for every
+               card) width. Each team column is a real minmax(0,1fr) track sized against that
+               fixed row width, so logos land at the same x position on every card regardless
+               of how long that particular row's team/opponent names are — nesting a second
+               fit-content grid inside an auto-sized outer track (the old approach) let each
+               row's content length silently resize its own tracks, which is what mis-aligned
+               logos card-to-card. */
+            ? {display:"grid",gridTemplateColumns:"minmax(0,1fr) auto minmax(0,1fr) 16px",alignItems:"center",gap:10,width:"100%",padding:"12px 10px",cursor:played?"pointer":"default",background:isOpen?"#fafafa":"transparent",boxSizing:"border-box"}
+            : {display:"grid",gridTemplateColumns:"1fr auto 1fr",alignItems:"center",width:"100%",padding:"14px 16px",cursor:played?"pointer":"default",background:isOpen?"#fafafa":"transparent",boxSizing:"border-box"}}
           onMouseEnter={played?e=>e.currentTarget.style.background="#fafafa":undefined}
           onMouseLeave={played?e=>e.currentTarget.style.background=isOpen?"#fafafa":"transparent":undefined}
         >
-          <div/>
-          <div style={{display:"grid",gridTemplateColumns:isMobile?"minmax(0,1fr) auto minmax(0,1fr)":"minmax(150px,1fr) 100px minmax(150px,1fr)",alignItems:"center",gap:isMobile?10:18,width:isMobile?"100%":"fit-content",maxWidth:"100%"}}>
+          {isMobile ? (<>
             {awayCell}
             {scoreCenter}
             {homeCell}
-          </div>
-          <div style={{justifySelf:"end"}}>
-            {played&&<span style={{fontSize:11,color:"#ccc"}}>{isOpen?"▲":"▼"}</span>}
-          </div>
+            <div style={{justifySelf:"end"}}>{arrow}</div>
+          </>) : (<>
+            <div/>
+            {/* matchup is a fit-content block auto-margined to true center within the row; the
+                arrow lives in its own equal-width track on the other side from an empty spacer
+                track, so its presence never skews where matchup centers. */}
+            <div style={{display:"grid",gridTemplateColumns:"minmax(150px,1fr) 100px minmax(150px,1fr)",alignItems:"center",gap:18,width:"fit-content",maxWidth:"100%"}}>
+              {awayCell}
+              {scoreCenter}
+              {homeCell}
+            </div>
+            <div style={{justifySelf:"end"}}>{arrow}</div>
+          </>)}
         </div>
         {played&&isOpen&&<BoxScore teamA={home} teamB={away} result={result} week={w}/>}
       </div>
