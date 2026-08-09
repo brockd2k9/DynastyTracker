@@ -2087,11 +2087,11 @@ function ScheduleTab({schedule,entries,week,season,year,setup,setupRows,history}
     const winHome = result?.winner===home, winAway = result?.winner===away;
     const key = `${w}-${[home,away].sort().join("||")}`;
     const isOpen = expanded[key];
-    const logoSize = isMobile ? (played?18:(prominent?22:18)) : (played?26:(prominent?34:26));
+    const logoSize = isMobile ? (played?32:(prominent?38:32)) : (played?26:(prominent?34:26));
     const WL = ({won}) => <span style={{fontSize:10,fontWeight:800,padding:"1px 5px",borderRadius:2,background:won?"#e8f5e9":"#fff0f0",color:won?"#007a00":RED,flexShrink:0}}>{won?"W":"L"}</span>;
     const CpuTag = () => <span style={{fontSize:8,fontWeight:800,color:"#999",border:"1px solid #ddd",borderRadius:2,padding:"1px 4px",textTransform:"uppercase",letterSpacing:0.5,flexShrink:0}}>CPU</span>;
 
-    const nameStyle = won => ({fontSize:isMobile?13:(prominent?15:13),fontWeight:played?(won?800:500):700,color:played?(won?"#111":"#999"):"#111",textTransform:"uppercase",letterSpacing:0.2,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap",maxWidth:220});
+    const nameStyle = won => ({fontSize:isMobile?12:(prominent?15:13),fontWeight:played?(won?800:500):700,color:played?(won?"#111":"#999"):"#111",textTransform:"uppercase",letterSpacing:0.2,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap",width:"100%"});
 
     const scoreCenter = (
       <div style={{display:"flex",flexDirection:"column",alignItems:"center",gap:3}}>
@@ -2110,18 +2110,18 @@ function ScheduleTab({schedule,entries,week,season,year,setup,setupRows,history}
       </div>
     );
     const awayCell = (
-      <div style={{display:"flex",flexDirection:"column",alignItems:isMobile?"center":"flex-end",gap:4,minWidth:0}}>
-        <TeamNameLink name={home} style={nameStyle(winHome)}/>
+      <div style={{display:"flex",flexDirection:"column",alignItems:"flex-end",gap:4,minWidth:0}}>
+        <TeamNameLink name={home} style={{...nameStyle(winHome),textAlign:"right"}}/>
         <TeamLogo url={logoByTeam[home]} size={logoSize}/>
         {played&&<WL won={winHome}/>}
         {!isMobile&&!played&&<div style={{fontSize:10,color:"#aaa",fontWeight:600}}>{recordByTeam[home]}</div>}
       </div>
     );
     const homeCell = (
-      <div style={{display:"flex",flexDirection:"column",alignItems:isMobile?"center":"flex-start",gap:4,minWidth:0}}>
+      <div style={{display:"flex",flexDirection:"column",alignItems:"flex-start",gap:4,minWidth:0}}>
         <TeamLogo url={logoByTeam[away]} size={logoSize}/>
-        <div style={{display:"flex",alignItems:"center",gap:5,minWidth:0}}>
-          <TeamNameLink name={away} display={oppDisplay} style={{...nameStyle(winAway),color:isCPU||isBye?"#aaa":nameStyle(winAway).color}}/>
+        <div style={{display:"flex",alignItems:"center",gap:5,minWidth:0,width:"100%"}}>
+          <TeamNameLink name={away} display={oppDisplay} style={{...nameStyle(winAway),color:isCPU||isBye?"#aaa":nameStyle(winAway).color,textAlign:"left"}}/>
           {showCpuPill&&<CpuTag/>}
         </div>
         {played&&<WL won={winAway}/>}
@@ -2141,7 +2141,7 @@ function ScheduleTab({schedule,entries,week,season,year,setup,setupRows,history}
           onMouseLeave={played?e=>e.currentTarget.style.background=isOpen?"#fafafa":"transparent":undefined}
         >
           <div/>
-          <div style={isMobile?{display:"flex",flexDirection:"column",alignItems:"center",gap:8,width:"fit-content",maxWidth:"100%"}:{display:"grid",gridTemplateColumns:"minmax(150px,1fr) 100px minmax(150px,1fr)",alignItems:"center",gap:18,width:"fit-content",maxWidth:"100%"}}>
+          <div style={{display:"grid",gridTemplateColumns:isMobile?"minmax(0,1fr) auto minmax(0,1fr)":"minmax(150px,1fr) 100px minmax(150px,1fr)",alignItems:"center",gap:isMobile?10:18,width:isMobile?"100%":"fit-content",maxWidth:"100%"}}>
             {awayCell}
             {scoreCenter}
             {homeCell}
