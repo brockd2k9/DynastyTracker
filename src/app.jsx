@@ -2786,10 +2786,13 @@ function YearStatsTab({history,currentEntries,season,year,setupRows,permanentUse
 
 function ProfileTab({history,setupRows,currentEntries,season,year,permanentUsers,sel,setSel,pTab,setPTab,articles,setActiveArticle,playerStats,gameArchive}) {
   const isMobile = useIsMobile();
+  const veryNarrow = useIsMobile(360);
   const [expandedSeasons,setExpandedSeasons] = useState({});
   const [expandedGames,setExpandedGames] = useState({});
   const [expandedH2H,setExpandedH2H] = useState({});
   const [expandedH2HGame,setExpandedH2HGame] = useState({});
+  const [search,setSearch] = useState("");
+  const [sortAZ,setSortAZ] = useState(false);
   // Merge permanentUsers with setupRows so no one gets dropped
   const puList = (permanentUsers||[]).map(u=>({userId:u.id,userName:u.defaultName,teamName:(setupRows||[]).find(r=>r.userId===u.id)?.teamName||u.teamName||""}));
   const puIds = new Set(puList.map(u=>u.userId));
@@ -2853,29 +2856,49 @@ function ProfileTab({history,setupRows,currentEntries,season,year,permanentUsers
   const profile=user?getProfile(user.userId||null,user.userName):null;
   const SB=({label,val,color="#111",sub})=><div style={{background:"#f7f7f7",borderRadius:2,padding:"12px 8px",textAlign:"center",border:"1px solid #eee"}}><div style={{fontSize:19,fontWeight:900,color}}>{val}</div>{sub&&<div style={{fontSize:10,color:"#999"}}>{sub}</div>}<div style={{fontSize:9,color:"#aaa",textTransform:"uppercase",letterSpacing:1,marginTop:3,fontWeight:700}}>{label}</div></div>;
 
+  // Roster entries resolved once (display name/team can differ from the setup-row fallback when
+  // a permanentUser has since renamed), so search/sort operate on exactly what's rendered.
+  const rosterUsers = allUsers.map(u=>{
+    const key=u.userId||u.userName;
+    const curEntry=currentEntries.find(e=>u.userId?e.userId===u.userId:e.userName===u.userName);
+    return{u,key,displayName:curEntry?.userName||u.userName,displayTeam:curEntry?.teamName||u.teamName};
+  });
+  const q=search.trim().toLowerCase();
+  let visibleUsers=q?rosterUsers.filter(r=>r.displayName.toLowerCase().includes(q)||r.displayTeam.toLowerCase().includes(q)):rosterUsers;
+  if(sortAZ)visibleUsers=[...visibleUsers].sort((a,b)=>a.displayName.localeCompare(b.displayName));
+
   return (
     <div style={{display:"flex",flexDirection:"column",gap:14}}>
-      <SL>Select User</SL>
-      <div style={{display:"grid",gridTemplateColumns:isMobile?"1fr 1fr":"repeat(auto-fill,minmax(140px,1fr))",gap:10}}>
-        {allUsers.map(u=>{
-          const key=u.userId||u.userName;
-          const curEntry=currentEntries.find(e=>u.userId?e.userId===u.userId:e.userName===u.userName);
-          const displayName=curEntry?.userName||u.userName;
-          const displayTeam=curEntry?.teamName||u.teamName;
+      <SL>Dynasty Coaches</SL>
+      <div style={{display:"flex",gap:8,flexWrap:"wrap",alignItems:"center"}}>
+        <input value={search} onChange={e=>setSearch(e.target.value)} placeholder="Search coaches…" style={{flex:isMobile?"1 1 100%":"0 1 240px",padding:"9px 12px",border:"1px solid #ddd",borderRadius:4,fontSize:13,fontFamily:ff,color:"#111",boxSizing:"border-box"}}/>
+        <button onClick={()=>setSortAZ(s=>!s)} style={{padding:"9px 16px",borderRadius:20,border:"1px solid",borderColor:sortAZ?RED:"#ddd",background:sortAZ?RED:"#fff",color:sortAZ?"#fff":"#555",cursor:"pointer",fontSize:11,fontWeight:800,fontFamily:ff,textTransform:"uppercase",letterSpacing:0.5,whiteSpace:"nowrap"}}>A–Z</button>
+      </div>
+      <div style={{display:"grid",gridTemplateColumns:veryNarrow?"1fr":isMobile?"1fr 1fr":"repeat(auto-fill,minmax(220px,1fr))",gap:14}}>
+        {visibleUsers.map(({u,key,displayName,displayTeam})=>{
           const imgs=getPlayerImages(setupRows,u.userId,u.userName);
           const isSel=sel===key;
           return(
-            <button key={key} onClick={()=>{setSel(isSel?null:key);}} style={{padding:"16px 10px 12px",borderRadius:4,border:`2px solid ${isSel?RED:"#eee"}`,background:isSel?"#fff5f5":"#fff",boxShadow:isSel?"0 2px 8px rgba(204,0,0,0.18)":"0 1px 3px rgba(0,0,0,0.05)",cursor:"pointer",fontFamily:ff,textAlign:"center",display:"flex",flexDirection:"column",alignItems:"center",gap:6,transition:"box-shadow 0.15s, border-color 0.15s"}}>
-              <div style={{position:"relative",width:60,height:60,flexShrink:0}}>
-                <div style={{width:60,height:60,borderRadius:"50%",background:isSel?RED:"#e8e8e8",display:"flex",alignItems:"center",justifyContent:"center",fontSize:22,fontWeight:900,color:isSel?"#fff":"#aaa"}}>{(displayName||"?")[0]?.toUpperCase()}</div>
-                {imgs.profilePic&&<img key={imgs.profilePic} src={imgs.profilePic} alt="" style={{position:"absolute",top:0,left:0,width:60,height:60,borderRadius:"50%",objectFit:"cover",border:"2px solid #fff",boxShadow:"0 1px 4px rgba(0,0,0,0.15)"}} onError={e=>{e.target.style.display="none";}}/>}
-                {imgs.teamLogo&&<div style={{position:"absolute",bottom:-3,right:-3,width:24,height:24,borderRadius:"50%",background:"#fff",border:"1px solid #ddd",display:"flex",alignItems:"center",justifyContent:"center",padding:3,boxShadow:"0 1px 3px rgba(0,0,0,0.15)"}}><img key={imgs.teamLogo} src={imgs.teamLogo} alt="" style={{width:"100%",height:"100%",objectFit:"contain"}} onError={e=>{e.target.parentElement.style.display="none";}}/></div>}
+            <div key={key} onClick={()=>setSel(isSel?null:key)}
+              style={{border:`1px solid ${isSel?RED:"#eee"}`,background:isSel?"#fff8f8":"#fff",borderRadius:2,overflow:"hidden",cursor:"pointer",boxShadow:isSel?"0 3px 10px rgba(204,0,0,0.15)":"0 1px 3px rgba(0,0,0,0.05)",transition:"transform 0.15s, box-shadow 0.15s, border-color 0.15s"}}
+              onMouseEnter={e=>{if(!isMobile){e.currentTarget.style.transform="translateY(-3px)";e.currentTarget.style.boxShadow="0 6px 16px rgba(0,0,0,0.12)";e.currentTarget.style.borderColor=RED;const vp=e.currentTarget.querySelector(".view-profile");if(vp)vp.style.opacity=1;}}}
+              onMouseLeave={e=>{if(!isMobile){e.currentTarget.style.transform="none";e.currentTarget.style.boxShadow=isSel?"0 3px 10px rgba(204,0,0,0.15)":"0 1px 3px rgba(0,0,0,0.05)";e.currentTarget.style.borderColor=isSel?RED:"#eee";const vp=e.currentTarget.querySelector(".view-profile");if(vp)vp.style.opacity=0.55;}}}
+            >
+              <div style={{position:"relative",width:"100%",aspectRatio:"4/3",background:"#e8e8e8",overflow:"hidden"}}>
+                {imgs.profilePic
+                  ? <img key={imgs.profilePic} src={imgs.profilePic} alt="" style={{width:"100%",height:"100%",objectFit:"cover",display:"block"}} onError={e=>{e.target.style.display="none";}}/>
+                  : <div style={{width:"100%",height:"100%",display:"flex",alignItems:"center",justifyContent:"center",fontSize:44,fontWeight:900,color:"#bbb"}}>{(displayName||"?")[0]?.toUpperCase()}</div>}
+                {imgs.teamLogo&&<div style={{position:"absolute",bottom:8,right:8,width:40,height:40,borderRadius:"50%",background:"#fff",border:"2px solid #fff",display:"flex",alignItems:"center",justifyContent:"center",padding:5,boxShadow:"0 1px 5px rgba(0,0,0,0.25)"}}><img key={imgs.teamLogo} src={imgs.teamLogo} alt="" style={{width:"100%",height:"100%",objectFit:"contain"}} onError={e=>{e.target.parentElement.style.display="none";}}/></div>}
               </div>
-              <div style={{fontWeight:800,fontSize:13,color:"#111",lineHeight:1.2}}>{displayName}</div>
-              <div style={{fontSize:10,color:"#999",textTransform:"uppercase",letterSpacing:0.5}}>{displayTeam}</div>
-            </button>
+              <div style={{padding:"10px 12px 12px"}}>
+                <div style={{fontWeight:900,fontSize:16,color:"#111",lineHeight:1.2}}>{displayName}</div>
+                <div style={{fontSize:11,color:"#888",textTransform:"uppercase",letterSpacing:0.5,marginTop:2}}>{displayTeam}</div>
+                <div className="view-profile" style={{fontSize:11,fontWeight:800,color:RED,marginTop:8,opacity:isMobile?1:0.55,transition:"opacity 0.15s"}}>View Profile →</div>
+              </div>
+            </div>
           );
         })}
+        {!visibleUsers.length&&<div style={{gridColumn:"1/-1",padding:"24px",textAlign:"center",color:"#888",fontSize:13}}>No coaches match "{search}".</div>}
       </div>
       {profile&&user&&<Card style={{borderTop:`3px solid ${RED}`,overflow:"hidden"}}>
         <div style={{background:"#f7f7f7",padding:"14px 18px",display:"flex",justifyContent:"space-between",alignItems:"flex-start",flexWrap:"wrap",gap:10}}>
@@ -7008,9 +7031,24 @@ export default function App() {
                 <div style={{fontSize:isMobile?12:14,color:"#555",marginTop:4,fontWeight:600}}>{leagueName} • Season {season} • {year} • {week>13?"Post":`Week ${week}`}</div>
               </div>
             </Card>
+          ):tab==="Profiles"?(
+            <Card style={{overflow:"hidden",borderLeft:`5px solid ${RED}`}}>
+              <div style={{padding:isMobile?"14px 14px 12px":"22px 26px 18px"}}>
+                <div style={{fontSize:isMobile?20:32,fontWeight:900,color:"#111",textTransform:"uppercase",letterSpacing:-0.5,lineHeight:1.05}}>Dynasty Profiles</div>
+                <div style={{fontSize:isMobile?12:14,color:"#555",marginTop:4,fontWeight:600}}>Meet the coaches and personalities building their dynasties.</div>
+                <div style={{fontSize:10,color:"#999",marginTop:isMobile?8:10,fontWeight:700,textTransform:"uppercase",letterSpacing:0.5}}>{leagueName} • Season {season} • {year} • {week>13?"Post":`Week ${week}`}</div>
+              </div>
+            </Card>
+          ):tab==="YearStats"?(
+            <Card style={{overflow:"hidden",borderLeft:`5px solid ${RED}`}}>
+              <div style={{padding:isMobile?"14px 14px 12px":"22px 26px 18px"}}>
+                <div style={{fontSize:isMobile?20:32,fontWeight:900,color:"#111",textTransform:"uppercase",letterSpacing:-0.5,lineHeight:1.05}}>Year Stats</div>
+                <div style={{fontSize:isMobile?12:14,color:"#555",marginTop:4,fontWeight:600}}>{leagueName} • Season {season} • {year} • {week>13?"Post":`Week ${week}`}</div>
+              </div>
+            </Card>
           ):(
             <Card style={{padding:isMobile?"10px 12px":"14px 16px",borderLeft:`4px solid ${RED}`}}>
-              <div style={{fontSize:isMobile?15:18,fontWeight:900,color:"#111",textTransform:"uppercase"}}>{tab==="YearStats"?"Year Stats":tab==="Profiles"?"Player Profiles":tab==="Redzone"?"Dynasty RedZone":tab==="Discord"?"Join Discord & Voice Chat":"League Rules"}</div>
+              <div style={{fontSize:isMobile?15:18,fontWeight:900,color:"#111",textTransform:"uppercase"}}>{tab==="Redzone"?"Dynasty RedZone":tab==="Discord"?"Join Discord & Voice Chat":"League Rules"}</div>
               <div style={{fontSize:10,color:"#888",marginTop:2}}>{leagueName} · S{season} · {year} · {week>13?"Post":`Wk ${week}`}</div>
             </Card>
           )}
@@ -7199,7 +7237,64 @@ export default function App() {
             )}
           </>)}
           {tab==="YearStats"&&<YearStatsTab history={history} currentEntries={activeEntries} season={season} year={year} setupRows={setup?.rows||[]} permanentUsers={setup?.permanentUsers} playerStats={setup?.playerStats} gameArchive={setup?.gameArchive}/>}
-          {tab==="Profiles"&&<ProfileTab history={history} setupRows={(setup?.rows||[]).filter(r=>r.active!==false)} currentEntries={activeEntries} season={season} year={year} permanentUsers={setup?.permanentUsers?.filter(u=>(setup?.rows||[]).some(r=>r.userId===u.id&&r.active!==false))} sel={profileSel} setSel={setProfileSel} pTab={profilePTab} setPTab={setProfilePTab} articles={articles} setActiveArticle={setActiveArticle} playerStats={setup?.playerStats} gameArchive={setup?.gameArchive}/>}
+          {tab==="Profiles"&&(<>
+            <ProfileTab history={history} setupRows={(setup?.rows||[]).filter(r=>r.active!==false)} currentEntries={activeEntries} season={season} year={year} permanentUsers={setup?.permanentUsers?.filter(u=>(setup?.rows||[]).some(r=>r.userId===u.id&&r.active!==false))} sel={profileSel} setSel={setProfileSel} pTab={profilePTab} setPTab={setProfilePTab} articles={articles} setActiveArticle={setActiveArticle} playerStats={setup?.playerStats} gameArchive={setup?.gameArchive}/>
+
+            {/* Supporting info — mirrors the right/left sidebars below 1024px, same pattern as
+                Standings'/Schedule's mobile fallbacks: Top Headlines, Full Standings, Dynasty
+                Info, Quick Links. */}
+            {!showSidebars&&(
+              <Card style={{overflow:"hidden"}}>
+                <CardHead>Top Headlines</CardHead>
+                <div style={{padding:"4px 0"}}>
+                  {sorted.length===0&&<div style={{padding:"12px",fontSize:12,color:"#888",fontStyle:"italic"}}>No standings yet.</div>}
+                  {articles.slice(0,5).map(a=>(
+                    <div key={a.id} onClick={()=>setActiveArticle(a)} style={{padding:"12px 14px",borderBottom:"1px solid #f0f0f0",cursor:"pointer",display:"flex",gap:12,alignItems:"flex-start"}}>
+                      {a.imageUrl
+                        ? <img src={a.imageUrl} alt="" style={{width:52,height:52,borderRadius:3,objectFit:"cover",flexShrink:0}} onError={e=>{e.target.style.display="none";}}/>
+                        : (a.reporterAvatar&&<div style={{width:52,height:52,borderRadius:3,background:a.reporterColor||RED,display:"flex",alignItems:"center",justifyContent:"center",fontSize:13,fontWeight:800,color:"#fff",flexShrink:0}}>{a.reporterAvatar}</div>)}
+                      <div style={{flex:1,minWidth:0}}>
+                        <div style={{fontSize:10,color:a.reporterColor||RED,fontWeight:700,letterSpacing:0.5,textTransform:"uppercase",marginBottom:4}}>{a.label} · S{a.season} Wk{a.week}</div>
+                        <div style={{fontSize:13,fontWeight:700,color:"#111",lineHeight:1.4,display:"-webkit-box",WebkitLineClamp:2,WebkitBoxOrient:"vertical",overflow:"hidden"}}>{articleHeadline(a.text)}</div>
+                      </div>
+                    </div>
+                  ))}
+                  {articles.length===0&&<div style={{padding:"12px 14px",fontSize:11,color:"#888",fontStyle:"italic"}}>Generate content to see articles here</div>}
+                </div>
+              </Card>
+            )}
+            {!showSidebars&&sorted.length>0&&(
+              <Card style={{overflow:"hidden"}}>
+                <CardHead>Full Standings</CardHead>
+                <div style={{padding:"4px 0"}}>
+                  {sorted.map((t,i)=>{const imgs=getPlayerImages(setup?.rows,t.userId,t.userName);const back=i===0?null:leader-calcTotal(t);return(<div key={t.teamName} style={{display:"flex",alignItems:"center",gap:10,padding:"9px 14px",borderBottom:"1px solid #f5f5f5",borderLeft:i===0?`3px solid ${RED}`:"3px solid transparent",background:i===0?"#fff8f8":"transparent"}}><span style={{fontSize:13,fontWeight:900,color:i===0?RED:"#bbb",width:18,textAlign:"right"}}>{i+1}</span>{imgs.teamLogo&&<img src={imgs.teamLogo} alt="" style={{width:24,height:24,objectFit:"contain",flexShrink:0}} onError={e=>{e.target.style.display="none";}}/>}<div style={{flex:1,minWidth:0}}><Name userId={t.userId} userName={t.userName} style={{fontSize:13,fontWeight:i===0?800:700,color:"#111",whiteSpace:"nowrap",overflow:"hidden",textOverflow:"ellipsis",display:"block"}}>{t.teamName}</Name></div><div style={{display:"flex",alignItems:"baseline",gap:5,flexShrink:0}}><span style={{fontSize:i===0?15:13,fontWeight:900,color:i===0?RED:"#333",minWidth:24,textAlign:"right"}}>{calcTotal(t)}</span><span style={{fontSize:9,color:"#aaa",fontWeight:700,minWidth:20,textAlign:"left"}}>{i===0?"":`-${back}`}</span></div></div>);})}
+                </div>
+              </Card>
+            )}
+            {!showSidebars&&(
+              <Card style={{overflow:"hidden"}}>
+                <CardHead>Dynasty Info</CardHead>
+                <div style={{padding:"10px 0"}}>
+                  {[["Season",season],["Year",year],["Week",week>13?"Post":week],["Teams",entries.length]].map(([l,v])=>
+                    <div key={l} style={{display:"flex",justifyContent:"space-between",alignItems:"center",padding:"9px 16px",borderBottom:"1px solid #f5f5f5"}}>
+                      <span style={{fontSize:12,color:"#888",fontWeight:600,textTransform:"uppercase",letterSpacing:0.5}}>{l}</span>
+                      <span style={{fontSize:14,fontWeight:800,color:"#111"}}>{v}</span>
+                    </div>
+                  )}
+                </div>
+              </Card>
+            )}
+            {!showSidebars&&(
+              <Card style={{overflow:"hidden"}}>
+                <CardHead>Quick Links</CardHead>
+                <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:1,background:"#f0f0f0",padding:1}}>
+                  {NAV_TABS.map(([label,val])=>(
+                    <button key={val} onClick={()=>setTab(val)} style={{background:"#fff",border:"none",padding:"0 10px",minHeight:44,display:"flex",alignItems:"center",gap:8,cursor:"pointer",fontFamily:ff,fontSize:12,fontWeight:700,color:RED,textAlign:"left"}}>🏈 {label}</button>
+                  ))}
+                </div>
+              </Card>
+            )}
+          </>)}
           {tab==="Schedule"&&(<>
             <ScheduleTab schedule={effectiveSchedule} entries={activeEntries} week={week} season={season} year={year} setup={setup} setupRows={setup?.rows||[]} history={history}/>
 
