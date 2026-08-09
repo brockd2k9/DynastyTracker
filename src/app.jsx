@@ -1942,10 +1942,14 @@ function ScheduleTab({schedule,entries,week,season,year,setup,setupRows,history}
   const logoByTeam = {};
   // teamName -> {userId,userName}, so real dynasty teams' names can link to their profile
   const ownerByTeam = {};
+  // teamName -> "8-1" overall record, for the matchup card subtext — same wins/losses fields
+  // already shown everywhere else (Standings, etc.), not a new calculation.
+  const recordByTeam = {};
   effEntries.forEach(e=>{
     const logo = getPlayerImages(setupRows, e.userId, e.userName).teamLogo;
     if (logo) logoByTeam[e.teamName] = logo;
     ownerByTeam[e.teamName] = {userId:e.userId, userName:e.userName};
+    recordByTeam[e.teamName] = `${e.wins||0}-${e.losses||0}`;
   });
   // Wrap a team name in a profile link when it's one of our dynasty teams; CPU/BYE opponents stay plain text.
   // `name` is the lookup key (always the raw team name); `display` optionally overrides the rendered text
@@ -2069,48 +2073,67 @@ function ScheduleTab({schedule,entries,week,season,year,setup,setupRows,history}
     );
   }
 
-  function MatchupRow({home, away, w}) {
+  // Matchup card — same result/played/win logic as before, just reshaped from a full-bleed table
+  // row into a bordered card. `prominent` (current-week, not-yet-played games only) bumps logo
+  // size/weight slightly per the "upcoming game gets more visual weight" ask.
+  function MatchupRow({home, away, w, prominent}) {
     const isCPU = isCPUOpp(away);
-    const result = away!=="BYE" ? getGameResult(home, away, w) : null;
+    const cpuName = cpuOppName(away);
+    const isBye = away==="BYE";
+    const oppDisplay = isBye ? "BYE" : isCPU ? (cpuName||"CPU") : away;
+    const showCpuPill = isCPU && !!cpuName;
+    const result = !isBye ? getGameResult(home, away, w) : null;
     const played = !!result;
     const winHome = result?.winner===home, winAway = result?.winner===away;
     const key = `${w}-${[home,away].sort().join("||")}`;
     const isOpen = expanded[key];
+    const logoSize = isMobile ? (played?18:(prominent?22:18)) : (played?26:(prominent?34:26));
+    const WL = ({won}) => <span style={{fontSize:10,fontWeight:800,padding:"1px 5px",borderRadius:2,background:won?"#e8f5e9":"#fff0f0",color:won?"#007a00":RED,flexShrink:0}}>{won?"W":"L"}</span>;
+    const CpuTag = () => <span style={{fontSize:8,fontWeight:800,color:"#999",border:"1px solid #ddd",borderRadius:2,padding:"1px 4px",textTransform:"uppercase",letterSpacing:0.5,flexShrink:0}}>CPU</span>;
 
     return (
-      <div style={{borderBottom:"1px solid #f0f0f0"}}>
+      <div style={{border:"1px solid #eee",borderRadius:2,margin:"0 12px 8px",background:"#fff",overflow:"hidden"}}>
         <div
           onClick={played ? ()=>setExpanded(p=>({...p,[key]:!p[key]})) : undefined}
-          style={{display:"flex",alignItems:"center",padding:"10px 12px",gap:6,cursor:played?"pointer":"default",background:isOpen?"#fafafa":"transparent"}}
+          style={{display:"flex",alignItems:"center",padding:isMobile?"8px 10px":"12px 16px",gap:isMobile?6:10,cursor:played?"pointer":"default",background:isOpen?"#fafafa":"transparent"}}
           onMouseEnter={played?e=>e.currentTarget.style.background="#fafafa":undefined}
           onMouseLeave={played?e=>e.currentTarget.style.background=isOpen?"#fafafa":"transparent":undefined}
         >
           {/* Home side */}
-          <div style={{flex:1,display:"flex",alignItems:"center",justifyContent:"flex-end",gap:5,minWidth:0}}>
-            <TeamNameLink name={home} style={{fontSize:13,fontWeight:played?(winHome?800:500):700,color:played?(winHome?"#111":"#999"):"#111",textAlign:"right",overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}/>
-            <TeamLogo url={logoByTeam[home]} size={18}/>
-            {played&&<span style={{fontSize:10,fontWeight:800,padding:"1px 5px",borderRadius:2,background:winHome?"#e8f5e9":"#fff0f0",color:winHome?"#007a00":RED,flexShrink:0}}>{winHome?"W":"L"}</span>}
+          <div style={{flex:1,display:"flex",flexDirection:isMobile?"row":"column",alignItems:isMobile?"center":"flex-end",justifyContent:isMobile?"flex-end":"center",gap:isMobile?5:2,minWidth:0}}>
+            <div style={{display:"flex",alignItems:"center",gap:5,justifyContent:"flex-end",minWidth:0}}>
+              <TeamNameLink name={home} style={{fontSize:isMobile?12:(prominent?15:13),fontWeight:played?(winHome?800:500):700,color:played?(winHome?"#111":"#999"):"#111",textAlign:"right",textTransform:"uppercase",letterSpacing:0.2,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}/>
+              <TeamLogo url={logoByTeam[home]} size={logoSize}/>
+            </div>
+            {!isMobile&&!played&&<div style={{fontSize:10,color:"#aaa",fontWeight:600}}>{recordByTeam[home]}</div>}
+            {played&&<WL won={winHome}/>}
           </div>
 
           {/* Score / VS center */}
-          <div style={{textAlign:"center",minWidth:60,flexShrink:0}}>
+          <div style={{textAlign:"center",minWidth:isMobile?46:70,flexShrink:0}}>
             {played ? (
-              <div style={{display:"flex",alignItems:"center",justifyContent:"center",gap:3}}>
-                {result.scoreA!=null&&<span style={{fontSize:14,fontWeight:900,color:winHome?"#111":"#999"}}>{result.scoreA}</span>}
-                <span style={{fontSize:10,fontWeight:800,color:"#ccc"}}>–</span>
-                {result.scoreB!=null&&<span style={{fontSize:14,fontWeight:900,color:winAway?"#111":"#999"}}>{result.scoreB}</span>}
-                {result.scoreA==null&&result.scoreB==null&&<span style={{fontSize:9,fontWeight:800,color:"#007a00",textTransform:"uppercase",padding:"1px 5px",background:"#f0f8f0",borderRadius:2}}>FINAL</span>}
+              <div style={{display:"flex",flexDirection:"column",alignItems:"center",gap:1}}>
+                <div style={{display:"flex",alignItems:"center",justifyContent:"center",gap:3}}>
+                  {result.scoreA!=null&&<span style={{fontSize:isMobile?14:20,fontWeight:900,color:winHome?"#111":"#999"}}>{result.scoreA}</span>}
+                  <span style={{fontSize:10,fontWeight:800,color:"#ccc"}}>–</span>
+                  {result.scoreB!=null&&<span style={{fontSize:isMobile?14:20,fontWeight:900,color:winAway?"#111":"#999"}}>{result.scoreB}</span>}
+                </div>
+                <span style={{fontSize:8,fontWeight:800,color:"#4caf50",background:"rgba(76,175,80,0.1)",border:"1px solid rgba(76,175,80,0.3)",borderRadius:2,padding:"1px 5px",textTransform:"uppercase",letterSpacing:0.5}}>Final</span>
               </div>
             ) : (
-              <span style={{fontSize:10,fontWeight:800,color:"#bbb",padding:"2px 6px",border:"1px solid #eee",borderRadius:2}}>{isCPU?"":"VS"}</span>
+              <span style={{fontSize:isMobile?10:(prominent?13:11),fontWeight:800,color:isBye?"#bbb":"#999",padding:isMobile?"1px 5px":"3px 8px",border:isBye?"none":"1px solid #eee",borderRadius:2}}>{isBye?"BYE":"VS"}</span>
             )}
           </div>
 
           {/* Away side */}
-          <div style={{flex:1,display:"flex",alignItems:"center",gap:5,minWidth:0}}>
-            {played&&<span style={{fontSize:10,fontWeight:800,padding:"1px 5px",borderRadius:2,background:winAway?"#e8f5e9":"#fff0f0",color:winAway?"#007a00":RED,flexShrink:0}}>{winAway?"W":"L"}</span>}
-            <TeamLogo url={logoByTeam[away]} size={18}/>
-            <TeamNameLink name={away} display={formatOpp(away)} style={{fontSize:13,fontWeight:played?(winAway?800:500):700,color:isCPU?"#aaa":played?(winAway?"#111":"#999"):"#111",overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}/>
+          <div style={{flex:1,display:"flex",flexDirection:isMobile?"row":"column",alignItems:isMobile?"center":"flex-start",justifyContent:isMobile?"flex-start":"center",gap:isMobile?5:2,minWidth:0}}>
+            {played&&<WL won={winAway}/>}
+            <div style={{display:"flex",alignItems:"center",gap:5,minWidth:0}}>
+              <TeamLogo url={logoByTeam[away]} size={logoSize}/>
+              <TeamNameLink name={away} display={oppDisplay} style={{fontSize:isMobile?12:(prominent?15:13),fontWeight:played?(winAway?800:500):700,color:isCPU||isBye?"#aaa":played?(winAway?"#111":"#999"):"#111",textTransform:"uppercase",letterSpacing:0.2,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}/>
+              {showCpuPill&&<CpuTag/>}
+            </div>
+            {!isMobile&&!played&&!isBye&&<div style={{fontSize:10,color:"#aaa",fontWeight:600}}>{isCPU?"":recordByTeam[away]}</div>}
           </div>
 
           {played&&<span style={{fontSize:11,color:"#ccc",flexShrink:0}}>{isOpen?"▲":"▼"}</span>}
@@ -2121,21 +2144,31 @@ function ScheduleTab({schedule,entries,week,season,year,setup,setupRows,history}
   }
 
   // Per-team schedule with result lookup — a week with no entry for this team is an implicit bye
-  function getTeamSchedule(teamName) {
-    return weeks.map(w=>{
-      const opp=effSchedule[w]?.[teamName]||"BYE";
-      const log=resultLookup[teamName]?.[w]||null;
-      return{week:w,opp,log};
-    });
+  // Strong status-coded week section header — current week gets the black+red "This Week"
+  // treatment, past weeks are subdued, future weeks stay clean. Shared by the full schedule and
+  // the single-team view so both read consistently.
+  function WeekHeaderBar({w}) {
+    const isCurrent = isCurrentYear&&w===week;
+    const isPast = isCurrentYear&&w<week;
+    return (
+      <div style={{background:isCurrent?"#111":isPast?"#f2f2f2":"#fff",padding:"9px 16px",display:"flex",alignItems:"center",gap:10,borderBottom:"1px solid #eee",borderLeft:isCurrent?`4px solid ${RED}`:"4px solid transparent"}}>
+        <span style={{fontSize:11,fontWeight:900,color:isCurrent?"#fff":isPast?"#999":"#111",textTransform:"uppercase",letterSpacing:1}}>{w>13?"Post-Season":`Week ${w}`}</span>
+        {isCurrent&&<span style={{background:RED,color:"#fff",fontSize:9,fontWeight:800,padding:"2px 8px",borderRadius:10,textTransform:"uppercase",letterSpacing:0.5}}>This Week</span>}
+        {isPast&&<span style={{color:"#aaa",fontSize:9,fontWeight:700,textTransform:"uppercase",letterSpacing:0.5}}>Final</span>}
+      </div>
+    );
   }
 
   return(
     <div style={{display:"flex",flexDirection:"column",gap:14}}>
+      <style>{".jud-hscroll{scrollbar-width:none}.jud-hscroll::-webkit-scrollbar{display:none}"}</style>
+
       {availableYears.length>1&&(
-        <div style={{display:"flex",gap:6,flexWrap:"wrap",alignItems:"center"}}>
-          <span style={{fontSize:11,fontWeight:700,color:"#888",textTransform:"uppercase",letterSpacing:0.5}}>Season:</span>
+        <div className="jud-hscroll" style={{display:"flex",gap:8,overflowX:"auto",WebkitOverflowScrolling:"touch",paddingBottom:2}}>
           {availableYears.map(y=>(
-            <button key={y} onClick={()=>{setSelYear(y);setView("full");}} style={{padding:"5px 12px",borderRadius:2,border:"1px solid",borderColor:selYear===y?RED:"#ddd",background:selYear===y?RED:"#fff",color:selYear===y?"#fff":"#555",cursor:"pointer",fontSize:12,fontWeight:700,fontFamily:ff}}>{y}{y===year?" (Current)":""}</button>
+            <button key={y} onClick={()=>{setSelYear(y);setView("full");}} style={{display:"flex",alignItems:"center",gap:6,padding:isMobile?"9px 16px":"8px 18px",borderRadius:20,border:"1px solid",borderColor:selYear===y?RED:"#ddd",background:selYear===y?RED:"#fafafa",color:selYear===y?"#fff":"#333",cursor:"pointer",fontSize:12,fontWeight:800,fontFamily:ff,whiteSpace:"nowrap",flexShrink:0}}>
+              {y}{y===year&&<span style={{fontSize:9,fontWeight:900,letterSpacing:0.5,opacity:selYear===y?0.85:0.55}}>CURRENT</span>}
+            </button>
           ))}
         </div>
       )}
@@ -2143,9 +2176,16 @@ function ScheduleTab({schedule,entries,week,season,year,setup,setupRows,history}
         <Card style={{padding:20,textAlign:"center",color:"#888",fontSize:13}}>{isCurrentYear?"No schedule set up yet. Add matchups in Commissioner Mode.":`No schedule available for ${selYear}.`}</Card>
       ) : (
       <Card style={{overflow:"hidden"}}>
-        <div style={{display:"flex",overflowX:"auto",borderBottom:"1px solid #eee"}}>
-          <button onClick={()=>setView("full")} style={{padding:"9px 16px",background:"transparent",border:"none",borderBottom:view==="full"?`3px solid ${RED}`:"3px solid transparent",color:view==="full"?"#111":"#888",cursor:"pointer",fontSize:11,fontWeight:700,fontFamily:ff,textTransform:"uppercase",letterSpacing:0.5,whiteSpace:"nowrap"}}>Full Schedule</button>
-          {teams.map(t=><button key={t} onClick={()=>setView(t)} style={{padding:"9px 14px",background:"transparent",border:"none",borderBottom:view===t?`3px solid ${RED}`:"3px solid transparent",color:view===t?"#111":"#888",cursor:"pointer",fontSize:11,fontWeight:700,fontFamily:ff,whiteSpace:"nowrap",display:"flex",alignItems:"center",gap:6}}><TeamLogo url={logoByTeam[t]} size={16}/>{t}</button>)}
+        <div className="jud-hscroll" style={{display:"flex",gap:8,overflowX:"auto",WebkitOverflowScrolling:"touch",padding:"12px 14px",borderBottom:"1px solid #eee"}}>
+          <button onClick={()=>setView("full")} style={{padding:"7px 16px",borderRadius:20,border:"1px solid",borderColor:view==="full"?RED:"#ddd",background:view==="full"?RED:"#fff",color:view==="full"?"#fff":"#555",cursor:"pointer",fontSize:11,fontWeight:800,fontFamily:ff,textTransform:"uppercase",letterSpacing:0.5,whiteSpace:"nowrap",flexShrink:0}}>All Teams</button>
+          {teams.map(t=>{
+            const sel=view===t;
+            return(
+              <button key={t} onClick={()=>setView(t)} style={{display:"flex",alignItems:"center",gap:6,padding:"6px 12px 6px 8px",borderRadius:20,border:"1px solid",borderColor:sel?RED:"#ddd",background:sel?"#fff5f5":"#fff",color:sel?RED:"#333",cursor:"pointer",fontSize:11,fontWeight:700,fontFamily:ff,whiteSpace:"nowrap",flexShrink:0}}>
+                <TeamLogo url={logoByTeam[t]} size={18}/>{t}
+              </button>
+            );
+          })}
         </div>
 
         {view==="full"&&(
@@ -2159,14 +2199,12 @@ function ScheduleTab({schedule,entries,week,season,year,setup,setupRows,history}
               });
               return(
                 <div key={w}>
-                  <div style={{background:"#f7f7f7",padding:"7px 14px",display:"flex",alignItems:"center",gap:10,borderBottom:"1px solid #eee"}}>
-                    <span style={{fontSize:10,fontWeight:800,color:RED,textTransform:"uppercase",letterSpacing:1}}>{w>13?"Post-Season":`Week ${w}`}</span>
-                    {isCurrentYear&&w===week&&<span style={{background:RED,color:"#fff",fontSize:9,fontWeight:800,padding:"1px 6px",borderRadius:10,textTransform:"uppercase",letterSpacing:0.5}}>Current</span>}
-                    {isCurrentYear&&w<week&&<span style={{background:"#007a00",color:"#fff",fontSize:9,fontWeight:800,padding:"1px 6px",borderRadius:10,textTransform:"uppercase",letterSpacing:0.5}}>Final</span>}
+                  <WeekHeaderBar w={w}/>
+                  <div style={{padding:"10px 0"}}>
+                    {matchups.map(({home,away},i)=>(
+                      <MatchupRow key={i} home={home} away={away} w={w} prominent={isCurrentYear&&w===week}/>
+                    ))}
                   </div>
-                  {matchups.map(({home,away},i)=>(
-                    <MatchupRow key={i} home={home} away={away} w={w}/>
-                  ))}
                 </div>
               );
             })}
@@ -2175,44 +2213,21 @@ function ScheduleTab({schedule,entries,week,season,year,setup,setupRows,history}
 
         {view!=="full"&&(
           <div>
-            <div style={{padding:"12px 14px",borderBottom:"1px solid #eee",display:"flex",alignItems:"center",gap:10}}>
-              <TeamLogo url={logoByTeam[view]} size={26}/>
-              <TeamNameLink name={view} style={{fontSize:16,fontWeight:900,color:"#111"}}/>
-              <div style={{fontSize:11,color:"#888"}}>Season {season} Schedule</div>
+            <div style={{padding:"14px 16px",borderBottom:"1px solid #eee",display:"flex",alignItems:"center",gap:12,background:"#fafafa"}}>
+              <TeamLogo url={logoByTeam[view]} size={32}/>
+              <div>
+                <TeamNameLink name={view} style={{fontSize:17,fontWeight:900,color:"#111",textTransform:"uppercase"}}/>
+                <div style={{fontSize:11,color:"#888",marginTop:1}}>{recordByTeam[view]} · Season {season} Schedule</div>
+              </div>
             </div>
-            {getTeamSchedule(view).map(({week:w,opp,log})=>{
-              const gameResult = opp!=="BYE" ? getGameResult(view, opp, w) : null;
-              const played = !!gameResult;
-              const won = gameResult?.winner===view;
-              const key=`team-${view}-${w}`;
-              const isOpen=expanded[key];
-              const myScore=gameResult?.scoreA??null;
-              const theirScore=gameResult?.scoreB??null;
+            {weeks.map(w=>{
+              const opp=effSchedule[w]?.[view]||"BYE";
               return(
-                <div key={w} style={{borderBottom:"1px solid #eee"}}>
-                  <div
-                    onClick={played?()=>setExpanded(p=>({...p,[key]:!p[key]})):undefined}
-                    style={{display:"flex",alignItems:"center",padding:"10px 14px",gap:10,cursor:played?"pointer":"default",background:isCurrentYear&&w===week?"#fff8f8":isOpen?"#fafafa":"transparent"}}
-                  >
-                    <div style={{width:50,flexShrink:0}}>
-                      <div style={{fontSize:12,fontWeight:isCurrentYear&&w===week?800:500,color:isCurrentYear&&w===week?RED:"#555",textAlign:"center"}}>{w>13?"Post":isCurrentYear&&w===week?<span style={{background:RED,color:"#fff",fontSize:9,fontWeight:800,padding:"1px 5px",borderRadius:10}}>NOW</span>:`Wk ${w}`}</div>
-                    </div>
-                    <div style={{flex:1,display:"flex",alignItems:"center",gap:8}}>
-                      {played&&<span style={{fontSize:10,fontWeight:800,padding:"2px 6px",borderRadius:2,background:won?"#e8f5e9":"#fff0f0",color:won?"#007a00":RED,flexShrink:0}}>{won?"W":"L"}</span>}
-                      <TeamLogo url={logoByTeam[opp]} size={18}/>
-                      <TeamNameLink name={opp} display={opp==="BYE"?"BYE WEEK":formatOpp(opp)} style={{fontSize:13,fontWeight:700,color:isCPUOpp(opp)||opp==="BYE"?"#aaa":"#111"}}/>
-                    </div>
-                    {played&&(myScore!=null||theirScore!=null)&&(
-                      <div style={{fontSize:14,fontWeight:900,color:"#111",flexShrink:0}}>
-                        <span style={{color:won?"#007a00":RED}}>{myScore??"-"}</span>
-                        <span style={{color:"#ccc",margin:"0 4px"}}>–</span>
-                        <span style={{color:!won?"#007a00":RED}}>{theirScore??"-"}</span>
-                      </div>
-                    )}
-                    {played&&myScore==null&&theirScore==null&&<span style={{fontSize:9,fontWeight:800,color:"#007a00",textTransform:"uppercase",padding:"1px 5px",background:"#f0f8f0",borderRadius:2,flexShrink:0}}>FINAL</span>}
-                    {played&&<span style={{fontSize:11,color:"#ccc",flexShrink:0}}>{isOpen?"▲":"▼"}</span>}
+                <div key={w}>
+                  <WeekHeaderBar w={w}/>
+                  <div style={{padding:"10px 0"}}>
+                    <MatchupRow home={view} away={opp} w={w} prominent={isCurrentYear&&w===week}/>
                   </div>
-                  {played&&isOpen&&<BoxScore teamA={view} teamB={opp} result={gameResult} week={w}/>}
                 </div>
               );
             })}
@@ -6826,9 +6841,16 @@ export default function App() {
                 <div style={{fontSize:10,color:"#999",marginTop:isMobile?8:10,fontWeight:700,textTransform:"uppercase",letterSpacing:0.5}}>Season {season} • {year} • {week>13?"Post":`Week ${week}`}</div>
               </div>
             </Card>
+          ):tab==="Schedule"?(
+            <Card style={{overflow:"hidden",borderLeft:`5px solid ${RED}`}}>
+              <div style={{padding:isMobile?"14px 14px 12px":"22px 26px 18px"}}>
+                <div style={{fontSize:isMobile?20:32,fontWeight:900,color:"#111",textTransform:"uppercase",letterSpacing:-0.5,lineHeight:1.05}}>Season {season} Schedule</div>
+                <div style={{fontSize:isMobile?12:14,color:"#555",marginTop:4,fontWeight:600}}>{leagueName} • {year} • {week>13?"Post":`Week ${week}`}</div>
+              </div>
+            </Card>
           ):(
             <Card style={{padding:isMobile?"10px 12px":"14px 16px",borderLeft:`4px solid ${RED}`}}>
-              <div style={{fontSize:isMobile?15:18,fontWeight:900,color:"#111",textTransform:"uppercase"}}>{tab==="Standings"?"Dynasty Standings":tab==="Schedule"?"Season Schedule":tab==="YearStats"?"Year Stats":tab==="Profiles"?"Player Profiles":tab==="Redzone"?"Dynasty RedZone":tab==="Discord"?"Join Discord & Voice Chat":"League Rules"}</div>
+              <div style={{fontSize:isMobile?15:18,fontWeight:900,color:"#111",textTransform:"uppercase"}}>{tab==="Standings"?"Dynasty Standings":tab==="YearStats"?"Year Stats":tab==="Profiles"?"Player Profiles":tab==="Redzone"?"Dynasty RedZone":tab==="Discord"?"Join Discord & Voice Chat":"League Rules"}</div>
               <div style={{fontSize:10,color:"#888",marginTop:2}}>{leagueName} · S{season} · {year} · {week>13?"Post":`Wk ${week}`}</div>
             </Card>
           )}
@@ -7030,7 +7052,36 @@ export default function App() {
           </>)}
           {tab==="YearStats"&&<YearStatsTab history={history} currentEntries={activeEntries} season={season} year={year} setupRows={setup?.rows||[]} permanentUsers={setup?.permanentUsers} playerStats={setup?.playerStats} gameArchive={setup?.gameArchive}/>}
           {tab==="Profiles"&&<ProfileTab history={history} setupRows={(setup?.rows||[]).filter(r=>r.active!==false)} currentEntries={activeEntries} season={season} year={year} permanentUsers={setup?.permanentUsers?.filter(u=>(setup?.rows||[]).some(r=>r.userId===u.id&&r.active!==false))} sel={profileSel} setSel={setProfileSel} pTab={profilePTab} setPTab={setProfilePTab} articles={articles} setActiveArticle={setActiveArticle} playerStats={setup?.playerStats} gameArchive={setup?.gameArchive}/>}
-          {tab==="Schedule"&&<ScheduleTab schedule={effectiveSchedule} entries={activeEntries} week={week} season={season} year={year} setup={setup} setupRows={setup?.rows||[]} history={history}/>}
+          {tab==="Schedule"&&(<>
+            <ScheduleTab schedule={effectiveSchedule} entries={activeEntries} week={week} season={season} year={year} setup={setup} setupRows={setup?.rows||[]} history={history}/>
+
+            {/* Supporting league info — the true left sidebar only renders at >=1024px, so give
+                Dynasty Info / Quick Links a compact spot below the schedule instead of dropping
+                them, matching the pattern already established for History's mobile fallback. */}
+            {!showSidebars&&(
+              <Card style={{overflow:"hidden"}}>
+                <CardHead>Dynasty Info</CardHead>
+                <div style={{padding:"10px 0"}}>
+                  {[["Season",season],["Year",year],["Week",week>13?"Post":week],["Teams",entries.length]].map(([l,v])=>
+                    <div key={l} style={{display:"flex",justifyContent:"space-between",alignItems:"center",padding:"9px 16px",borderBottom:"1px solid #f5f5f5"}}>
+                      <span style={{fontSize:12,color:"#888",fontWeight:600,textTransform:"uppercase",letterSpacing:0.5}}>{l}</span>
+                      <span style={{fontSize:14,fontWeight:800,color:"#111"}}>{v}</span>
+                    </div>
+                  )}
+                </div>
+              </Card>
+            )}
+            {!showSidebars&&(
+              <Card style={{overflow:"hidden"}}>
+                <CardHead>Quick Links</CardHead>
+                <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:1,background:"#f0f0f0",padding:1}}>
+                  {NAV_TABS.map(([label,val])=>(
+                    <button key={val} onClick={()=>setTab(val)} style={{background:"#fff",border:"none",padding:"0 10px",minHeight:44,display:"flex",alignItems:"center",gap:8,cursor:"pointer",fontFamily:ff,fontSize:12,fontWeight:700,color:RED,textAlign:"left"}}>🏈 {label}</button>
+                  ))}
+                </div>
+              </Card>
+            )}
+          </>)}
           {tab==="Rules"&&(()=>{
             const customCats=(pc.customCategories||[]);
             const ptsCards=[
