@@ -154,6 +154,8 @@ function formatOpp(v) {
   if (isCPUOpp(v)) { const name=cpuOppName(v); return name ? `${name} (CPU)` : "CPU"; }
   return v || "";
 }
+// Lookup key for a frozen pregame betting line (setup.gameOdds), independent of which team is "home".
+function oddsKey(year, week, teamA, teamB) { return `${year}|${week}|${[teamA,teamB].sort().join("||")}`; }
 
 // Extract the first balanced {...} object from text, ignoring braces inside quoted strings.
 // More robust than a greedy regex when the model adds stray commentary containing "}" characters.
@@ -813,6 +815,39 @@ function probToAmericanOdds(p) {
   return implied>=0.5 ? Math.round(-100*implied/(1-implied)) : Math.round(100*(1-implied)/implied);
 }
 function fmtOdds(n) { return n>0?`+${n}`:`${n}`; }
+
+// Displays a completed game's frozen pregame line (odds — see freezeWeekOdds in App, which
+// snapshots setup.gameOdds right before that week's results are applied) next to the final
+// result, so viewers can see who was favored and whether the favorite covered.
+function BettingRecap({odds, teamA, teamB, scoreA, scoreB}) {
+  if (!odds) return null;
+  const favIsTeam1 = odds.spread1<=0;
+  const favName = favIsTeam1?odds.team1:odds.team2, dogName = favIsTeam1?odds.team2:odds.team1;
+  const favSpread = Math.abs(favIsTeam1?odds.spread1:odds.spread2);
+  const favML = favIsTeam1?odds.ml1:odds.ml2, dogML = favIsTeam1?odds.ml2:odds.ml1;
+  let resultNote=null, totalNote=null;
+  if (scoreA!=null && scoreB!=null) {
+    const winner = scoreA>scoreB?teamA:scoreB>scoreA?teamB:null;
+    if (winner) {
+      const margin = winner===teamA ? scoreA-scoreB : scoreB-scoreA;
+      resultNote = winner===favName
+        ? (margin>favSpread
+            ? {text:`${favName} covered as the favorite (won by ${margin})`, upset:false}
+            : {text:`${favName} won but didn't cover (-${favSpread}, won by ${margin})`, upset:false})
+        : {text:`UPSET — ${dogName} won outright as a +${favSpread} underdog`, upset:true};
+    }
+    const actualTotal = scoreA+scoreB;
+    totalNote = `${actualTotal} combined pts — went ${actualTotal>odds.total?"OVER":"UNDER"} the O/U ${odds.total}`;
+  }
+  return (
+    <div style={{padding:"9px 14px",background:"#1a1a1a",borderTop:"1px solid #333"}}>
+      <div style={{fontSize:9,fontWeight:800,color:"#666",textTransform:"uppercase",letterSpacing:1,marginBottom:4}}>Pregame Line</div>
+      <div style={{fontSize:12,color:"#ccc"}}>{favName} -{favSpread} ({fmtOdds(favML)}) · {dogName} +{favSpread} ({fmtOdds(dogML)}) · O/U {odds.total}</div>
+      {resultNote&&<div style={{fontSize:11,fontWeight:700,color:resultNote.upset?"#ff6b6b":"#4caf50",marginTop:4}}>{resultNote.text}</div>}
+      {totalNote&&<div style={{fontSize:11,color:"#999",marginTop:2}}>{totalNote}</div>}
+    </div>
+  );
+}
 
 // Point spread for teamEntry, in standard betting notation (negative = teamEntry favored by
 // that many, positive = teamEntry an underdog getting that many). Prefers real scored-game
@@ -1905,10 +1940,11 @@ function ScheduleTab({schedule,entries,week,season,year,setup,setupRows,history}
     return {winner, loser, logA, logB, statsA, statsB, scoreA, scoreB, archiveGame: archA||null};
   }
 
-  function BoxScore({teamA, teamB, result}) {
+  function BoxScore({teamA, teamB, result, week:gameWeek}) {
     const {statsA, statsB, scoreA, scoreB, archiveGame} = result;
     const wA = scoreA!=null&&scoreB!=null ? scoreA>scoreB : result.winner===teamA;
     const wB = scoreA!=null&&scoreB!=null ? scoreB>scoreA : result.winner===teamB;
+    const odds = setup?.gameOdds?.[oddsKey(selYear, gameWeek, teamA, teamB)];
 
     if (archiveGame) {
       const {mine,opp} = archiveGame;
@@ -1927,6 +1963,7 @@ function ScheduleTab({schedule,entries,week,season,year,setup,setupRows,history}
               <div style={{fontSize:22,fontWeight:900,color:wB?"#fff":"#888",lineHeight:1.1}}>{opp.score}</div>
             </div>
           </div>
+          <BettingRecap odds={odds} teamA={teamA} teamB={teamB} scoreA={mine.score} scoreB={opp.score}/>
           <div style={{padding:12,fontSize:11}}>
             <BoxScoreDetail team1={mine} team2={opp} dark/>
           </div>
@@ -1958,6 +1995,7 @@ function ScheduleTab({schedule,entries,week,season,year,setup,setupRows,history}
             {(scoreB!=null)&&<div style={{fontSize:22,fontWeight:900,color:wB?"#fff":"#888",lineHeight:1.1}}>{scoreB}</div>}
           </div>
         </div>
+        <BettingRecap odds={odds} teamA={teamA} teamB={teamB} scoreA={scoreA} scoreB={scoreB}/>
         {/* Stats table */}
         {hasStats&&<table style={{width:"100%",borderCollapse:"collapse",fontSize:12}}>
           <thead><tr>
@@ -2029,7 +2067,7 @@ function ScheduleTab({schedule,entries,week,season,year,setup,setupRows,history}
 
           {played&&<span style={{fontSize:11,color:"#ccc",flexShrink:0}}>{isOpen?"▲":"▼"}</span>}
         </div>
-        {played&&isOpen&&<BoxScore teamA={home} teamB={away} result={result}/>}
+        {played&&isOpen&&<BoxScore teamA={home} teamB={away} result={result} week={w}/>}
       </div>
     );
   }
@@ -2126,7 +2164,7 @@ function ScheduleTab({schedule,entries,week,season,year,setup,setupRows,history}
                     {played&&myScore==null&&theirScore==null&&<span style={{fontSize:9,fontWeight:800,color:"#007a00",textTransform:"uppercase",padding:"1px 5px",background:"#f0f8f0",borderRadius:2,flexShrink:0}}>FINAL</span>}
                     {played&&<span style={{fontSize:11,color:"#ccc",flexShrink:0}}>{isOpen?"▲":"▼"}</span>}
                   </div>
-                  {played&&isOpen&&<BoxScore teamA={view} teamB={opp} result={gameResult}/>}
+                  {played&&isOpen&&<BoxScore teamA={view} teamB={opp} result={gameResult} week={w}/>}
                 </div>
               );
             })}
@@ -5981,6 +6019,31 @@ export default function App() {
     return out;
   })() : schedule;
 
+  // Freezes betting odds for a week's real matchups the moment results are being submitted for
+  // it (see applyWeekResults/applyBulkResults below) — that's the last point where `entries` still
+  // reflects the pregame record, so completed games can still show what the line was beforehand.
+  // Recomputing odds after the fact wouldn't work — wins, points, and scoring trends used in the
+  // estimate all keep moving once the game is logged. Returns null if nothing new to freeze.
+  function freezeWeekOdds(targetWeek) {
+    const wkSchedule = effectiveSchedule[targetWeek];
+    if (!wkSchedule || !Object.keys(wkSchedule).length) return null;
+    const existing = setup?.gameOdds || {};
+    const games = buildGamesList(effectiveSchedule, targetWeek).filter(g=>g.opp!=="BYE"&&!isCPUOpp(g.opp));
+    const newOdds = {};
+    games.forEach(g => {
+      const key = oddsKey(year, targetWeek, g.team, g.opp);
+      if (existing[key] || newOdds[key]) return;
+      const t1 = entries.find(e=>e.teamName===g.team), t2 = entries.find(e=>e.teamName===g.opp);
+      if (!t1 || !t2) return;
+      const trend1 = teamScoringTrend(setup?.gameArchive, year, g.team);
+      const trend2 = teamScoringTrend(setup?.gameArchive, year, g.opp);
+      const prob1 = estimateWinProb(t1, t2, history, trend1, trend2);
+      const spread1 = estimateSpread(t1, t2, trend1, trend2);
+      newOdds[key] = {team1:g.team, team2:g.opp, spread1, spread2:-spread1, total:estimateTotal(trend1,trend2), ml1:probToAmericanOdds(prob1), ml2:probToAmericanOdds(1-prob1)};
+    });
+    return Object.keys(newOdds).length ? {...setup, gameOdds:{...existing, ...newOdds}} : null;
+  }
+
   // Auto-generates the Week News / Week Review / Week Preview articles the moment
   // a week's results are submitted and the schedule advances. Fire-and-forget from
   // the caller; every Claude call is individually try/caught so one failure never
@@ -6097,6 +6160,8 @@ export default function App() {
 
   function applyWeekResults(targetWeek=week) {
     const thisWeekSchedule = effectiveSchedule[targetWeek] || {};
+    const frozenSetup = freezeWeekOdds(targetWeek);
+    if (frozenSetup) setSetup(frozenSetup);
     // Build a map of results entered this week
     const resultsMap = {};
     weekResults.forEach(r=>{ if(r.result!=="none") resultsMap[r.teamName]=r; });
@@ -6155,14 +6220,16 @@ export default function App() {
     if(targetWeek>=week){
       const newWeek=targetWeek+1;
       setWeek(newWeek);
-      setTimeout(()=>saveToDb({week:newWeek,entries:nextEntries}),100);
+      setTimeout(()=>saveToDb({week:newWeek,entries:nextEntries,...(frozenSetup?{setup:frozenSetup}:{})}),100);
       triggerAutoWeeklyArticles(targetWeek,newWeek,nextEntries).then(()=>sleep(3200)).then(()=>postWeekRecapToGroupMe(targetWeek,nextEntries)).then(()=>sleep(GOTW_STAGGER_MS)).then(()=>postGameOfWeekPreview(newWeek,nextEntries)).catch(e=>console.error("Auto weekly articles failed:",e));
     }
-    else{setTimeout(()=>saveToDb({entries:nextEntries}),100);}
+    else{setTimeout(()=>saveToDb({entries:nextEntries,...(frozenSetup?{setup:frozenSetup}:{})}),100);}
   }
 
   function applyBulkResults(results, targetWeek=week) {
     const thisWeekSchedule=effectiveSchedule[targetWeek]||{};
+    const frozenSetup = freezeWeekOdds(targetWeek);
+    if (frozenSetup) setSetup(frozenSetup);
     const nextEntries = entries.map(entry=>{
       const r=results.find(x=>x.leagueTeam===entry.teamName);
       if(!r)return entry;
@@ -6180,10 +6247,10 @@ export default function App() {
     if(targetWeek>=week){
       const newWeek=targetWeek+1;
       setWeek(newWeek);
-      setTimeout(()=>saveToDb({week:newWeek,entries:nextEntries}),100);
+      setTimeout(()=>saveToDb({week:newWeek,entries:nextEntries,...(frozenSetup?{setup:frozenSetup}:{})}),100);
       triggerAutoWeeklyArticles(targetWeek,newWeek,nextEntries).then(()=>sleep(3200)).then(()=>postWeekRecapToGroupMe(targetWeek,nextEntries)).then(()=>sleep(GOTW_STAGGER_MS)).then(()=>postGameOfWeekPreview(newWeek,nextEntries)).catch(e=>console.error("Auto weekly articles failed:",e));
     }
-    else{setTimeout(()=>saveToDb({entries:nextEntries}),100);}
+    else{setTimeout(()=>saveToDb({entries:nextEntries,...(frozenSetup?{setup:frozenSetup}:{})}),100);}
   }
 
   function applyPostSeason() {
