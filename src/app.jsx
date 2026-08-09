@@ -2635,8 +2635,26 @@ function ProfileTab({history,setupRows,currentEntries,season,year,permanentUsers
   return (
     <div style={{display:"flex",flexDirection:"column",gap:14}}>
       <SL>Select User</SL>
-      <div style={{display:"grid",gridTemplateColumns:isMobile?"1fr 1fr":"repeat(auto-fill,minmax(160px,1fr))",gap:8}}>
-        {allUsers.map(u=>{const key=u.userId||u.userName;const curEntry=currentEntries.find(e=>u.userId?e.userId===u.userId:e.userName===u.userName);return(<button key={key} onClick={()=>{setSel(sel===key?null:key);}} style={{padding:"10px 14px",borderRadius:2,border:"1px solid",borderColor:sel===key?RED:"#ddd",background:sel===key?RED:"#fff",color:sel===key?"#fff":"#333",cursor:"pointer",fontFamily:ff,textAlign:"left"}}><div style={{fontWeight:800,fontSize:13}}>{curEntry?.userName||u.userName}</div><div style={{fontSize:10,color:sel===key?"rgba(255,255,255,0.7)":"#999",marginTop:2,textTransform:"uppercase"}}>{curEntry?.teamName||u.teamName}</div></button>);})}
+      <div style={{display:"grid",gridTemplateColumns:isMobile?"1fr 1fr":"repeat(auto-fill,minmax(140px,1fr))",gap:10}}>
+        {allUsers.map(u=>{
+          const key=u.userId||u.userName;
+          const curEntry=currentEntries.find(e=>u.userId?e.userId===u.userId:e.userName===u.userName);
+          const displayName=curEntry?.userName||u.userName;
+          const displayTeam=curEntry?.teamName||u.teamName;
+          const imgs=getPlayerImages(setupRows,u.userId,u.userName);
+          const isSel=sel===key;
+          return(
+            <button key={key} onClick={()=>{setSel(isSel?null:key);}} style={{padding:"16px 10px 12px",borderRadius:4,border:`2px solid ${isSel?RED:"#eee"}`,background:isSel?"#fff5f5":"#fff",boxShadow:isSel?"0 2px 8px rgba(204,0,0,0.18)":"0 1px 3px rgba(0,0,0,0.05)",cursor:"pointer",fontFamily:ff,textAlign:"center",display:"flex",flexDirection:"column",alignItems:"center",gap:6,transition:"box-shadow 0.15s, border-color 0.15s"}}>
+              <div style={{position:"relative",width:60,height:60,flexShrink:0}}>
+                <div style={{width:60,height:60,borderRadius:"50%",background:isSel?RED:"#e8e8e8",display:"flex",alignItems:"center",justifyContent:"center",fontSize:22,fontWeight:900,color:isSel?"#fff":"#aaa"}}>{(displayName||"?")[0]?.toUpperCase()}</div>
+                {imgs.profilePic&&<img key={imgs.profilePic} src={imgs.profilePic} alt="" style={{position:"absolute",top:0,left:0,width:60,height:60,borderRadius:"50%",objectFit:"cover",border:"2px solid #fff",boxShadow:"0 1px 4px rgba(0,0,0,0.15)"}} onError={e=>{e.target.style.display="none";}}/>}
+                {imgs.teamLogo&&<div style={{position:"absolute",bottom:-3,right:-3,width:24,height:24,borderRadius:"50%",background:"#fff",border:"1px solid #ddd",display:"flex",alignItems:"center",justifyContent:"center",padding:3,boxShadow:"0 1px 3px rgba(0,0,0,0.15)"}}><img key={imgs.teamLogo} src={imgs.teamLogo} alt="" style={{width:"100%",height:"100%",objectFit:"contain"}} onError={e=>{e.target.parentElement.style.display="none";}}/></div>}
+              </div>
+              <div style={{fontWeight:800,fontSize:13,color:"#111",lineHeight:1.2}}>{displayName}</div>
+              <div style={{fontSize:10,color:"#999",textTransform:"uppercase",letterSpacing:0.5}}>{displayTeam}</div>
+            </button>
+          );
+        })}
       </div>
       {profile&&user&&<Card style={{borderTop:`3px solid ${RED}`,overflow:"hidden"}}>
         <div style={{background:"#f7f7f7",padding:"14px 18px",display:"flex",justifyContent:"space-between",alignItems:"flex-start",flexWrap:"wrap",gap:10}}>
