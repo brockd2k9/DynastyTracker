@@ -2190,11 +2190,26 @@ const STAT_STREAK_DEFS=[
   {key:"passDefUnder200",label:"Held Opp Under 200 Pass Yds",pred:g=>(g.oppStats?.passing?.yds??Infinity)<200},
   {key:"turnoverForced",label:"Turnover Forced",pred:g=>(g.oppStats?.misc?.turnovers||0)>=1},
 ];
+// Formats the year(s)/season(s) a streak touched, from an ordered list of {year,seasonNum} pairs
+// (seasonNum may be missing on older data, which falls back to the plain year as before). A year
+// can hold more than one finalized season, so "2026" alone is ambiguous: this collapses to
+// "2026 S1" for a single season, "2026 S1-S2" when the streak crosses seasons within one year,
+// and "2025 S2 – 2026 S1" when it crosses years.
+function seasonSpanLabel(pairs){
+  const uniq=[];
+  pairs.forEach(p=>{const last=uniq[uniq.length-1];if(!last||last.year!==p.year||last.seasonNum!==p.seasonNum)uniq.push(p);});
+  if(!uniq.length)return "";
+  const fmt=p=>p.seasonNum?`${p.year} S${p.seasonNum}`:String(p.year);
+  if(uniq.length===1)return fmt(uniq[0]);
+  const first=uniq[0], last=uniq[uniq.length-1];
+  if(first.year===last.year&&first.seasonNum&&last.seasonNum)return `${first.year} S${first.seasonNum}-S${last.seasonNum}`;
+  return `${fmt(first)} – ${fmt(last)}`;
+}
 function longestStatStreak(games,pred){
   let max=0,cur=0,startIdx=0,bestStart=0,bestEnd=0;
   games.forEach((g,i)=>{if(pred(g)){if(cur===0)startIdx=i;cur++;if(cur>max){max=cur;bestStart=startIdx;bestEnd=i;}}else cur=0;});
   if(!max)return null;
-  const span=[...new Set(games.slice(bestStart,bestEnd+1).map(g=>g.year))].join("–");
+  const span=seasonSpanLabel(games.slice(bestStart,bestEnd+1).map(g=>({year:g.year,seasonNum:g.seasonNum})));
   return {len:max,span,teamName:games[bestStart]?.teamName||""};
 }
 
@@ -2318,7 +2333,7 @@ function LeagueRecordBook({history,currentEntries,season,year,permanentUsers,set
       const [name,yr]=key.split("|");
       if(!ssMost4thQComebacks||n>ssMost4thQComebacks.n)ssMost4thQComebacks={name,year:Number(yr),seasonNum:resolveSeasonNum(name,Number(yr)),n};
     });
-    const getUserLogs=(name)=>{const prof=recs[name];if(!prof)return[];const logs=[];prof.seasons.filter(s=>!s.isHistorical&&(filterYear==null||s.year===filterYear)).forEach(s=>{(s.weekLog||[]).forEach(w=>logs.push({...w,season:s.seasonNum,year:s.year,teamName:s.teamName}));});if(!filterYear&&prof.cur)(prof.cur.weekLog||[]).forEach(w=>logs.push({...w,season,year,teamName:prof.cur.teamName}));return logs;};
+    const getUserLogs=(name)=>{const prof=recs[name];if(!prof)return[];const logs=[];prof.seasons.filter(s=>!s.isHistorical&&(filterYear==null||s.year===filterYear)).forEach(s=>{(s.weekLog||[]).forEach(w=>logs.push({...w,seasonNum:s.seasonNum,year:s.year,teamName:s.teamName}));});if(!filterYear&&prof.cur)(prof.cur.weekLog||[]).forEach(w=>logs.push({...w,seasonNum:season,year,teamName:prof.cur.teamName}));return logs;};
     // Join each weekLog entry with its archived box score (if one was scanned) so stat-based
     // streaks (pass yards, rush TDs, turnovers, etc.) have something to test.
     const getUserGames=(name)=>getUserLogs(name).map(w=>{
@@ -2335,7 +2350,7 @@ function LeagueRecordBook({history,currentEntries,season,year,permanentUsers,set
       e.forEach(([name])=>{const s=longestStatStreak(getUserGames(name),def.pred);if(s&&(!best||s.len>best.data.len))best={name,data:s};});
       statStreaks[def.key]=best;
     });
-    const getWinStreakAllTime=(name)=>{const logs=getUserLogs(name);let max=0,cur=0,startIdx=0,bestStart=0,bestEnd=0;logs.forEach((w,i)=>{if(w.result==="win"){if(cur===0)startIdx=i;cur++;if(cur>max){max=cur;bestStart=startIdx;bestEnd=i;}}else cur=0;});if(!max)return null;const span=[...new Set(logs.slice(bestStart,bestEnd+1).map(w=>w.year))];return{len:max,years:span.join("–"),teamName:logs[bestStart]?.teamName||""};};
+    const getWinStreakAllTime=(name)=>{const logs=getUserLogs(name);let max=0,cur=0,startIdx=0,bestStart=0,bestEnd=0;logs.forEach((w,i)=>{if(w.result==="win"){if(cur===0)startIdx=i;cur++;if(cur>max){max=cur;bestStart=startIdx;bestEnd=i;}}else cur=0;});if(!max)return null;const spanLabel=seasonSpanLabel(logs.slice(bestStart,bestEnd+1).map(w=>({year:w.year,seasonNum:w.seasonNum})));return{len:max,spanLabel,teamName:logs[bestStart]?.teamName||""};};
     const getWinStreakSeason=(name)=>{const prof=recs[name];if(!prof)return null;let best=null;const allS=[...prof.seasons.filter(s=>!s.isHistorical&&(filterYear==null||s.year===filterYear))];if(!filterYear&&prof.cur)allS.push({...prof.cur,year,seasonNum:season,isHistorical:false});allS.forEach(s=>{let cur=0,max=0;(s.weekLog||[]).forEach(w=>{if(w.result==="win"){cur++;if(cur>max)max=cur;}else cur=0;});if(max>0&&(!best||max>best.len))best={len:max,year:s.year,seasonNum:s.seasonNum,teamName:s.teamName};});return best;};
     const isUvU=(w)=>w.opponent&&!isCPUOpp(w.opponent)&&w.opponent!=="BYE"&&w.opponent!=="Unknown"&&w.opponent!=="";
     let bestSeason=null,worstSeason=null,mostSeasonLosses=null;
@@ -2408,7 +2423,7 @@ function LeagueRecordBook({history,currentEntries,season,year,permanentUsers,set
         {lr.ssBestYPCarry&&<RR label="Yards Per Carry (Season)" holder={lr.ssBestYPCarry.name} val={(lr.ssBestYPCarry.yds/lr.ssBestYPCarry.att).toFixed(1)} sub={ys(lr.ssBestYPCarry.year,lr.ssBestYPCarry.seasonNum)}/>}
         {lr.ssMost4thQComebacks&&<RR label="4th Quarter Comebacks (Season)" holder={lr.ssMost4thQComebacks.name} val={lr.ssMost4thQComebacks.n+"×"} sub={ys(lr.ssMost4thQComebacks.year,lr.ssMost4thQComebacks.seasonNum)}/>}
         <div style={{gridColumn:"1/-1",padding:"10px 0 2px",fontSize:10,fontWeight:800,color:"#aaa",textTransform:"uppercase",letterSpacing:1,borderBottom:"1px solid #f0f0f0",marginBottom:2}}>WIN STREAKS</div>
-        {lr.bestStreakAllTime&&<RR label="Longest Win Streak All Time" holder={lr.bestStreakAllTime.name} val={lr.bestStreakAllTime.data.len+"G"} sub={lr.bestStreakAllTime.data.years?`${lr.bestStreakAllTime.data.teamName} · ${lr.bestStreakAllTime.data.years}`:""}/>}
+        {lr.bestStreakAllTime&&<RR label="Longest Win Streak All Time" holder={lr.bestStreakAllTime.name} val={lr.bestStreakAllTime.data.len+"G"} sub={lr.bestStreakAllTime.data.spanLabel?`${lr.bestStreakAllTime.data.teamName} · ${lr.bestStreakAllTime.data.spanLabel}`:""}/>}
         {lr.bestStreakSeason&&<RR label="Longest Win Streak (Season)" holder={lr.bestStreakSeason.name} val={lr.bestStreakSeason.data.len+"G"} sub={`${lr.bestStreakSeason.data.teamName} · ${ys(lr.bestStreakSeason.data.year,lr.bestStreakSeason.data.seasonNum)}`}/>}
         <div style={{gridColumn:"1/-1",padding:"10px 0 2px",fontSize:10,fontWeight:800,color:"#aaa",textTransform:"uppercase",letterSpacing:1,borderBottom:"1px solid #f0f0f0",marginBottom:2}}>STAT STREAKS</div>
         {STAT_STREAK_DEFS.map(def=>{const s=lr.statStreaks?.[def.key];return s&&<RR key={def.key} label={`Longest ${def.label} Streak`} holder={s.name} val={s.data.len+"G"} sub={s.data.span?`${s.data.teamName} · ${s.data.span}`:""}/>;})}
@@ -2882,7 +2897,7 @@ function ProfileTab({history,setupRows,currentEntries,season,year,permanentUsers
             // Find longest win streak with span
             let maxW=0,curW=0,startI=0,bestWS=0,bestWE=0;
             allLogs.forEach((w,i)=>{if(w.result==="win"){if(curW===0)startI=i;curW++;if(curW>maxW){maxW=curW;bestWS=startI;bestWE=i;}}else curW=0;});
-            const wsSpan=maxW>0?[...new Set(allLogs.slice(bestWS,bestWE+1).map(w=>w.year))].join("–"):"";
+            const wsSpan=maxW>0?seasonSpanLabel(allLogs.slice(bestWS,bestWE+1).map(w=>({year:w.year,seasonNum:w.seasonNum}))):"";
             const wsTeam=maxW>0?(allLogs[bestWS]?.teamName||""):"";
             // Longest loss streak
             let maxL=0,curL=0;
@@ -2891,10 +2906,10 @@ function ProfileTab({history,setupRows,currentEntries,season,year,permanentUsers
             let activeCnt=0,activeType="";
             for(let i=allLogs.length-1;i>=0;i--){const r=allLogs[i].result;if(!activeType){activeType=r;activeCnt=1;}else if(r===activeType)activeCnt++;else break;}
             // Best single-season win streak
-            let bestSSnLen=0,bestSSnYear=null,bestSSnTeam="";
+            let bestSSnLen=0,bestSSnYear=null,bestSSnSeasonNum=null,bestSSnTeam="";
             const ssnSrc=[...profile.seasons.filter(s=>!s.isHistorical)];
             if(profile.cur)ssnSrc.push({...profile.cur,year,seasonNum:season});
-            ssnSrc.forEach(s=>{let c=0,m=0;(s.weekLog||[]).forEach(w=>{if(w.result==="win"){c++;if(c>m)m=c;}else c=0;});if(m>bestSSnLen){bestSSnLen=m;bestSSnYear=s.year;bestSSnTeam=s.teamName;}});
+            ssnSrc.forEach(s=>{let c=0,m=0;(s.weekLog||[]).forEach(w=>{if(w.result==="win"){c++;if(c>m)m=c;}else c=0;});if(m>bestSSnLen){bestSSnLen=m;bestSSnYear=s.year;bestSSnSeasonNum=s.seasonNum;bestSSnTeam=s.teamName;}});
             // Join weekLog entries with their archived box scores (if scanned) for stat-based streaks
             const profileGames=allLogs.map(w=>{
               const archivedGame=(gameArchive||[]).find(g=>g.year===w.year&&g.week===w.week&&(g.team1.name===w.teamName||g.team2.name===w.teamName));
@@ -2911,7 +2926,7 @@ function ProfileTab({history,setupRows,currentEntries,season,year,permanentUsers
                   <SB label="Longest Win Streak" val={maxW>0?maxW+"W":"—"} color="#007a00" sub={maxW>0?`${wsTeam} · ${wsSpan}`:""}/>
                   <SB label="Longest Loss Streak" val={maxL>0?maxL+"L":"—"} color={RED}/>
                   <SB label="Current Streak" val={activeCnt>0?`${activeCnt}${activeType==="win"?"W":"L"}`:"—"} color={activeType==="win"?"#007a00":RED}/>
-                  <SB label="Best Season Streak" val={bestSSnLen>0?bestSSnLen+"W":"—"} color="#007a00" sub={bestSSnLen>0?`${bestSSnTeam} · ${bestSSnYear}`:""}/>
+                  <SB label="Best Season Streak" val={bestSSnLen>0?bestSSnLen+"W":"—"} color="#007a00" sub={bestSSnLen>0?`${bestSSnTeam} · ${seasonSpanLabel([{year:bestSSnYear,seasonNum:bestSSnSeasonNum}])}`:""}/>
                 </div>
               </div>
               <div><SL>Stat Streaks</SL>
