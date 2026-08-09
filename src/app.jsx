@@ -2486,12 +2486,20 @@ function LeagueRecordBook({history,currentEntries,season,year,permanentUsers,set
   // contract (label/holder/val/sub) so no record value/logic changes, just presentation.
   const RC=({label,holder,val,sub,big})=>{
     const u=allUsers.find(u=>u.userName===holder);
+    const imgs=u?getPlayerImages(setupRows,u.userId,u.userName):null;
+    const avatarSize=big?26:20;
     return(
       <div style={{border:"1px solid #e5e5e5",borderTop:`3px solid ${RED}`,borderRadius:2,background:"#fff",padding:big?"18px 20px":"12px 14px",display:"flex",flexDirection:"column",gap:2,transition:"box-shadow 0.15s"}}
         onMouseEnter={e=>{e.currentTarget.style.boxShadow="0 2px 8px rgba(0,0,0,0.08)";}}
         onMouseLeave={e=>{e.currentTarget.style.boxShadow="none";}}>
         <div style={{fontSize:big?10:9,fontWeight:800,color:"#999",textTransform:"uppercase",letterSpacing:1}}>{label}</div>
-        <div style={{fontSize:big?15:13,fontWeight:800,color:"#111"}}>{u?<Name userId={u.userId} userName={holder} style={{textDecoration:"none"}}>{holder}</Name>:holder}</div>
+        <div style={{display:"flex",alignItems:"center",gap:6,marginTop:1,minWidth:0}}>
+          {u&&<div style={{position:"relative",width:avatarSize,height:avatarSize,flexShrink:0}}>
+            <div style={{width:avatarSize,height:avatarSize,borderRadius:"50%",background:"#e8e8e8",display:"flex",alignItems:"center",justifyContent:"center",fontSize:avatarSize*0.42,fontWeight:900,color:"#aaa"}}>{(holder||"?")[0]?.toUpperCase()}</div>
+            {imgs?.profilePic&&<img key={imgs.profilePic} src={imgs.profilePic} alt="" style={{position:"absolute",top:0,left:0,width:avatarSize,height:avatarSize,borderRadius:"50%",objectFit:"cover",border:"1px solid #fff",boxShadow:"0 1px 3px rgba(0,0,0,0.15)"}} onError={e=>{e.target.style.display="none";}}/>}
+          </div>}
+          <div style={{fontSize:big?15:13,fontWeight:800,color:"#111",minWidth:0,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{u?<Name userId={u.userId} userName={holder} style={{textDecoration:"none"}}>{holder}</Name>:holder}</div>
+        </div>
         <div style={{fontSize:big?34:20,fontWeight:900,color:RED,lineHeight:1,marginTop:2}}>{val}</div>
         {sub&&<div style={{fontSize:10,color:"#aaa",marginTop:2}}>{sub}</div>}
       </div>
