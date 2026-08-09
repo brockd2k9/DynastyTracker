@@ -5965,6 +5965,24 @@ export default function App() {
   const teamNames=activeEntries.map(e=>e.teamName);
   const leagueName=setup?.leagueName||"Dynasty Central";
 
+  // A quitter's remaining (not-yet-played) games get reassigned to their opponent as CPU
+  // games instead of sitting on the schedule as a real matchup nobody can finish. Weeks
+  // already played (week < current week) are left untouched — those are real, final results.
+  const inactiveTeamNames=new Set(entries.filter(e=>!isEntryActive(e)).map(e=>e.teamName));
+  const effectiveSchedule = inactiveTeamNames.size ? (()=>{
+    const out={};
+    Object.entries(schedule||{}).forEach(([wkStr,matchups])=>{
+      if(Number(wkStr)<week){out[wkStr]=matchups;return;}
+      const nm={};
+      Object.entries(matchups||{}).forEach(([team,opp])=>{
+        if(inactiveTeamNames.has(team))return; // drop the departed team's own schedule row
+        nm[team]=(opp!=="BYE"&&!isCPUOpp(opp)&&inactiveTeamNames.has(opp))?("CPU:"+opp):opp;
+      });
+      out[wkStr]=nm;
+    });
+    return out;
+  })() : schedule;
+
   // Auto-generates the Week News / Week Review / Week Preview articles the moment
   // a week's results are submitted and the schedule advances. Fire-and-forget from
   // the caller; every Claude call is individually try/caught so one failure never
@@ -5998,7 +6016,7 @@ export default function App() {
         const prompt = buildRecapPrompt(weekGames, awards, leagueNameLocal, completedWeek, season, year, r1) + (cameoSlot===1?PERSONALITY_CAMEO_NOTE:"");
         text = cleanArticle(await callClaude(prompt));
       } else {
-        const prompt = buildAutoWeekReviewFallbackPrompt({reporter:r1, leagueName:leagueNameLocal, season, completedWeek, year, history, sorted:sortedAfter, leader:leaderAfter, setup, schedule, cameoNote: cameoSlot===1?PERSONALITY_CAMEO_NOTE:""});
+        const prompt = buildAutoWeekReviewFallbackPrompt({reporter:r1, leagueName:leagueNameLocal, season, completedWeek, year, history, sorted:sortedAfter, leader:leaderAfter, setup, schedule:effectiveSchedule, cameoNote: cameoSlot===1?PERSONALITY_CAMEO_NOTE:""});
         text = cleanArticle(await callClaude(prompt));
       }
       if(text) newArticles.push({id:Date.now()+1, type:"recap", label:`📰 Week ${completedWeek} Review`, week:completedWeek, season, text, reporter:r1.name, reporterColor:r1.color, reporterAvatar:r1.avatar, autoWeek:completedWeek, autoSeason:season});
@@ -6007,7 +6025,7 @@ export default function App() {
     await sleep(3200);
 
     try {
-      const prompt = buildAutoWeekPreviewPrompt({reporter:r2, leagueName:leagueNameLocal, season, newWeek, year, history, sorted:sortedAfter, leader:leaderAfter, setup, schedule, cameoNote: cameoSlot===2?PERSONALITY_CAMEO_NOTE:""});
+      const prompt = buildAutoWeekPreviewPrompt({reporter:r2, leagueName:leagueNameLocal, season, newWeek, year, history, sorted:sortedAfter, leader:leaderAfter, setup, schedule:effectiveSchedule, cameoNote: cameoSlot===2?PERSONALITY_CAMEO_NOTE:""});
       const text = cleanArticle(await callClaude(prompt));
       if(text) newArticles.push({id:Date.now()+2, type:"preview", label:`🔭 Week ${newWeek} Preview`, week:newWeek, season, text, reporter:r2.name, reporterColor:r2.color, reporterAvatar:r2.avatar, autoWeek:completedWeek, autoSeason:season});
     } catch(e) { console.error("Auto week preview failed:", e); }
@@ -6055,7 +6073,7 @@ export default function App() {
     try {
       const activeAfter = entriesAfter.filter(e=>(e.userId&&activeUserIds.has(e.userId))||(!e.userId&&activeUserNames.has(e.userName)));
       const sortedAfter = [...activeAfter].sort((a,b)=>calcTotal(b)-calcTotal(a));
-      const games = buildGamesList(schedule, newWeek);
+      const games = buildGamesList(effectiveSchedule, newWeek);
       const confGames = games.filter(g=>g.opp!=="BYE"&&!isCPUOpp(g.opp));
       const gotw = pickGOTW(confGames, sortedAfter);
       if (!gotw) return; // no dynasty-vs-dynasty game this week (bye/CPU-only or post-season) — nothing to preview
@@ -6080,7 +6098,7 @@ export default function App() {
   }
 
   function applyWeekResults(targetWeek=week) {
-    const thisWeekSchedule = schedule[targetWeek] || {};
+    const thisWeekSchedule = effectiveSchedule[targetWeek] || {};
     // Build a map of results entered this week
     const resultsMap = {};
     weekResults.forEach(r=>{ if(r.result!=="none") resultsMap[r.teamName]=r; });
@@ -6146,7 +6164,7 @@ export default function App() {
   }
 
   function applyBulkResults(results, targetWeek=week) {
-    const thisWeekSchedule=schedule[targetWeek]||{};
+    const thisWeekSchedule=effectiveSchedule[targetWeek]||{};
     const nextEntries = entries.map(entry=>{
       const r=results.find(x=>x.leagueTeam===entry.teamName);
       if(!r)return entry;
@@ -6345,7 +6363,7 @@ export default function App() {
             <FeaturedCarousel articles={articles} setActiveArticle={setActiveArticle} RED={RED} ff={ff}/>
 
             {/* This week's matchups */}
-            {schedule&&schedule[week]&&Object.keys(schedule[week]).length>0&&<WeekMatchupsCard schedule={schedule} week={week} sorted={sorted} leagueName={leagueName} season={season} setActiveArticle={setActiveArticle} articles={articles} setArticles={setArticles} commUnlocked={commUnlocked} setupRows={setup?.rows} gameArchive={setup?.gameArchive} year={year} history={history} setTab={setTab}/>}
+            {effectiveSchedule&&effectiveSchedule[week]&&Object.keys(effectiveSchedule[week]).length>0&&<WeekMatchupsCard schedule={effectiveSchedule} week={week} sorted={sorted} leagueName={leagueName} season={season} setActiveArticle={setActiveArticle} articles={articles} setArticles={setArticles} commUnlocked={commUnlocked} setupRows={setup?.rows} gameArchive={setup?.gameArchive} year={year} history={history} setTab={setTab}/>}
 
             {/* Current standings summary */}
             <Card style={{overflow:"hidden"}}>
@@ -6459,7 +6477,7 @@ export default function App() {
           {tab==="History"&&<HistoryTab history={history} setHistory={setHistory} saveToDb={saveToDb} commUnlocked={commUnlocked} yearRosters={setup?.yearRosters} permanentUsers={setup?.permanentUsers} currentEntries={entries} season={season} year={year} setupRows={setup?.rows||[]} gameArchive={setup?.gameArchive} classicGames={setup?.classicGames} playerStats={setup?.playerStats}/>}
           {tab==="YearStats"&&<YearStatsTab history={history} currentEntries={activeEntries} season={season} year={year} setupRows={setup?.rows||[]} permanentUsers={setup?.permanentUsers} playerStats={setup?.playerStats} gameArchive={setup?.gameArchive}/>}
           {tab==="Profiles"&&<ProfileTab history={history} setupRows={(setup?.rows||[]).filter(r=>r.active!==false)} currentEntries={activeEntries} season={season} year={year} permanentUsers={setup?.permanentUsers?.filter(u=>(setup?.rows||[]).some(r=>r.userId===u.id&&r.active!==false))} sel={profileSel} setSel={setProfileSel} pTab={profilePTab} setPTab={setProfilePTab} articles={articles} setActiveArticle={setActiveArticle} playerStats={setup?.playerStats} gameArchive={setup?.gameArchive}/>}
-          {tab==="Schedule"&&<ScheduleTab schedule={schedule} entries={activeEntries} week={week} season={season} year={year} setup={setup} setupRows={setup?.rows||[]} history={history}/>}
+          {tab==="Schedule"&&<ScheduleTab schedule={effectiveSchedule} entries={activeEntries} week={week} season={season} year={year} setup={setup} setupRows={setup?.rows||[]} history={history}/>}
           {tab==="Rules"&&(()=>{
             const customCats=(pc.customCategories||[]);
             const ptsCards=[
@@ -6492,7 +6510,7 @@ export default function App() {
               </div>
             );
           })()}
-          {tab==="Redzone"&&<DynastyRedzone setup={setup} entries={activeEntries} setTab={setTab} autoLiveStatuses={autoLiveStatuses} autoEmbedUrls={autoEmbedUrls} schedule={schedule} week={week}/>}
+          {tab==="Redzone"&&<DynastyRedzone setup={setup} entries={activeEntries} setTab={setTab} autoLiveStatuses={autoLiveStatuses} autoEmbedUrls={autoEmbedUrls} schedule={effectiveSchedule} week={week}/>}
           {tab==="Discord"&&<DiscordTab/>}
         </div>
 
@@ -6576,9 +6594,9 @@ export default function App() {
         </div>
         <div style={{maxWidth:800,margin:"0 auto",padding:"20px 14px"}}>
           {commTab==="Season History"&&<HistoryTab history={history} setHistory={setHistory} saveToDb={saveToDb} commUnlocked={true} entries={entries} setEntries={setEntries} season={season} week={week} setWeek={setWeek} yearRosters={setup?.yearRosters} permanentUsers={setup?.permanentUsers} currentEntries={entries} year={year} setupRows={setup?.rows||[]} gameArchive={setup?.gameArchive} classicGames={setup?.classicGames} playerStats={setup?.playerStats}/>}
-          {commTab==="Enter Results"&&<EnterResultsPanel entries={activeEntries} weekResults={weekResults} setWeekResults={setWeekResults} week={week} setWeek={setWeek} applyBulkResults={applyBulkResults} applyWeekResults={applyWeekResults} postSeasonInputs={postSeasonInputs} setPSI={setPSI} applyPostSeason={applyPostSeason} finalizeSeason={finalizeSeason} season={season} setSeason={setSeason} year={year} setYear={setYear} teamNames={teamNames} schedule={schedule} history={history} onImportHistory={importHistoricalSeason} setupRows={setup?.rows||[]} saveToDb={saveToDb} setup={setup} setSetup={setSetup} postWeekRecapToGroupMe={postWeekRecapToGroupMe} postGameOfWeekPreview={postGameOfWeekPreview}/>}
+          {commTab==="Enter Results"&&<EnterResultsPanel entries={activeEntries} weekResults={weekResults} setWeekResults={setWeekResults} week={week} setWeek={setWeek} applyBulkResults={applyBulkResults} applyWeekResults={applyWeekResults} postSeasonInputs={postSeasonInputs} setPSI={setPSI} applyPostSeason={applyPostSeason} finalizeSeason={finalizeSeason} season={season} setSeason={setSeason} year={year} setYear={setYear} teamNames={teamNames} schedule={effectiveSchedule} history={history} onImportHistory={importHistoricalSeason} setupRows={setup?.rows||[]} saveToDb={saveToDb} setup={setup} setSetup={setSetup} postWeekRecapToGroupMe={postWeekRecapToGroupMe} postGameOfWeekPreview={postGameOfWeekPreview}/>}
           {commTab==="Schedule"&&<SchedulePanel entries={activeEntries} schedule={schedule} setSchedule={setSchedule}/>}
-{commTab==="Content"&&<ContentHub sorted={sorted} entries={activeEntries} week={week} season={season} year={year} leagueName={leagueName} history={history} leader={leader} articles={articles} setArticles={setArticles} setActiveArticle={setActiveArticle} schedule={schedule} setup={setup} setSetup={setSetup} saveToDb={saveToDb}/>}
+{commTab==="Content"&&<ContentHub sorted={sorted} entries={activeEntries} week={week} season={season} year={year} leagueName={leagueName} history={history} leader={leader} articles={articles} setArticles={setArticles} setActiveArticle={setActiveArticle} schedule={effectiveSchedule} setup={setup} setSetup={setSetup} saveToDb={saveToDb}/>}
           {commTab==="Player Stats"&&<PlayerStatsAdmin setup={setup} setSetup={setSetup} saveToDb={saveToDb} permanentUsers={setup?.permanentUsers||[]} year={year} ff={ff} RED={RED}/>}
           {commTab==="League Setup"&&<SetupPanel entries={entries} setup={setup} postSeasonInputs={postSeasonInputs} setPSI={setPSI} handleStart={handleStart} setCommissionerUnlocked={setCommUnlocked} season={season} year={year} setEntries={setEntries} setWeekResults={setWeekResults} setSetup={setSetup} saveToDb={saveToDb} history={history} setHistory={setHistory} autoLiveStatuses={autoLiveStatuses} autoEmbedUrls={autoEmbedUrls}/>}
         </div>
