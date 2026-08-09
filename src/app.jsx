@@ -6123,6 +6123,150 @@ function ScoresTicker({ sorted, setupRows, schedule, week, year, season, gameArc
   );
 }
 
+// ── Standings Board ──────────────────────────────────────────────────────
+// Standings-tab-only rankings display — deliberately NOT built on StandingsRow
+// (src/app.jsx:751), which is shared with Home's mobile summary and stays
+// untouched. Three responsive tiers, all reading the exact same fields the
+// old raw <table> read (calcTotal, wins/losses/confWins/confLosses/
+// gamePts/rankedBonusPts/confStandPts/confChampPts/bowlPts/recruitingPts/
+// prestigePts/heismanPts/isActive) — no new calculations.
+function StandingsBoard({sorted, setupRows, leader}) {
+  const isMobile = useIsMobile();
+  const showFullStats = !useIsMobile(1280);
+  const [expanded, setExpanded] = useState({});
+
+  if (!sorted.length) {
+    return (
+      <Card style={{overflow:"hidden"}}>
+        <CardHead>Current Standings</CardHead>
+        <div style={{padding:"40px 20px",textAlign:"center"}}>
+          <div style={{fontSize:36,marginBottom:12}}>🏈</div>
+          <div style={{fontSize:16,fontWeight:900,color:"#111",marginBottom:6}}>Season Starting Soon</div>
+          <div style={{fontSize:12,color:"#888"}}>The commissioner is setting up the dynasty.</div>
+        </div>
+      </Card>
+    );
+  }
+
+  const awdFor = t => (t.prestigePts||0)+(t.heismanPts||0);
+  // Compact single-line mini-stat: tiny uppercase code above, value below. No group headers/
+  // dividers — the outer 1440px-max site grid caps the main column at ~764px even on very wide
+  // displays (sidebars are fixed-width), so the full 7-stat breakdown has to stay dense to fit
+  // next to rank/logo/school/points/record/conf without wrapping.
+  const MiniStat = ({code,val}) => (
+    <div style={{textAlign:"center",minWidth:20}}>
+      <div style={{fontSize:6,color:"#bbb",fontWeight:800,textTransform:"uppercase"}}>{code}</div>
+      <div style={{fontSize:11,fontWeight:700,color:"#555"}}>{val}</div>
+    </div>
+  );
+  const Stat = ({label,val,big}) => (
+    <div style={{textAlign:"center"}}>
+      <div style={{fontSize:big?14:12,fontWeight:800,color:big?"#333":"#555"}}>{val}</div>
+      <div style={{fontSize:big?9:7,color:"#aaa",textTransform:"uppercase",fontWeight:700,marginTop:big?2:0}}>{label}</div>
+    </div>
+  );
+
+  const gridCols = showFullStats
+    ? "32px 32px minmax(130px,1fr) 56px 48px 48px auto"
+    : "32px 32px minmax(130px,1fr) 56px 48px 48px";
+
+  const Row = ({t,i}) => {
+    const tot = calcTotal(t);
+    const back = leader-tot;
+    const imgs = getPlayerImages(setupRows, t.userId, t.userName);
+    const isTop = i===0;
+    return (
+      <div style={{display:"grid",gridTemplateColumns:gridCols,alignItems:"center",gap:8,padding:isTop?"14px 12px":"11px 12px",background:isTop?"#fff5f5":i%2===0?"#fafafa":"#fff",borderBottom:"1px solid #eee",borderLeft:isTop?`4px solid ${RED}`:"4px solid transparent"}}>
+        <div style={{fontSize:isTop?18:14,fontWeight:900,color:isTop?RED:"#bbb",textAlign:"center"}}>{i+1}</div>
+        {imgs.teamLogo?<img src={imgs.teamLogo} alt="" style={{width:isTop?36:26,height:isTop?36:26,objectFit:"contain"}} onError={e=>{e.target.style.display="none";}}/>:<div/>}
+        <div style={{minWidth:0}}>
+          <div style={{display:"flex",alignItems:"center",gap:6}}>
+            <Name userId={t.userId} userName={t.userName} style={{fontSize:isTop?15:13,fontWeight:isTop?900:700,color:"#111",whiteSpace:"nowrap",overflow:"hidden",textOverflow:"ellipsis",display:"block"}}>{t.teamName}</Name>
+            {t.isActive===false&&<span style={{fontSize:8,fontWeight:800,color:RED,border:`1px solid ${RED}`,borderRadius:2,padding:"1px 3px",flexShrink:0}}>INACTIVE</span>}
+          </div>
+          <div style={{fontSize:11,color:"#888",marginTop:1,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{t.userName}</div>
+        </div>
+        <div style={{textAlign:"center"}}>
+          <div style={{fontSize:isTop?22:17,fontWeight:900,color:isTop?RED:"#111"}}>{tot}</div>
+          <div style={{fontSize:9,color:back===0?"#007a00":RED,fontWeight:700}}>{back===0?"—":`-${back}`}</div>
+        </div>
+        <div style={{textAlign:"center",fontSize:12,fontWeight:700,color:"#555"}}>{t.wins}-{t.losses}</div>
+        <div style={{textAlign:"center",fontSize:12,fontWeight:700,color:"#1a3a6b"}}>{t.confWins||0}-{t.confLosses||0}</div>
+        {showFullStats&&(
+          <div style={{display:"flex",alignItems:"center",gap:3,borderLeft:"1px solid #eee",paddingLeft:8}}>
+            <MiniStat code="GM" val={t.gamePts}/>
+            <MiniStat code="BN" val={t.rankedBonusPts>0?`+${t.rankedBonusPts}`:"—"}/>
+            <MiniStat code="CS" val={t.confStandPts}/>
+            <MiniStat code="CC" val={t.confChampPts}/>
+            <MiniStat code="BWL" val={t.bowlPts}/>
+            <MiniStat code="REC" val={t.recruitingPts}/>
+            <MiniStat code="AWD" val={awdFor(t)}/>
+          </div>
+        )}
+      </div>
+    );
+  };
+
+  const MobileCard = ({t,i}) => {
+    const tot = calcTotal(t);
+    const back = leader-tot;
+    const imgs = getPlayerImages(setupRows, t.userId, t.userName);
+    const isTop = i===0;
+    const isOpen = !!expanded[t.teamName];
+    return (
+      <div style={{borderBottom:"1px solid #eee",background:isTop?"#fff5f5":i%2===0?"#fafafa":"#fff",borderLeft:isTop?`4px solid ${RED}`:"4px solid transparent"}}>
+        <div onClick={()=>setExpanded(p=>({...p,[t.teamName]:!p[t.teamName]}))} style={{display:"flex",alignItems:"center",gap:10,padding:"12px 14px",cursor:"pointer"}}>
+          <div style={{fontSize:isTop?18:15,fontWeight:900,color:isTop?RED:"#bbb",width:20,textAlign:"center",flexShrink:0}}>{i+1}</div>
+          {imgs.teamLogo?<img src={imgs.teamLogo} alt="" style={{width:isTop?36:28,height:isTop?36:28,objectFit:"contain",flexShrink:0}} onError={e=>{e.target.style.display="none";}}/>:<div style={{width:isTop?36:28,flexShrink:0}}/>}
+          <div style={{flex:1,minWidth:0}}>
+            <div style={{display:"flex",alignItems:"center",gap:5}}>
+              <Name userId={t.userId} userName={t.userName} style={{fontSize:isTop?15:14,fontWeight:isTop?900:700,color:"#111",whiteSpace:"nowrap",overflow:"hidden",textOverflow:"ellipsis",display:"block"}}>{t.teamName}</Name>
+              {t.isActive===false&&<span style={{fontSize:8,fontWeight:800,color:RED,border:`1px solid ${RED}`,borderRadius:2,padding:"1px 3px",flexShrink:0}}>INACTIVE</span>}
+            </div>
+            <div style={{fontSize:10,color:"#888",marginTop:1,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{t.userName} · {t.wins}-{t.losses} • <span style={{color:"#1a3a6b"}}>{t.confWins||0}-{t.confLosses||0} CONF</span></div>
+          </div>
+          <div style={{fontSize:isTop?20:17,fontWeight:900,color:isTop?RED:"#111",flexShrink:0}}>{tot}</div>
+          <span style={{fontSize:11,color:"#ccc",flexShrink:0}}>{isOpen?"▲":"▼"}</span>
+        </div>
+        {isOpen&&(
+          <div style={{padding:"2px 14px 14px",display:"grid",gridTemplateColumns:"repeat(4,minmax(0,1fr))",gap:8,borderTop:"1px solid #f0f0f0",paddingTop:10}}>
+            <Stat big label="Back" val={back===0?"—":`-${back}`}/>
+            <Stat big label="Game" val={t.gamePts}/>
+            <Stat big label="Bonus" val={t.rankedBonusPts>0?`+${t.rankedBonusPts}`:"—"}/>
+            <Stat big label="CStand" val={t.confStandPts}/>
+            <Stat big label="CC" val={t.confChampPts}/>
+            <Stat big label="Bowl" val={t.bowlPts}/>
+            <Stat big label="Rec" val={t.recruitingPts}/>
+            <Stat big label="Awd" val={awdFor(t)}/>
+          </div>
+        )}
+      </div>
+    );
+  };
+
+  return (
+    <Card style={{overflow:"hidden"}}>
+      <CardHead>Current Standings</CardHead>
+      {isMobile ? (
+        <div>{sorted.map((t,i)=><MobileCard key={t.teamName} t={t} i={i}/>)}</div>
+      ) : (
+        <div style={{overflowX:"auto"}}>
+          <div style={{display:"grid",gridTemplateColumns:gridCols,gap:8,padding:"10px 12px",background:"#f7f7f7",borderBottom:`3px solid ${RED}`}}>
+            <div style={{fontSize:9,fontWeight:800,color:"#555",textAlign:"center",textTransform:"uppercase",letterSpacing:1}}>Rk</div>
+            <div/>
+            <div style={{fontSize:9,fontWeight:800,color:"#555",textTransform:"uppercase",letterSpacing:1}}>School</div>
+            <div style={{fontSize:9,fontWeight:800,color:"#555",textAlign:"center",textTransform:"uppercase",letterSpacing:1}}>Pts</div>
+            <div style={{fontSize:9,fontWeight:800,color:"#555",textAlign:"center",textTransform:"uppercase",letterSpacing:1}}>Rec</div>
+            <div style={{fontSize:9,fontWeight:800,color:"#1a3a6b",textAlign:"center",textTransform:"uppercase",letterSpacing:1}}>Conf</div>
+            {showFullStats&&<div style={{fontSize:8,fontWeight:800,color:"#999",textAlign:"left",textTransform:"uppercase",letterSpacing:0.5,borderLeft:"1px solid #eee",paddingLeft:8}}>Point Breakdown</div>}
+          </div>
+          {sorted.map((t,i)=><Row key={t.teamName} t={t} i={i}/>)}
+        </div>
+      )}
+    </Card>
+  );
+}
+
 export default function App() {
   const [setup,setSetup] = useState(null);
   const pc = {...DEFAULT_PTS_CONFIG,...(setup?.pointsConfig||{})};
@@ -6857,9 +7001,16 @@ export default function App() {
                 <div style={{fontSize:isMobile?12:14,color:"#555",marginTop:4,fontWeight:600}}>{leagueName} • {year} • {week>13?"Post":`Week ${week}`}</div>
               </div>
             </Card>
+          ):tab==="Standings"?(
+            <Card style={{overflow:"hidden",borderLeft:`5px solid ${RED}`}}>
+              <div style={{padding:isMobile?"14px 14px 12px":"22px 26px 18px"}}>
+                <div style={{fontSize:isMobile?20:32,fontWeight:900,color:"#111",textTransform:"uppercase",letterSpacing:-0.5,lineHeight:1.05}}>Dynasty Standings</div>
+                <div style={{fontSize:isMobile?12:14,color:"#555",marginTop:4,fontWeight:600}}>{leagueName} • Season {season} • {year} • {week>13?"Post":`Week ${week}`}</div>
+              </div>
+            </Card>
           ):(
             <Card style={{padding:isMobile?"10px 12px":"14px 16px",borderLeft:`4px solid ${RED}`}}>
-              <div style={{fontSize:isMobile?15:18,fontWeight:900,color:"#111",textTransform:"uppercase"}}>{tab==="Standings"?"Dynasty Standings":tab==="YearStats"?"Year Stats":tab==="Profiles"?"Player Profiles":tab==="Redzone"?"Dynasty RedZone":tab==="Discord"?"Join Discord & Voice Chat":"League Rules"}</div>
+              <div style={{fontSize:isMobile?15:18,fontWeight:900,color:"#111",textTransform:"uppercase"}}>{tab==="YearStats"?"Year Stats":tab==="Profiles"?"Player Profiles":tab==="Redzone"?"Dynasty RedZone":tab==="Discord"?"Join Discord & Voice Chat":"League Rules"}</div>
               <div style={{fontSize:10,color:"#888",marginTop:2}}>{leagueName} · S{season} · {year} · {week>13?"Post":`Wk ${week}`}</div>
             </Card>
           )}
@@ -6945,76 +7096,64 @@ export default function App() {
           </>)}
 
           {tab==="Standings"&&(<>
-            {/* Latest article teaser — shown whenever the RightRail (with Top Headlines) isn't
-                rendered, i.e. below the true-desktop showSidebars threshold */}
-            {!showSidebars&&articles.length>0&&(
-              <div onClick={()=>setActiveArticle(articles[0])} style={{background:"#111",borderRadius:2,padding:"12px 14px",cursor:"pointer",display:"flex",justifyContent:"space-between",alignItems:"center",gap:10}}>
-                <div style={{flex:1,minWidth:0}}>
-                  <div style={{display:"flex",alignItems:"center",gap:6,marginBottom:4}}>
-                    {articles[0].reporterAvatar&&<div style={{width:20,height:20,borderRadius:"50%",background:articles[0].reporterColor||RED,display:"flex",alignItems:"center",justifyContent:"center",fontSize:8,fontWeight:800,color:"#fff",flexShrink:0}}>{articles[0].reporterAvatar}</div>}
-                    <div style={{fontSize:9,color:articles[0].reporterColor||RED,fontWeight:700,letterSpacing:1,textTransform:"uppercase"}}>{articles[0].reporter} · {articles[0].label}</div>
-                  </div>
-                  <div style={{fontSize:13,fontWeight:700,color:"#fff",lineHeight:1.4,display:"-webkit-box",WebkitLineClamp:2,WebkitBoxOrient:"vertical",overflow:"hidden"}}>{articleHeadline(articles[0].text)}</div>
-                </div>
-                <div style={{color:RED,fontWeight:800,fontSize:12,flexShrink:0}}>READ →</div>
-              </div>
-            )}
+            <StandingsBoard sorted={sorted} setupRows={setup?.rows} leader={leader}/>
 
-            <Card style={{overflow:"hidden"}}>
-              <CardHead>Current Standings</CardHead>
-              {!entries.length
-                ?<div style={{padding:"40px 20px",textAlign:"center"}}><div style={{fontSize:36,marginBottom:12}}>🏈</div><div style={{fontSize:16,fontWeight:900,color:"#111",marginBottom:6}}>Season Starting Soon</div><div style={{fontSize:12,color:"#888"}}>The commissioner is setting up the dynasty.</div></div>
-                :isMobile?(
-                  <div>
-                    {sorted.map((t,i)=><StandingsRow key={t.teamName} t={t} i={i} setupRows={setup?.rows} RED={RED}/>)}
-                    <div style={{padding:"8px 12px",fontSize:10,color:"#aaa",textAlign:"center",borderTop:"1px solid #f0f0f0"}}>Full point breakdown (game, bonus, bowl, etc.) shown on desktop</div>
-                  </div>
-                ):(
-                <div style={{overflowX:"auto"}}>
-                  <table style={{width:"100%",borderCollapse:"collapse",fontSize:13}}>
-                    <thead><tr style={{background:"#f7f7f7",borderBottom:`3px solid ${RED}`}}>
-                      {["RK","SCHOOL","PTS","BACK","OVR","CONF","GAME","BONUS","CSTAND","CC","BOWL","REC","AWD"].map(h=>(
-                        <th key={h} style={{padding:"11px 9px",textAlign:h==="SCHOOL"?"left":"center",color:h==="CONF"?"#1a3a6b":"#555",fontSize:9,letterSpacing:1.1,textTransform:"uppercase",fontWeight:800,whiteSpace:"nowrap",borderRight:"1px solid #eee"}}>{h}</th>
-                      ))}
-                    </tr></thead>
-                    <tbody>{sorted.map((t,i)=>{const tot=calcTotal(t);const beh=leader-tot;return(
-                      <tr key={t.teamName} style={{borderBottom:"1px solid #eee",background:i===0?"#fff5f5":i%2===0?"#fafafa":"#fff"}}>
-                        <td style={{padding:"12px 9px",textAlign:"center",fontWeight:900,fontSize:i===0?17:14,color:i===0?RED:"#bbb",borderRight:"1px solid #eee",borderLeft:i===0?`4px solid ${RED}`:"4px solid transparent"}}>{i+1}</td>
-                        <td style={{padding:"12px 9px",fontWeight:i===0?800:600,color:"#111",whiteSpace:"nowrap",borderRight:"1px solid #eee",maxWidth:150,overflow:"hidden",textOverflow:"ellipsis"}}><div style={{display:"flex",alignItems:"center",gap:8}}>{(()=>{const imgs=getPlayerImages(setup?.rows,t.userId,t.userName);return imgs.teamLogo?<img src={imgs.teamLogo} alt="" style={{width:26,height:26,objectFit:"contain",flexShrink:0}} onError={e=>{e.target.style.display="none";}}/>:null;})()}<div><div style={{display:"flex",alignItems:"center",gap:5}}><Name userId={t.userId} userName={t.userName}>{t.teamName}</Name>{t.isActive===false&&<span style={{fontSize:8,fontWeight:800,color:RED,border:`1px solid ${RED}`,borderRadius:2,padding:"1px 3px",flexShrink:0}}>INACTIVE</span>}</div><div style={{fontSize:11,color:"#888",fontWeight:400}}>{t.userName}</div></div></div></td>
-                        <td style={{padding:"12px 9px",textAlign:"center",fontWeight:900,color:i===0?RED:"#111",fontSize:i===0?19:16,background:i===0?"#fff0f0":"transparent",borderRight:"2px solid #ddd"}}>{tot}</td>
-                        <td style={{padding:"12px 9px",textAlign:"center",color:beh===0?"#007a00":RED,fontWeight:700,fontSize:12,borderRight:"2px solid #ddd",whiteSpace:"nowrap"}}>{beh===0?"-":`-${beh}`}</td>
-                        <td style={{padding:"12px 9px",textAlign:"center",color:"#555",fontWeight:600,fontSize:12,borderRight:"1px solid #eee",whiteSpace:"nowrap"}}>{t.wins}-{t.losses}</td>
-                        <td style={{padding:"12px 9px",textAlign:"center",color:"#1a3a6b",fontWeight:700,fontSize:12,borderRight:"2px solid #ddd",whiteSpace:"nowrap"}}>{(t.confWins||0)}-{(t.confLosses||0)}</td>
-                        <td style={{padding:"12px 9px",textAlign:"center",borderRight:"1px solid #eee"}}>{t.gamePts}</td>
-                        <td style={{padding:"12px 9px",textAlign:"center",color:"#cc7700",fontWeight:700,borderRight:"1px solid #eee"}}>{t.rankedBonusPts>0?`+${t.rankedBonusPts}`:"—"}</td>
-                        <td style={{padding:"12px 9px",textAlign:"center",borderRight:"1px solid #eee"}}>{t.confStandPts}</td>
-                        <td style={{padding:"12px 9px",textAlign:"center",borderRight:"1px solid #eee"}}>{t.confChampPts}</td>
-                        <td style={{padding:"12px 9px",textAlign:"center",borderRight:"1px solid #eee"}}>{t.bowlPts}</td>
-                        <td style={{padding:"12px 9px",textAlign:"center",borderRight:"1px solid #eee"}}>{t.recruitingPts}</td>
-                        <td style={{padding:"12px 9px",textAlign:"center"}}>{t.prestigePts+t.heismanPts}</td>
-                      </tr>
-                    );})}</tbody>
-                  </table>
-                </div>)
-              }
-            </Card>
-
-            {/* Articles feed — same reasoning as the teaser above */}
-            {!showSidebars&&articles.length>1&&(
+            {/* Supporting info — the true right/left sidebars only render at >=1024px, so mirror
+                their content below the board on mobile/tablet: Top Headlines, Dynasty Leader,
+                Dynasty Info, Quick Links, in that order — same pattern already established for
+                History's and Schedule's mobile fallbacks. */}
+            {!showSidebars&&(
               <Card style={{overflow:"hidden"}}>
-                <CardHead>Latest Articles</CardHead>
+                <CardHead>Top Headlines</CardHead>
                 <div style={{padding:"4px 0"}}>
+                  {sorted.length===0&&<div style={{padding:"12px",fontSize:12,color:"#888",fontStyle:"italic"}}>No standings yet.</div>}
                   {articles.slice(0,5).map(a=>(
-                    <div key={a.id} onClick={()=>setActiveArticle(a)} style={{padding:"10px 12px",borderBottom:"1px solid #f0f0f0",display:"flex",alignItems:"center",gap:10,cursor:"pointer"}}>
+                    <div key={a.id} onClick={()=>setActiveArticle(a)} style={{padding:"12px 14px",borderBottom:"1px solid #f0f0f0",cursor:"pointer",display:"flex",gap:12,alignItems:"flex-start"}}>
                       {a.imageUrl
-                      ? <img src={a.imageUrl} alt="" style={{width:44,height:44,borderRadius:4,objectFit:"cover",flexShrink:0}} onError={e=>{e.target.style.display="none";}}/>
-                      : <div style={{width:44,height:44,borderRadius:4,background:a.reporterColor||RED,display:"flex",alignItems:"center",justifyContent:"center",fontSize:12,fontWeight:800,color:"#fff",flexShrink:0}}>{a.reporterAvatar||"DC"}</div>}
+                        ? <img src={a.imageUrl} alt="" style={{width:52,height:52,borderRadius:3,objectFit:"cover",flexShrink:0}} onError={e=>{e.target.style.display="none";}}/>
+                        : (a.reporterAvatar&&<div style={{width:52,height:52,borderRadius:3,background:a.reporterColor||RED,display:"flex",alignItems:"center",justifyContent:"center",fontSize:13,fontWeight:800,color:"#fff",flexShrink:0}}>{a.reporterAvatar}</div>)}
                       <div style={{flex:1,minWidth:0}}>
-                        <div style={{fontSize:10,color:a.reporterColor||RED,fontWeight:700,textTransform:"uppercase",letterSpacing:0.5}}>{a.label} · S{a.season} Wk{a.week}</div>
-                        <div style={{fontSize:12,fontWeight:700,color:"#111",display:"-webkit-box",WebkitLineClamp:2,WebkitBoxOrient:"vertical",overflow:"hidden",lineHeight:1.35,marginTop:1}}>{articleHeadline(a.text)}</div>
+                        <div style={{fontSize:10,color:a.reporterColor||RED,fontWeight:700,letterSpacing:0.5,textTransform:"uppercase",marginBottom:4}}>{a.label} · S{a.season} Wk{a.week}</div>
+                        <div style={{fontSize:13,fontWeight:700,color:"#111",lineHeight:1.4,display:"-webkit-box",WebkitLineClamp:2,WebkitBoxOrient:"vertical",overflow:"hidden"}}>{articleHeadline(a.text)}</div>
                       </div>
-                      <div style={{color:"#ccc",fontSize:16,flexShrink:0}}>›</div>
                     </div>
+                  ))}
+                  {articles.length===0&&<div style={{padding:"12px 14px",fontSize:11,color:"#888",fontStyle:"italic"}}>Generate content to see articles here</div>}
+                </div>
+              </Card>
+            )}
+            {!showSidebars&&sorted.length>0&&(
+              <Card style={{overflow:"hidden"}}>
+                <CardHead bg={RED}>Dynasty Leader</CardHead>
+                <div style={{padding:"12px 14px",display:"flex",alignItems:"center",gap:12}}>
+                  {(()=>{const imgs=getPlayerImages(setup?.rows,sorted[0].userId,sorted[0].userName);return imgs.teamLogo?<img src={imgs.teamLogo} alt="" style={{width:40,height:40,objectFit:"contain",flexShrink:0}} onError={e=>{e.target.style.display="none";}}/>:null;})()}
+                  <div style={{flex:1,minWidth:0}}>
+                    <div style={{fontSize:15,fontWeight:800,color:"#111",overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{sorted[0].teamName}</div>
+                    <div style={{fontSize:11,color:"#888",marginTop:1}}>{sorted[0].wins}W - {sorted[0].losses}L</div>
+                  </div>
+                  <div style={{fontSize:24,fontWeight:900,color:RED,flexShrink:0}}>{calcTotal(sorted[0])}</div>
+                </div>
+              </Card>
+            )}
+            {!showSidebars&&(
+              <Card style={{overflow:"hidden"}}>
+                <CardHead>Dynasty Info</CardHead>
+                <div style={{padding:"10px 0"}}>
+                  {[["Season",season],["Year",year],["Week",week>13?"Post":week],["Teams",entries.length]].map(([l,v])=>
+                    <div key={l} style={{display:"flex",justifyContent:"space-between",alignItems:"center",padding:"9px 16px",borderBottom:"1px solid #f5f5f5"}}>
+                      <span style={{fontSize:12,color:"#888",fontWeight:600,textTransform:"uppercase",letterSpacing:0.5}}>{l}</span>
+                      <span style={{fontSize:14,fontWeight:800,color:"#111"}}>{v}</span>
+                    </div>
+                  )}
+                </div>
+              </Card>
+            )}
+            {!showSidebars&&(
+              <Card style={{overflow:"hidden"}}>
+                <CardHead>Quick Links</CardHead>
+                <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:1,background:"#f0f0f0",padding:1}}>
+                  {NAV_TABS.map(([label,val])=>(
+                    <button key={val} onClick={()=>setTab(val)} style={{background:"#fff",border:"none",padding:"0 10px",minHeight:44,display:"flex",alignItems:"center",gap:8,cursor:"pointer",fontFamily:ff,fontSize:12,fontWeight:700,color:RED,textAlign:"left"}}>🏈 {label}</button>
                   ))}
                 </div>
               </Card>
