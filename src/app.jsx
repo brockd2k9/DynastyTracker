@@ -3848,7 +3848,7 @@ function SetupPanel({entries,setup,postSeasonInputs,setPSI,handleStart,setCommis
 
       {isLive&&setup?.rows?.length>0&&<Card><CardHead bg="#333">Active Teams</CardHead>
         <div style={{padding:"8px 0"}}>
-          <div style={{padding:"4px 14px 8px",fontSize:11,color:"#888",lineHeight:1.5}}>Deactivated teams are hidden from current season standings, schedule, and results. They still appear in past season history and player profiles.</div>
+          <div style={{padding:"4px 14px 8px",fontSize:11,color:"#888",lineHeight:1.5}}>Deactivated teams stop getting new schedule matchups and can't have new results entered, but keep their record and stay visible in the current season standings — marked Inactive. They still appear in past season history and player profiles.</div>
           {setup.rows.map(r=>{const isActive=r.active!==false;return(
             <div key={r.teamName} style={{display:"flex",alignItems:"center",gap:10,padding:"8px 14px",borderBottom:"1px solid #f5f5f5"}}>
               <div style={{flex:1}}>
@@ -5955,8 +5955,12 @@ export default function App() {
 
   const activeUserIds=new Set((setup?.rows||[]).filter(r=>r.active!==false&&r.userId).map(r=>r.userId));
   const activeUserNames=new Set((setup?.rows||[]).filter(r=>r.active!==false).map(r=>r.userName));
-  const activeEntries=entries.filter(e=>(e.userId&&activeUserIds.has(e.userId))||(!e.userId&&activeUserNames.has(e.userName)));
-  const sorted=[...activeEntries].sort((a,b)=>calcTotal(b)-calcTotal(a));
+  const isEntryActive=e=>(e.userId&&activeUserIds.has(e.userId))||(!e.userId&&activeUserNames.has(e.userName));
+  const activeEntries=entries.filter(isEntryActive);
+  // Standings keep deactivated teams (they already have games on the books and should stay
+  // visible in the standings/website), but the schedule and results entry stay active-only so
+  // a quitter never gets assigned — or logs — a future game.
+  const sorted=[...entries].sort((a,b)=>calcTotal(b)-calcTotal(a)).map(e=>({...e,isActive:isEntryActive(e)}));
   const leader=sorted[0]?calcTotal(sorted[0]):0;
   const teamNames=activeEntries.map(e=>e.teamName);
   const leagueName=setup?.leagueName||"Dynasty Central";
@@ -5968,8 +5972,7 @@ export default function App() {
   // safeguards is respected with explicit spacing instead of racing it.
   async function triggerAutoWeeklyArticles(completedWeek, newWeek, entriesAfter) {
     if (articles.some(a=>a.autoWeek===completedWeek && a.autoSeason===season)) return;
-    const activeAfter = entriesAfter.filter(e=>(e.userId&&activeUserIds.has(e.userId))||(!e.userId&&activeUserNames.has(e.userName)));
-    const sortedAfter = [...activeAfter].sort((a,b)=>calcTotal(b)-calcTotal(a));
+    const sortedAfter = [...entriesAfter].sort((a,b)=>calcTotal(b)-calcTotal(a));
     const leaderAfter = sortedAfter[0]?calcTotal(sortedAfter[0]):0;
     const leagueNameLocal = setup?.leagueName||"Dynasty Central";
     const cameoSlot = completedWeek % 3;
@@ -6023,7 +6026,7 @@ export default function App() {
   async function postWeekRecapToGroupMe(completedWeek, entriesAfter) {
     try {
       const activeAfter = entriesAfter.filter(e=>(e.userId&&activeUserIds.has(e.userId))||(!e.userId&&activeUserNames.has(e.userName)));
-      const sortedAfter = [...activeAfter].sort((a,b)=>calcTotal(b)-calcTotal(a));
+      const sortedAfter = [...entriesAfter].sort((a,b)=>calcTotal(b)-calcTotal(a));
       const weekGames = (setup?.gameArchive||[]).filter(g=>g.year===Number(year)&&g.week===Number(completedWeek));
       const gameLines = weekGames.length
         ? weekGames.map(g=>`${g.team1.name} ${g.team1.score}-${g.team2.score} ${g.team2.name}`).join("; ")
@@ -6356,7 +6359,7 @@ export default function App() {
                   <tbody>{sorted.map((t,i)=>{const tot=calcTotal(t);const beh=leader-tot;return(
                     <tr key={t.teamName} style={{borderBottom:"1px solid #eee",background:i===0?"#fff8f8":i%2===0?"#fafafa":"#fff"}}>
                       <td style={{padding:"9px 8px",textAlign:"center",fontWeight:900,color:i===0?RED:"#bbb"}}>{i+1}</td>
-                      <td style={{padding:"9px 8px",fontWeight:i===0?800:600,color:"#111",whiteSpace:"nowrap"}}><div style={{display:"flex",alignItems:"center",gap:6}}>{(()=>{const imgs=getPlayerImages(setup?.rows,t.userId,t.userName);return imgs.teamLogo?<img src={imgs.teamLogo} alt="" style={{width:22,height:22,objectFit:"contain",flexShrink:0}} onError={e=>{e.target.style.display="none";}}/>:null;})()}<div><Name userId={t.userId} userName={t.userName}>{t.teamName}</Name><div style={{fontSize:10,color:"#888"}}>{t.userName}</div></div></div></td>
+                      <td style={{padding:"9px 8px",fontWeight:i===0?800:600,color:"#111",whiteSpace:"nowrap"}}><div style={{display:"flex",alignItems:"center",gap:6}}>{(()=>{const imgs=getPlayerImages(setup?.rows,t.userId,t.userName);return imgs.teamLogo?<img src={imgs.teamLogo} alt="" style={{width:22,height:22,objectFit:"contain",flexShrink:0}} onError={e=>{e.target.style.display="none";}}/>:null;})()}<div><Name userId={t.userId} userName={t.userName}>{t.teamName}</Name><div style={{fontSize:10,color:"#888"}}>{t.userName}{t.isActive===false&&<span style={{marginLeft:6,color:RED,fontWeight:800}}>INACTIVE</span>}</div></div></div></td>
                       <td style={{padding:"9px 8px",textAlign:"center",fontWeight:900,color:i===0?RED:"#111",fontSize:15}}>{tot}</td>
                       <td style={{padding:"9px 8px",textAlign:"center",color:beh===0?"#007a00":RED,fontWeight:700}}>{beh===0?"-":`-${beh}`}</td>
                       <td style={{padding:"9px 8px",textAlign:"center",color:"#555",fontWeight:600,fontSize:12}}>{t.wins}-{t.losses}</td>
@@ -6413,7 +6416,7 @@ export default function App() {
                     <tbody>{sorted.map((t,i)=>{const tot=calcTotal(t);const beh=leader-tot;return(
                       <tr key={t.teamName} style={{borderBottom:"1px solid #eee",background:i===0?"#fff8f8":i%2===0?"#fafafa":"#fff"}}>
                         <td style={{padding:isMobile?"8px 6px":"10px 7px",textAlign:"center",fontWeight:900,fontSize:isMobile?13:14,color:i===0?RED:"#bbb",borderRight:"1px solid #eee"}}>{i+1}</td>
-                        <td style={{padding:isMobile?"8px 6px":"10px 7px",fontWeight:i===0?800:600,color:"#111",whiteSpace:"nowrap",borderRight:"1px solid #eee",maxWidth:isMobile?90:140,overflow:"hidden",textOverflow:"ellipsis"}}><div style={{display:"flex",alignItems:"center",gap:6}}>{(()=>{const imgs=getPlayerImages(setup?.rows,t.userId,t.userName);return imgs.teamLogo?<img src={imgs.teamLogo} alt="" style={{width:22,height:22,objectFit:"contain",flexShrink:0}} onError={e=>{e.target.style.display="none";}}/>:null;})()}<div><Name userId={t.userId} userName={t.userName}>{t.teamName}</Name>{!isMobile&&<div style={{fontSize:10,color:"#888",fontWeight:400}}>{t.userName}</div>}</div></div></td>
+                        <td style={{padding:isMobile?"8px 6px":"10px 7px",fontWeight:i===0?800:600,color:"#111",whiteSpace:"nowrap",borderRight:"1px solid #eee",maxWidth:isMobile?90:140,overflow:"hidden",textOverflow:"ellipsis"}}><div style={{display:"flex",alignItems:"center",gap:6}}>{(()=>{const imgs=getPlayerImages(setup?.rows,t.userId,t.userName);return imgs.teamLogo?<img src={imgs.teamLogo} alt="" style={{width:22,height:22,objectFit:"contain",flexShrink:0}} onError={e=>{e.target.style.display="none";}}/>:null;})()}<div><div style={{display:"flex",alignItems:"center",gap:5}}><Name userId={t.userId} userName={t.userName}>{t.teamName}</Name>{t.isActive===false&&<span style={{fontSize:8,fontWeight:800,color:RED,border:`1px solid ${RED}`,borderRadius:2,padding:"1px 3px",flexShrink:0}}>INACTIVE</span>}</div>{!isMobile&&<div style={{fontSize:10,color:"#888",fontWeight:400}}>{t.userName}</div>}</div></div></td>
                         <td style={{padding:isMobile?"8px 6px":"10px 7px",textAlign:"center",fontWeight:900,color:i===0?RED:"#111",fontSize:isMobile?14:16,background:i===0?"#fff0f0":"transparent",borderRight:"2px solid #ddd"}}>{tot}</td>
                         <td style={{padding:isMobile?"8px 6px":"10px 7px",textAlign:"center",color:beh===0?"#007a00":RED,fontWeight:700,fontSize:isMobile?11:12,borderRight:"2px solid #ddd",whiteSpace:"nowrap"}}>{beh===0?"-":`-${beh}`}</td>
                         <td style={{padding:isMobile?"8px 6px":"10px 7px",textAlign:"center",color:"#555",fontWeight:600,fontSize:isMobile?11:12,borderRight:"1px solid #eee",whiteSpace:"nowrap"}}>{t.wins}-{t.losses}</td>
