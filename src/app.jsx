@@ -2421,65 +2421,102 @@ function LeagueRecordBook({history,currentEntries,season,year,permanentUsers,set
   // "2026" is ambiguous once a year holds more than one finalized season — labels it "2026 S1"
   // when the season number is known (see resolveSeasonNum above), else fall back to just the year.
   const ys=(yr,seasonNum)=>seasonNum?`${yr} S${seasonNum}`:String(yr);
-  const RR=({label,holder,val,sub})=>{const u=allUsers.find(u=>u.userName===holder);return(<div style={{display:"flex",justifyContent:"space-between",alignItems:"center",padding:"9px 0",borderBottom:"1px solid #f0f0f0"}}><span style={{fontSize:12,color:"#555",flex:1}}>{label}</span><div style={{textAlign:"right",flexShrink:0}}><div style={{fontSize:13,color:"#111",fontWeight:700}}><Name userId={u?.userId} userName={holder}>{holder}</Name></div><div style={{fontSize:11,color:RED,fontWeight:700}}>{val}</div>{sub&&<div style={{fontSize:10,color:"#aaa"}}>{sub}</div>}</div></div>);};
-  return(
-    <Card style={{overflow:"hidden"}}><CardHead bg="#111">📖 League Record Book</CardHead>
-      <div style={{padding:"10px 14px 4px",display:"flex",alignItems:"center",gap:8,flexWrap:"wrap",borderBottom:"1px solid #f0f0f0"}}>
-        <span style={{fontSize:11,fontWeight:700,color:"#555",textTransform:"uppercase",letterSpacing:0.5}}>Filter:</span>
-        {[null,...[...new Set(history.map(s=>s.year))].sort((a,b)=>b-a)].map(y=>(
-          <button key={y??'all'} onClick={()=>setLrYear(y)} style={{padding:"4px 10px",borderRadius:2,border:"1px solid",borderColor:lrYear===y?RED:"#ddd",background:lrYear===y?RED:"#fff",color:lrYear===y?"#fff":"#555",cursor:"pointer",fontSize:11,fontFamily:ff,fontWeight:700}}>{y==null?"All Time":y}</button>
-        ))}
+  // Record "accomplishment" card — replaces the old RR spreadsheet-row renderer. Same data
+  // contract (label/holder/val/sub) so no record value/logic changes, just presentation.
+  const RC=({label,holder,val,sub,big})=>{
+    const u=allUsers.find(u=>u.userName===holder);
+    return(
+      <div style={{border:"1px solid #e5e5e5",borderTop:`3px solid ${RED}`,borderRadius:2,background:"#fff",padding:big?"18px 20px":"12px 14px",display:"flex",flexDirection:"column",gap:2,transition:"box-shadow 0.15s"}}
+        onMouseEnter={e=>{e.currentTarget.style.boxShadow="0 2px 8px rgba(0,0,0,0.08)";}}
+        onMouseLeave={e=>{e.currentTarget.style.boxShadow="none";}}>
+        <div style={{fontSize:big?10:9,fontWeight:800,color:"#999",textTransform:"uppercase",letterSpacing:1}}>{label}</div>
+        <div style={{fontSize:big?15:13,fontWeight:800,color:"#111"}}><Name userId={u?.userId} userName={holder} style={{textDecoration:"none"}}>{holder}</Name></div>
+        <div style={{fontSize:big?34:20,fontWeight:900,color:RED,lineHeight:1,marginTop:2}}>{val}</div>
+        {sub&&<div style={{fontSize:10,color:"#aaa",marginTop:2}}>{sub}</div>}
       </div>
-      <div style={{padding:"4px 14px 6px",fontSize:10,color:"#aaa",fontStyle:"italic",borderBottom:"1px solid #f5f5f5"}}>Rivalry and game records are user vs user matchups only. Win streaks count all games.</div>
-      <div style={{padding:"4px 14px 10px",display:"grid",gridTemplateColumns:isMobile?"1fr":"1fr 1fr",gap:isMobile?"0":"0 24px"}}>
-        <div style={{gridColumn:"1/-1",padding:"6px 0 2px",fontSize:10,fontWeight:800,color:"#aaa",textTransform:"uppercase",letterSpacing:1,borderBottom:"1px solid #f0f0f0",marginBottom:2}}>CAREER RECORDS</div>
-        {lr.mostWins&&<RR label="Most Wins" holder={lr.mostWins[0]} val={lr.mostWins[1].totalWins+"W"}/>}
-        {lr.mostLosses&&<RR label="Most Losses" holder={lr.mostLosses[0]} val={lr.mostLosses[1].totalLosses+"L"}/>}
-        {lr.mostPts&&<RR label="Most Pts" holder={lr.mostPts[0]} val={String(lr.mostPts[1].totalPts)}/>}
-        {lr.mostChamps&&<RR label="Most Titles" holder={lr.mostChamps[0]} val={lr.mostChamps[1].championships+"×"}/>}
-        {lr.bestWinPct&&<RR label="Best Win%" holder={lr.bestWinPct[0]} val={lr.bestWinPct[1].winPct+"%"}/>}
-        {lr.mostRW&&<RR label="Most Ranked Wins" holder={lr.mostRW[0]} val={lr.mostRW[1].rankedWins+"W"}/>}
-        {lr.mostBowlWins&&lr.mostBowlWins[1].bowlWins>0&&<RR label="Most Bowl Wins" holder={lr.mostBowlWins[0]} val={lr.mostBowlWins[1].bowlWins+"W"}/>}
-        {lr.mostPlayoffApp&&(lr.mostPlayoffApp[1].careerPlayoffWins+lr.mostPlayoffApp[1].careerPlayoffLosses)>0&&<RR label="Most Playoff Games" holder={lr.mostPlayoffApp[0]} val={(lr.mostPlayoffApp[1].careerPlayoffWins+lr.mostPlayoffApp[1].careerPlayoffLosses)+"×"}/>}
-        {lr.mostConfApp?.n>0&&<RR label="Most Conf Champ Apps" holder={lr.mostConfApp.name} val={lr.mostConfApp.n+"×"}/>}
-        {lr.mostNattyApp?.n>0&&<RR label="Most Natty Apps" holder={lr.mostNattyApp.name} val={lr.mostNattyApp.n+"×"}/>}
-        <div style={{gridColumn:"1/-1",padding:"10px 0 2px",fontSize:10,fontWeight:800,color:"#aaa",textTransform:"uppercase",letterSpacing:1,borderBottom:"1px solid #f0f0f0",marginBottom:2}}>PASSING RECORDS</div>
-        {lr.mostPassAtt&&lr.mostPassAtt[1].att>0&&<RR label="Pass Attempts" holder={lr.mostPassAtt[0]} val={lr.mostPassAtt[1].att+" ATT"}/>}
-        {lr.mostPassComp&&lr.mostPassComp[1].comp>0&&<RR label="Pass Completions" holder={lr.mostPassComp[0]} val={lr.mostPassComp[1].comp+" COMP"}/>}
-        {lr.bestCompPct&&<RR label="Completion Percentage" holder={lr.bestCompPct[0]} val={((lr.bestCompPct[1].comp/lr.bestCompPct[1].att)*100).toFixed(1)+"%"}/>}
-        {lr.mostPassTD&&lr.mostPassTD[1].tds>0&&<RR label="Passing Touchdowns" holder={lr.mostPassTD[0]} val={lr.mostPassTD[1].tds+" TD"}/>}
-        {lr.mostInt&&lr.mostInt[1].int>0&&<RR label="Interceptions" holder={lr.mostInt[0]} val={lr.mostInt[1].int+" INT"}/>}
-        {lr.bestYPC&&<RR label="Yards Per Completion" holder={lr.bestYPC[0]} val={(lr.bestYPC[1].yds/lr.bestYPC[1].comp).toFixed(1)}/>}
-        <div style={{gridColumn:"1/-1",padding:"10px 0 2px",fontSize:10,fontWeight:800,color:"#aaa",textTransform:"uppercase",letterSpacing:1,borderBottom:"1px solid #f0f0f0",marginBottom:2}}>RUSHING RECORDS</div>
-        {lr.mostRushAtt&&lr.mostRushAtt[1].att>0&&<RR label="Rushing Attempts" holder={lr.mostRushAtt[0]} val={lr.mostRushAtt[1].att+" ATT"}/>}
-        {lr.mostRushYds&&lr.mostRushYds[1].yds>0&&<RR label="Rushing Yards" holder={lr.mostRushYds[0]} val={lr.mostRushYds[1].yds.toLocaleString()+" YDS"}/>}
-        {lr.mostRushTD&&lr.mostRushTD[1].tds>0&&<RR label="Rushing Touchdowns" holder={lr.mostRushTD[0]} val={lr.mostRushTD[1].tds+" TD"}/>}
-        {lr.bestYPCarry&&<RR label="Yards Per Carry" holder={lr.bestYPCarry[0]} val={(lr.bestYPCarry[1].yds/lr.bestYPCarry[1].att).toFixed(1)}/>}
-        <div style={{gridColumn:"1/-1",padding:"10px 0 2px",fontSize:10,fontWeight:800,color:"#aaa",textTransform:"uppercase",letterSpacing:1,borderBottom:"1px solid #f0f0f0",marginBottom:2}}>SINGLE SEASON RECORDS</div>
-        {lr.bestSeason&&<RR label="Best Season (UvU)" holder={lr.bestSeason.name} val={`${lr.bestSeason.w}W-${lr.bestSeason.l}L`} sub={`${lr.bestSeason.teamName} · ${ys(lr.bestSeason.year,lr.bestSeason.seasonNum)}`}/>}
-        {lr.worstSeason&&<RR label="Worst Season (UvU)" holder={lr.worstSeason.name} val={`${lr.worstSeason.w}W-${lr.worstSeason.l}L`} sub={`${lr.worstSeason.teamName} · ${ys(lr.worstSeason.year,lr.worstSeason.seasonNum)}`}/>}
-        {lr.mostSeasonLosses&&lr.mostSeasonLosses.l>0&&<RR label="Most Losses in a Season" holder={lr.mostSeasonLosses.name} val={lr.mostSeasonLosses.l+"L"} sub={`${lr.mostSeasonLosses.teamName} · ${ys(lr.mostSeasonLosses.year,lr.mostSeasonLosses.seasonNum)}`}/>}
-        {lr.ssMostPassAtt&&lr.ssMostPassAtt.att>0&&<RR label="Pass Attempts (Season)" holder={lr.ssMostPassAtt.name} val={lr.ssMostPassAtt.att+" ATT"} sub={ys(lr.ssMostPassAtt.year,lr.ssMostPassAtt.seasonNum)}/>}
-        {lr.ssMostPassComp&&lr.ssMostPassComp.comp>0&&<RR label="Pass Completions (Season)" holder={lr.ssMostPassComp.name} val={lr.ssMostPassComp.comp+" COMP"} sub={ys(lr.ssMostPassComp.year,lr.ssMostPassComp.seasonNum)}/>}
-        {lr.ssBestCompPct&&<RR label="Completion Percentage (Season)" holder={lr.ssBestCompPct.name} val={((lr.ssBestCompPct.comp/lr.ssBestCompPct.att)*100).toFixed(1)+"%"} sub={ys(lr.ssBestCompPct.year,lr.ssBestCompPct.seasonNum)}/>}
-        {lr.ssMostPassTD&&lr.ssMostPassTD.tds>0&&<RR label="Passing Touchdowns (Season)" holder={lr.ssMostPassTD.name} val={lr.ssMostPassTD.tds+" TD"} sub={ys(lr.ssMostPassTD.year,lr.ssMostPassTD.seasonNum)}/>}
-        {lr.ssMostInt&&lr.ssMostInt.int>0&&<RR label="Interceptions (Season)" holder={lr.ssMostInt.name} val={lr.ssMostInt.int+" INT"} sub={ys(lr.ssMostInt.year,lr.ssMostInt.seasonNum)}/>}
-        {lr.ssBestYPC&&<RR label="Yards Per Completion (Season)" holder={lr.ssBestYPC.name} val={(lr.ssBestYPC.yds/lr.ssBestYPC.comp).toFixed(1)} sub={ys(lr.ssBestYPC.year,lr.ssBestYPC.seasonNum)}/>}
-        {lr.ssMostRushAtt&&lr.ssMostRushAtt.att>0&&<RR label="Rushing Attempts (Season)" holder={lr.ssMostRushAtt.name} val={lr.ssMostRushAtt.att+" ATT"} sub={ys(lr.ssMostRushAtt.year,lr.ssMostRushAtt.seasonNum)}/>}
-        {lr.ssMostRushYds&&lr.ssMostRushYds.yds>0&&<RR label="Rushing Yards (Season)" holder={lr.ssMostRushYds.name} val={lr.ssMostRushYds.yds.toLocaleString()+" YDS"} sub={ys(lr.ssMostRushYds.year,lr.ssMostRushYds.seasonNum)}/>}
-        {lr.ssMostRushTD&&lr.ssMostRushTD.tds>0&&<RR label="Rushing Touchdowns (Season)" holder={lr.ssMostRushTD.name} val={lr.ssMostRushTD.tds+" TD"} sub={ys(lr.ssMostRushTD.year,lr.ssMostRushTD.seasonNum)}/>}
-        {lr.ssBestYPCarry&&<RR label="Yards Per Carry (Season)" holder={lr.ssBestYPCarry.name} val={(lr.ssBestYPCarry.yds/lr.ssBestYPCarry.att).toFixed(1)} sub={ys(lr.ssBestYPCarry.year,lr.ssBestYPCarry.seasonNum)}/>}
-        {lr.ssMost4thQComebacks&&<RR label="4th Quarter Comebacks (Season)" holder={lr.ssMost4thQComebacks.name} val={lr.ssMost4thQComebacks.n+"×"} sub={ys(lr.ssMost4thQComebacks.year,lr.ssMost4thQComebacks.seasonNum)}/>}
-        <div style={{gridColumn:"1/-1",padding:"10px 0 2px",fontSize:10,fontWeight:800,color:"#aaa",textTransform:"uppercase",letterSpacing:1,borderBottom:"1px solid #f0f0f0",marginBottom:2}}>WIN STREAKS</div>
-        {lr.bestStreakAllTime&&<RR label="Longest Win Streak All Time" holder={lr.bestStreakAllTime.name} val={lr.bestStreakAllTime.data.len+"G"} sub={lr.bestStreakAllTime.data.spanLabel?`${lr.bestStreakAllTime.data.teamName} · ${lr.bestStreakAllTime.data.spanLabel}`:""}/>}
-        {lr.bestStreakSeason&&<RR label="Longest Win Streak (Season)" holder={lr.bestStreakSeason.name} val={lr.bestStreakSeason.data.len+"G"} sub={`${lr.bestStreakSeason.data.teamName} · ${ys(lr.bestStreakSeason.data.year,lr.bestStreakSeason.data.seasonNum)}`}/>}
-        <div style={{gridColumn:"1/-1",padding:"10px 0 2px",fontSize:10,fontWeight:800,color:"#aaa",textTransform:"uppercase",letterSpacing:1,borderBottom:"1px solid #f0f0f0",marginBottom:2}}>STAT STREAKS</div>
-        {STAT_STREAK_DEFS.map(def=>{const s=lr.statStreaks?.[def.key];return s&&<RR key={def.key} label={`Longest ${def.label} Streak`} holder={s.name} val={s.data.len+"G"} sub={s.data.span?`${s.data.teamName} · ${s.data.span}`:""}/>;})}
-        <div style={{gridColumn:"1/-1",padding:"10px 0 2px",fontSize:10,fontWeight:800,color:"#aaa",textTransform:"uppercase",letterSpacing:1,borderBottom:"1px solid #f0f0f0",marginBottom:2}}>RIVALRY RECORDS (UvU)</div>
-        {lr.mostH2HWins&&lr.mostH2HWins.wins>0&&<RR label="Most Wins vs Single Opponent" holder={lr.mostH2HWins.name} val={lr.mostH2HWins.wins+"W"} sub={`vs ${lr.mostH2HWins.opp}`}/>}
-        {lr.longestH2HStreak&&lr.longestH2HStreak.len>0&&<RR label="Longest Streak vs Opponent" holder={lr.longestH2HStreak.name} val={lr.longestH2HStreak.len+"W"} sub={`vs ${lr.longestH2HStreak.opp}`}/>}
+    );
+  };
+  // Section wrapper — every record category gets its own strong CardHead + a card grid.
+  // `dense` sections (everything but Career) pack more, smaller cards per row on desktop.
+  const Section=({title,bg,dense,children})=>(
+    <Card style={{overflow:"hidden"}}>
+      <CardHead bg={bg}>{title}</CardHead>
+      <div style={{padding:isMobile?12:16,display:"grid",gridTemplateColumns:isMobile?"1fr":dense?"repeat(auto-fill,minmax(200px,1fr))":"1fr 1fr",gap:isMobile?10:dense?12:14}}>
+        {children}
       </div>
     </Card>
+  );
+  return(
+    <div style={{display:"flex",flexDirection:"column",gap:14}}>
+      <Card style={{overflow:"hidden"}}>
+        <div style={{padding:isMobile?"12px 14px 8px":"14px 18px 10px",display:"flex",alignItems:"center",gap:isMobile?6:8,flexWrap:"nowrap",overflowX:"auto",WebkitOverflowScrolling:"touch"}}>
+          {[null,...[...new Set(history.map(s=>s.year))].sort((a,b)=>b-a)].map(y=>(
+            <button key={y??'all'} onClick={()=>setLrYear(y)} style={{padding:isMobile?"8px 14px":"6px 16px",borderRadius:20,border:"1px solid",borderColor:lrYear===y?RED:"#ddd",background:lrYear===y?RED:"#fafafa",color:lrYear===y?"#fff":"#555",cursor:"pointer",fontSize:11,fontFamily:ff,fontWeight:800,textTransform:"uppercase",letterSpacing:0.5,whiteSpace:"nowrap",flexShrink:0}}>{y==null?"All Time":y}</button>
+          ))}
+        </div>
+        <div style={{padding:"0 18px 12px",fontSize:10,color:"#aaa",fontStyle:"italic"}}>Rivalry and game records are user vs user matchups only. Win streaks count all games.</div>
+      </Card>
+
+      <Section title="Career Records" bg="#111">
+        {lr.mostWins&&<RC big label="Most Wins" holder={lr.mostWins[0]} val={lr.mostWins[1].totalWins+"W"}/>}
+        {lr.mostLosses&&<RC big label="Most Losses" holder={lr.mostLosses[0]} val={lr.mostLosses[1].totalLosses+"L"}/>}
+        {lr.mostPts&&<RC big label="Most Pts" holder={lr.mostPts[0]} val={String(lr.mostPts[1].totalPts)}/>}
+        {lr.mostChamps&&<RC big label="Most Titles" holder={lr.mostChamps[0]} val={lr.mostChamps[1].championships+"×"}/>}
+        {lr.bestWinPct&&<RC big label="Best Win%" holder={lr.bestWinPct[0]} val={lr.bestWinPct[1].winPct+"%"}/>}
+        {lr.mostRW&&<RC big label="Most Ranked Wins" holder={lr.mostRW[0]} val={lr.mostRW[1].rankedWins+"W"}/>}
+        {lr.mostBowlWins&&lr.mostBowlWins[1].bowlWins>0&&<RC big label="Most Bowl Wins" holder={lr.mostBowlWins[0]} val={lr.mostBowlWins[1].bowlWins+"W"}/>}
+        {lr.mostPlayoffApp&&(lr.mostPlayoffApp[1].careerPlayoffWins+lr.mostPlayoffApp[1].careerPlayoffLosses)>0&&<RC big label="Most Playoff Games" holder={lr.mostPlayoffApp[0]} val={(lr.mostPlayoffApp[1].careerPlayoffWins+lr.mostPlayoffApp[1].careerPlayoffLosses)+"×"}/>}
+        {lr.mostConfApp?.n>0&&<RC big label="Most Conf Champ Apps" holder={lr.mostConfApp.name} val={lr.mostConfApp.n+"×"}/>}
+        {lr.mostNattyApp?.n>0&&<RC big label="Most Natty Apps" holder={lr.mostNattyApp.name} val={lr.mostNattyApp.n+"×"}/>}
+      </Section>
+
+      <Section title="Passing Records" bg={RED} dense>
+        {lr.mostPassAtt&&lr.mostPassAtt[1].att>0&&<RC label="Pass Attempts" holder={lr.mostPassAtt[0]} val={lr.mostPassAtt[1].att+" ATT"}/>}
+        {lr.mostPassComp&&lr.mostPassComp[1].comp>0&&<RC label="Pass Completions" holder={lr.mostPassComp[0]} val={lr.mostPassComp[1].comp+" COMP"}/>}
+        {lr.bestCompPct&&<RC label="Completion Percentage" holder={lr.bestCompPct[0]} val={((lr.bestCompPct[1].comp/lr.bestCompPct[1].att)*100).toFixed(1)+"%"}/>}
+        {lr.mostPassTD&&lr.mostPassTD[1].tds>0&&<RC label="Passing Touchdowns" holder={lr.mostPassTD[0]} val={lr.mostPassTD[1].tds+" TD"}/>}
+        {lr.mostInt&&lr.mostInt[1].int>0&&<RC label="Interceptions" holder={lr.mostInt[0]} val={lr.mostInt[1].int+" INT"}/>}
+        {lr.bestYPC&&<RC label="Yards Per Completion" holder={lr.bestYPC[0]} val={(lr.bestYPC[1].yds/lr.bestYPC[1].comp).toFixed(1)}/>}
+      </Section>
+
+      <Section title="Rushing Records" bg="#111" dense>
+        {lr.mostRushAtt&&lr.mostRushAtt[1].att>0&&<RC label="Rushing Attempts" holder={lr.mostRushAtt[0]} val={lr.mostRushAtt[1].att+" ATT"}/>}
+        {lr.mostRushYds&&lr.mostRushYds[1].yds>0&&<RC label="Rushing Yards" holder={lr.mostRushYds[0]} val={lr.mostRushYds[1].yds.toLocaleString()+" YDS"}/>}
+        {lr.mostRushTD&&lr.mostRushTD[1].tds>0&&<RC label="Rushing Touchdowns" holder={lr.mostRushTD[0]} val={lr.mostRushTD[1].tds+" TD"}/>}
+        {lr.bestYPCarry&&<RC label="Yards Per Carry" holder={lr.bestYPCarry[0]} val={(lr.bestYPCarry[1].yds/lr.bestYPCarry[1].att).toFixed(1)}/>}
+      </Section>
+
+      <Section title="Single Season Records" bg={RED} dense>
+        {lr.bestSeason&&<RC label="Best Season (UvU)" holder={lr.bestSeason.name} val={`${lr.bestSeason.w}W-${lr.bestSeason.l}L`} sub={`${lr.bestSeason.teamName} · ${ys(lr.bestSeason.year,lr.bestSeason.seasonNum)}`}/>}
+        {lr.worstSeason&&<RC label="Worst Season (UvU)" holder={lr.worstSeason.name} val={`${lr.worstSeason.w}W-${lr.worstSeason.l}L`} sub={`${lr.worstSeason.teamName} · ${ys(lr.worstSeason.year,lr.worstSeason.seasonNum)}`}/>}
+        {lr.mostSeasonLosses&&lr.mostSeasonLosses.l>0&&<RC label="Most Losses in a Season" holder={lr.mostSeasonLosses.name} val={lr.mostSeasonLosses.l+"L"} sub={`${lr.mostSeasonLosses.teamName} · ${ys(lr.mostSeasonLosses.year,lr.mostSeasonLosses.seasonNum)}`}/>}
+        {lr.ssMostPassAtt&&lr.ssMostPassAtt.att>0&&<RC label="Pass Attempts (Season)" holder={lr.ssMostPassAtt.name} val={lr.ssMostPassAtt.att+" ATT"} sub={ys(lr.ssMostPassAtt.year,lr.ssMostPassAtt.seasonNum)}/>}
+        {lr.ssMostPassComp&&lr.ssMostPassComp.comp>0&&<RC label="Pass Completions (Season)" holder={lr.ssMostPassComp.name} val={lr.ssMostPassComp.comp+" COMP"} sub={ys(lr.ssMostPassComp.year,lr.ssMostPassComp.seasonNum)}/>}
+        {lr.ssBestCompPct&&<RC label="Completion Percentage (Season)" holder={lr.ssBestCompPct.name} val={((lr.ssBestCompPct.comp/lr.ssBestCompPct.att)*100).toFixed(1)+"%"} sub={ys(lr.ssBestCompPct.year,lr.ssBestCompPct.seasonNum)}/>}
+        {lr.ssMostPassTD&&lr.ssMostPassTD.tds>0&&<RC label="Passing Touchdowns (Season)" holder={lr.ssMostPassTD.name} val={lr.ssMostPassTD.tds+" TD"} sub={ys(lr.ssMostPassTD.year,lr.ssMostPassTD.seasonNum)}/>}
+        {lr.ssMostInt&&lr.ssMostInt.int>0&&<RC label="Interceptions (Season)" holder={lr.ssMostInt.name} val={lr.ssMostInt.int+" INT"} sub={ys(lr.ssMostInt.year,lr.ssMostInt.seasonNum)}/>}
+        {lr.ssBestYPC&&<RC label="Yards Per Completion (Season)" holder={lr.ssBestYPC.name} val={(lr.ssBestYPC.yds/lr.ssBestYPC.comp).toFixed(1)} sub={ys(lr.ssBestYPC.year,lr.ssBestYPC.seasonNum)}/>}
+        {lr.ssMostRushAtt&&lr.ssMostRushAtt.att>0&&<RC label="Rushing Attempts (Season)" holder={lr.ssMostRushAtt.name} val={lr.ssMostRushAtt.att+" ATT"} sub={ys(lr.ssMostRushAtt.year,lr.ssMostRushAtt.seasonNum)}/>}
+        {lr.ssMostRushYds&&lr.ssMostRushYds.yds>0&&<RC label="Rushing Yards (Season)" holder={lr.ssMostRushYds.name} val={lr.ssMostRushYds.yds.toLocaleString()+" YDS"} sub={ys(lr.ssMostRushYds.year,lr.ssMostRushYds.seasonNum)}/>}
+        {lr.ssMostRushTD&&lr.ssMostRushTD.tds>0&&<RC label="Rushing Touchdowns (Season)" holder={lr.ssMostRushTD.name} val={lr.ssMostRushTD.tds+" TD"} sub={ys(lr.ssMostRushTD.year,lr.ssMostRushTD.seasonNum)}/>}
+        {lr.ssBestYPCarry&&<RC label="Yards Per Carry (Season)" holder={lr.ssBestYPCarry.name} val={(lr.ssBestYPCarry.yds/lr.ssBestYPCarry.att).toFixed(1)} sub={ys(lr.ssBestYPCarry.year,lr.ssBestYPCarry.seasonNum)}/>}
+        {lr.ssMost4thQComebacks&&<RC label="4th Quarter Comebacks (Season)" holder={lr.ssMost4thQComebacks.name} val={lr.ssMost4thQComebacks.n+"×"} sub={ys(lr.ssMost4thQComebacks.year,lr.ssMost4thQComebacks.seasonNum)}/>}
+      </Section>
+
+      <Section title="Win Streaks" bg="#111" dense>
+        {lr.bestStreakAllTime&&<RC label="Longest Win Streak All Time" holder={lr.bestStreakAllTime.name} val={lr.bestStreakAllTime.data.len+"G"} sub={lr.bestStreakAllTime.data.spanLabel?`${lr.bestStreakAllTime.data.teamName} · ${lr.bestStreakAllTime.data.spanLabel}`:""}/>}
+        {lr.bestStreakSeason&&<RC label="Longest Win Streak (Season)" holder={lr.bestStreakSeason.name} val={lr.bestStreakSeason.data.len+"G"} sub={`${lr.bestStreakSeason.data.teamName} · ${ys(lr.bestStreakSeason.data.year,lr.bestStreakSeason.data.seasonNum)}`}/>}
+      </Section>
+
+      <Section title="Stat Streaks" bg={RED} dense>
+        {STAT_STREAK_DEFS.map(def=>{const s=lr.statStreaks?.[def.key];return s&&<RC key={def.key} label={`Longest ${def.label} Streak`} holder={s.name} val={s.data.len+"G"} sub={s.data.span?`${s.data.teamName} · ${s.data.span}`:""}/>;})}
+      </Section>
+
+      <Section title="Rivalry Records (UvU)" bg="#111" dense>
+        {lr.mostH2HWins&&lr.mostH2HWins.wins>0&&<RC label="Most Wins vs Single Opponent" holder={lr.mostH2HWins.name} val={lr.mostH2HWins.wins+"W"} sub={`vs ${lr.mostH2HWins.opp}`}/>}
+        {lr.longestH2HStreak&&lr.longestH2HStreak.len>0&&<RC label="Longest Streak vs Opponent" holder={lr.longestH2HStreak.name} val={lr.longestH2HStreak.len+"W"} sub={`vs ${lr.longestH2HStreak.opp}`}/>}
+      </Section>
+    </div>
   );
 }
 
@@ -6560,7 +6597,8 @@ export default function App() {
           {/* Page header — on Home, the branded top bar already carries the logo/league name/
               season info on desktop, so this white card would just duplicate it; it stays on
               mobile (where the top bar is compact) and on every other tab (where it's the only
-              page-title indicator). */}
+              page-title indicator). History gets its own stronger header treatment since the
+              Record Book is a flagship page, not just another tab. */}
           {tab==="Home"?(
             isMobile&&<Card style={{padding:"10px 12px",borderLeft:`4px solid ${RED}`,display:"flex",alignItems:"center",gap:14}}>
               <img src="/jackedupdynastytr.png" alt="Jacked Up Dynasty League" style={{height:52,width:"auto",objectFit:"contain",flexShrink:0}}/>
@@ -6569,9 +6607,17 @@ export default function App() {
                 <div style={{fontSize:10,color:"#888",marginTop:2}}>S{season} · {year} · {week>13?"Post":`Wk ${week}`}</div>
               </div>
             </Card>
+          ):tab==="History"?(
+            <Card style={{overflow:"hidden",borderLeft:`5px solid ${RED}`}}>
+              <div style={{padding:isMobile?"14px 14px 12px":"22px 26px 18px"}}>
+                <div style={{fontSize:isMobile?20:32,fontWeight:900,color:"#111",textTransform:"uppercase",letterSpacing:-0.5,lineHeight:1.05}}>League Record Book</div>
+                <div style={{fontSize:isMobile?12:14,color:"#555",marginTop:4,fontWeight:600}}>The statistical history of {leagueName}</div>
+                <div style={{fontSize:10,color:"#999",marginTop:isMobile?8:10,fontWeight:700,textTransform:"uppercase",letterSpacing:0.5}}>Season {season} • {year} • {week>13?"Post":`Week ${week}`}</div>
+              </div>
+            </Card>
           ):(
             <Card style={{padding:isMobile?"10px 12px":"14px 16px",borderLeft:`4px solid ${RED}`}}>
-              <div style={{fontSize:isMobile?15:18,fontWeight:900,color:"#111",textTransform:"uppercase"}}>{tab==="Standings"?"Dynasty Standings":tab==="Schedule"?"Season Schedule":tab==="History"?"League Record Book":tab==="YearStats"?"Year Stats":tab==="Profiles"?"Player Profiles":tab==="Redzone"?"Dynasty RedZone":tab==="Discord"?"Join Discord & Voice Chat":"League Rules"}</div>
+              <div style={{fontSize:isMobile?15:18,fontWeight:900,color:"#111",textTransform:"uppercase"}}>{tab==="Standings"?"Dynasty Standings":tab==="Schedule"?"Season Schedule":tab==="YearStats"?"Year Stats":tab==="Profiles"?"Player Profiles":tab==="Redzone"?"Dynasty RedZone":tab==="Discord"?"Join Discord & Voice Chat":"League Rules"}</div>
               <div style={{fontSize:10,color:"#888",marginTop:2}}>{leagueName} · S{season} · {year} · {week>13?"Post":`Wk ${week}`}</div>
             </Card>
           )}
@@ -6733,7 +6779,44 @@ export default function App() {
             )}
           </>)}
 
-          {tab==="History"&&<HistoryTab history={history} setHistory={setHistory} saveToDb={saveToDb} commUnlocked={commUnlocked} yearRosters={setup?.yearRosters} permanentUsers={setup?.permanentUsers} currentEntries={entries} season={season} year={year} setupRows={setup?.rows||[]} gameArchive={setup?.gameArchive} classicGames={setup?.classicGames} playerStats={setup?.playerStats}/>}
+          {tab==="History"&&(<>
+            <HistoryTab history={history} setHistory={setHistory} saveToDb={saveToDb} commUnlocked={commUnlocked} yearRosters={setup?.yearRosters} permanentUsers={setup?.permanentUsers} currentEntries={entries} season={season} year={year} setupRows={setup?.rows||[]} gameArchive={setup?.gameArchive} classicGames={setup?.classicGames} playerStats={setup?.playerStats}/>
+
+            {/* Supporting league info — only the true left/right sidebars carry this below
+                1024px, so give it a compact spot below the record book instead of dropping it,
+                matching the pattern already established for Home's mobile fallback cards. */}
+            {!showSidebars&&sorted.length>0&&(
+              <Card style={{overflow:"hidden"}}>
+                <CardHead bg={RED}>Dynasty Leader</CardHead>
+                <div style={{padding:"12px 14px",display:"flex",alignItems:"center",gap:12}}>
+                  {(()=>{const imgs=getPlayerImages(setup?.rows,sorted[0].userId,sorted[0].userName);return imgs.teamLogo?<img src={imgs.teamLogo} alt="" style={{width:40,height:40,objectFit:"contain",flexShrink:0}} onError={e=>{e.target.style.display="none";}}/>:null;})()}
+                  <div style={{flex:1,minWidth:0}}>
+                    <div style={{fontSize:15,fontWeight:800,color:"#111",overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{sorted[0].teamName}</div>
+                    <div style={{fontSize:11,color:"#888",marginTop:1}}>{sorted[0].wins}W - {sorted[0].losses}L</div>
+                  </div>
+                  <div style={{fontSize:24,fontWeight:900,color:RED,flexShrink:0}}>{calcTotal(sorted[0])}</div>
+                </div>
+              </Card>
+            )}
+            {!showSidebars&&(
+              <Card style={{overflow:"hidden"}}>
+                <CardHead>Quick Links</CardHead>
+                <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:1,background:"#f0f0f0",padding:1}}>
+                  {NAV_TABS.map(([label,val])=>(
+                    <button key={val} onClick={()=>setTab(val)} style={{background:"#fff",border:"none",padding:"0 10px",minHeight:44,display:"flex",alignItems:"center",gap:8,cursor:"pointer",fontFamily:ff,fontSize:12,fontWeight:700,color:RED,textAlign:"left"}}>🏈 {label}</button>
+                  ))}
+                </div>
+              </Card>
+            )}
+            {!showSidebars&&sorted.length>0&&(
+              <Card style={{overflow:"hidden"}}>
+                <CardHead>Full Standings</CardHead>
+                <div style={{padding:"4px 0"}}>
+                  {sorted.map((t,i)=>{const imgs=getPlayerImages(setup?.rows,t.userId,t.userName);const back=i===0?null:leader-calcTotal(t);return(<div key={t.teamName} style={{display:"flex",alignItems:"center",gap:10,padding:"9px 14px",borderBottom:"1px solid #f5f5f5",borderLeft:i===0?`3px solid ${RED}`:"3px solid transparent",background:i===0?"#fff8f8":"transparent"}}><span style={{fontSize:13,fontWeight:900,color:i===0?RED:"#bbb",width:18,textAlign:"right"}}>{i+1}</span>{imgs.teamLogo&&<img src={imgs.teamLogo} alt="" style={{width:24,height:24,objectFit:"contain",flexShrink:0}} onError={e=>{e.target.style.display="none";}}/>}<div style={{flex:1,minWidth:0}}><Name userId={t.userId} userName={t.userName} style={{fontSize:13,fontWeight:i===0?800:700,color:"#111",whiteSpace:"nowrap",overflow:"hidden",textOverflow:"ellipsis",display:"block"}}>{t.teamName}</Name></div><div style={{display:"flex",alignItems:"baseline",gap:5,flexShrink:0}}><span style={{fontSize:i===0?15:13,fontWeight:900,color:i===0?RED:"#333",minWidth:24,textAlign:"right"}}>{calcTotal(t)}</span><span style={{fontSize:9,color:"#aaa",fontWeight:700,minWidth:20,textAlign:"left"}}>{i===0?"":`-${back}`}</span></div></div>);})}
+                </div>
+              </Card>
+            )}
+          </>)}
           {tab==="YearStats"&&<YearStatsTab history={history} currentEntries={activeEntries} season={season} year={year} setupRows={setup?.rows||[]} permanentUsers={setup?.permanentUsers} playerStats={setup?.playerStats} gameArchive={setup?.gameArchive}/>}
           {tab==="Profiles"&&<ProfileTab history={history} setupRows={(setup?.rows||[]).filter(r=>r.active!==false)} currentEntries={activeEntries} season={season} year={year} permanentUsers={setup?.permanentUsers?.filter(u=>(setup?.rows||[]).some(r=>r.userId===u.id&&r.active!==false))} sel={profileSel} setSel={setProfileSel} pTab={profilePTab} setPTab={setProfilePTab} articles={articles} setActiveArticle={setActiveArticle} playerStats={setup?.playerStats} gameArchive={setup?.gameArchive}/>}
           {tab==="Schedule"&&<ScheduleTab schedule={effectiveSchedule} entries={activeEntries} week={week} season={season} year={year} setup={setup} setupRows={setup?.rows||[]} history={history}/>}
