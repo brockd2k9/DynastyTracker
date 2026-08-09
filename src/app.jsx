@@ -2188,16 +2188,13 @@ function ScheduleTab({schedule,entries,week,season,year,setup,setupRows,history}
         <Card style={{padding:20,textAlign:"center",color:"#888",fontSize:13}}>{isCurrentYear?"No schedule set up yet. Add matchups in Commissioner Mode.":`No schedule available for ${selYear}.`}</Card>
       ) : (
       <Card style={{overflow:"hidden"}}>
-        <div className="jud-hscroll" style={{display:"flex",gap:8,overflowX:"auto",WebkitOverflowScrolling:"touch",padding:"12px 14px",borderBottom:"1px solid #eee"}}>
-          <button onClick={()=>setView("full")} style={{padding:"7px 16px",borderRadius:20,border:"1px solid",borderColor:view==="full"?RED:"#ddd",background:view==="full"?RED:"#fff",color:view==="full"?"#fff":"#555",cursor:"pointer",fontSize:11,fontWeight:800,fontFamily:ff,textTransform:"uppercase",letterSpacing:0.5,whiteSpace:"nowrap",flexShrink:0}}>All Teams</button>
-          {teams.map(t=>{
-            const sel=view===t;
-            return(
-              <button key={t} onClick={()=>setView(t)} style={{display:"flex",alignItems:"center",gap:6,padding:"6px 12px 6px 8px",borderRadius:20,border:"1px solid",borderColor:sel?RED:"#ddd",background:sel?"#fff5f5":"#fff",color:sel?RED:"#333",cursor:"pointer",fontSize:11,fontWeight:700,fontFamily:ff,whiteSpace:"nowrap",flexShrink:0}}>
-                <TeamLogo url={logoByTeam[t]} size={18}/>{t}
-              </button>
-            );
-          })}
+        <div style={{display:"flex",alignItems:"center",gap:10,padding:"12px 14px",borderBottom:"1px solid #eee",flexWrap:"wrap"}}>
+          <span style={{fontSize:11,fontWeight:800,color:"#555",textTransform:"uppercase",letterSpacing:0.5,flexShrink:0}}>Team:</span>
+          {view!=="full"&&<TeamLogo url={logoByTeam[view]} size={20}/>}
+          <select value={view} onChange={e=>setView(e.target.value)} style={{flex:isMobile?"1 1 auto":"0 0 auto",minWidth:isMobile?0:220,padding:"8px 14px",borderRadius:4,border:`1px solid ${view!=="full"?RED:"#ddd"}`,background:view!=="full"?"#fff5f5":"#fff",color:view!=="full"?RED:"#333",fontSize:12,fontWeight:800,fontFamily:ff,cursor:"pointer"}}>
+            <option value="full">All Teams</option>
+            {teams.map(t=><option key={t} value={t}>{t}</option>)}
+          </select>
         </div>
 
         {view==="full"&&(
