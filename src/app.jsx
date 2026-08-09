@@ -2670,50 +2670,75 @@ function YearStatsTab({history,currentEntries,season,year,setupRows,permanentUse
     if(!all.length)return null;
     const isOpen=!!expanded[title];
     const rows=isOpen?all:all.slice(0,5);
-    return(<Card><CardHead bg="#333">{title}</CardHead><div style={{padding:"4px 0"}}>
-      {rows.map((l,i)=><div key={l.userId||l.name} style={{display:"flex",justifyContent:"space-between",alignItems:"center",padding:"7px 12px",borderBottom:"1px solid #f5f5f5"}}>
-        <span style={{fontSize:12,color:i===0?"#111":"#555",fontWeight:i===0?700:400}}>{i+1}. <Name userId={l.userId} userName={l.name}>{l.name}</Name></span>
-        <span style={{fontSize:13,fontWeight:800,color:RED}}>{renderVal?renderVal(l):valFn(l).toLocaleString()+suffix}</span>
-      </div>)}
-      {all.length>5&&<button onClick={()=>setExpanded(prev=>({...prev,[title]:!prev[title]}))} style={{width:"100%",padding:"8px",background:"none",border:"none",borderTop:"1px solid #f0f0f0",color:RED,fontSize:11,fontWeight:800,cursor:"pointer",fontFamily:ff,textTransform:"uppercase",letterSpacing:0.5}}>{isOpen?"Show Less ▲":`Show All (${all.length}) ▼`}</button>}
-    </div></Card>);
+    return(<Card style={{overflow:"hidden"}}>
+      <CardHead>{title}</CardHead>
+      <div style={{padding:"4px 0"}}>
+        {rows.map((l,i)=>{
+          const imgs=getPlayerImages(setupRows,l.userId,l.name);
+          return(<div key={l.userId||l.name} style={{display:"flex",justifyContent:"space-between",alignItems:"center",gap:8,padding:"7px 12px",borderBottom:"1px solid #f5f5f5",background:i===0?"#fff6f6":"transparent",borderLeft:`3px solid ${i===0?RED:"transparent"}`}}>
+            <div style={{display:"flex",alignItems:"center",gap:8,minWidth:0,flex:1}}>
+              <span style={{fontSize:12,fontWeight:800,color:i===0?RED:"#999",width:14,flexShrink:0}}>{i+1}</span>
+              <div style={{width:26,height:26,borderRadius:"50%",overflow:"hidden",background:"#e8e8e8",flexShrink:0,display:"flex",alignItems:"center",justifyContent:"center"}}>
+                {imgs.profilePic
+                  ? <img src={imgs.profilePic} alt="" style={{width:"100%",height:"100%",objectFit:"cover"}} onError={e=>{e.target.style.display="none";}}/>
+                  : <span style={{fontSize:11,fontWeight:800,color:"#aaa"}}>{(l.name||"?")[0]?.toUpperCase()}</span>}
+              </div>
+              <Name userId={l.userId} userName={l.name} style={{fontSize:13,fontWeight:i===0?800:600,color:"#111",textDecoration:"none",overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap",minWidth:0,flex:1}}>{l.name}</Name>
+            </div>
+            <span style={{fontSize:14,fontWeight:900,color:RED,flexShrink:0}}>{renderVal?renderVal(l):valFn(l).toLocaleString()+suffix}</span>
+          </div>);
+        })}
+        {all.length>5&&<button onClick={()=>setExpanded(prev=>({...prev,[title]:!prev[title]}))} style={{width:"100%",padding:"8px",background:"none",border:"none",borderTop:"1px solid #f0f0f0",color:RED,fontSize:11,fontWeight:800,cursor:"pointer",fontFamily:ff,textTransform:"uppercase",letterSpacing:0.5}}>{isOpen?"Show Less ▲":`View All ${all.length} →`}</button>}
+      </div>
+    </Card>);
   };
-  const SectionLabel=({children})=><div style={{fontSize:10,fontWeight:800,color:"#aaa",textTransform:"uppercase",letterSpacing:1,padding:"2px 4px"}}>{children}</div>;
-  const leaderGrid={display:"grid",gridTemplateColumns:isMobile?"1fr":"1fr 1fr 1fr",gap:14};
+  const SectionLabel=({icon,children})=>(
+    <div style={{display:"flex",alignItems:"center",gap:8,padding:"6px 2px 2px"}}>
+      {icon&&<span style={{fontSize:15,lineHeight:1}}>{icon}</span>}
+      <span style={{fontSize:15,fontWeight:900,color:"#111",textTransform:"uppercase",letterSpacing:0.5,whiteSpace:"nowrap"}}>{children}</span>
+      <div style={{flex:1,height:2,background:RED}}/>
+    </div>
+  );
+  const leaderGrid={display:"grid",gridTemplateColumns:isMobile?"1fr":"repeat(auto-fit,minmax(240px,1fr))",gap:14};
   const qRows=leaders.filter(l=>(l.qs?.qGames||0)>0).sort((a,b)=>a.name.localeCompare(b.name));
   return(
     <div style={{display:"flex",flexDirection:"column",gap:14}}>
       <Card style={{overflow:"hidden"}}>
-        <CardHead bg="#111">📅 Year Stats</CardHead>
-        <div style={{padding:"10px 14px 4px",display:"flex",alignItems:"center",gap:8,flexWrap:"wrap",borderBottom:"1px solid #f0f0f0"}}>
-          <span style={{fontSize:11,fontWeight:700,color:"#555",textTransform:"uppercase",letterSpacing:0.5}}>Year:</span>
-          {allYears.map(y=>(
-            <button key={y} onClick={()=>setSelYear(y)} style={{padding:"4px 10px",borderRadius:2,border:"1px solid",borderColor:selYear===y?RED:"#ddd",background:selYear===y?RED:"#fff",color:selYear===y?"#fff":"#555",cursor:"pointer",fontSize:11,fontFamily:ff,fontWeight:700}}>{y}</button>
-          ))}
+        <div style={{padding:isMobile?"12px 14px":"14px 18px",display:"flex",flexWrap:"wrap",alignItems:"center",gap:isMobile?10:20}}>
+          <div style={{display:"flex",alignItems:"center",gap:8,flexWrap:"wrap"}}>
+            <span style={{fontSize:10,fontWeight:800,color:"#888",textTransform:"uppercase",letterSpacing:0.5}}>Year</span>
+            {allYears.map(y=>(
+              <button key={y} onClick={()=>setSelYear(y)} style={{display:"flex",alignItems:"center",gap:5,padding:isMobile?"9px 14px":"7px 14px",borderRadius:20,border:"1px solid",borderColor:selYear===y?RED:"#ddd",background:selYear===y?RED:"#fff",color:selYear===y?"#fff":"#333",cursor:"pointer",fontSize:12,fontWeight:800,fontFamily:ff,whiteSpace:"nowrap"}}>
+                {y}{y===year&&<span style={{fontSize:8,fontWeight:900,letterSpacing:0.5,opacity:selYear===y?0.85:0.55}}>CURRENT</span>}
+              </button>
+            ))}
+          </div>
+          {seasonTabs.length>0&&(
+            <div style={{display:"flex",alignItems:"center",gap:8}}>
+              <span style={{fontSize:10,fontWeight:800,color:"#888",textTransform:"uppercase",letterSpacing:0.5}}>Season</span>
+              <select value={activeKey||""} onChange={e=>setSelSeasonKey(e.target.value)} style={{padding:isMobile?"9px 12px":"7px 12px",borderRadius:4,border:`1px solid ${RED}`,background:"#fff5f5",color:RED,fontSize:12,fontWeight:800,fontFamily:ff,cursor:"pointer"}}>
+                {seasonTabs.map(s=><option key={s.key} value={s.key}>{s.label}</option>)}
+              </select>
+            </div>
+          )}
         </div>
-        {seasonTabs.length>0&&<div style={{padding:"8px 14px 10px",display:"flex",alignItems:"center",gap:8,flexWrap:"wrap"}}>
-          <span style={{fontSize:11,fontWeight:700,color:"#555",textTransform:"uppercase",letterSpacing:0.5}}>Season:</span>
-          {seasonTabs.map(s=>(
-            <button key={s.key} onClick={()=>setSelSeasonKey(s.key)} style={{padding:"4px 10px",borderRadius:2,border:"1px solid",borderColor:activeKey===s.key?"#1a3a6b":"#ddd",background:activeKey===s.key?"#1a3a6b":"#fff",color:activeKey===s.key?"#fff":"#555",cursor:"pointer",fontSize:11,fontFamily:ff,fontWeight:700}}>{s.label}</button>
-          ))}
-        </div>}
       </Card>
       <div style={{fontSize:10,color:"#aaa",fontStyle:"italic",padding:"0 4px"}}>Stats below are tracked per year (not split further by season if a year has more than one).</div>
 
-      <SectionLabel>Passing</SectionLabel>
+      <SectionLabel icon="🏈">Passing</SectionLabel>
       <div style={leaderGrid}>
         <LeaderList title="Passing Yards" valFn={l=>l.passing?.yds||0}/>
         <LeaderList title="Passing TDs" valFn={l=>l.passing?.tds||0}/>
         <LeaderList title="Interceptions Thrown" valFn={l=>l.passing?.int||0}/>
       </div>
 
-      <SectionLabel>Rushing</SectionLabel>
+      <SectionLabel icon="🏃">Rushing</SectionLabel>
       <div style={leaderGrid}>
         <LeaderList title="Rushing Yards" valFn={l=>l.rushing?.yds||0}/>
         <LeaderList title="Rushing TDs" valFn={l=>l.rushing?.tds||0}/>
       </div>
 
-      <SectionLabel>Scoring & Yards</SectionLabel>
+      <SectionLabel icon="📊">Scoring & Yards</SectionLabel>
       <div style={leaderGrid}>
         <LeaderList title="Off Pts/Game" valFn={l=>l.team.offPts/l.team.games} filterFn={hasTeamGames} renderVal={l=>(l.team.offPts/l.team.games).toFixed(1)}/>
         <LeaderList title="Def Pts/Game (Best)" valFn={l=>l.team.defPts/l.team.games} filterFn={hasTeamGames} asc renderVal={l=>(l.team.defPts/l.team.games).toFixed(1)}/>
@@ -2721,7 +2746,7 @@ function YearStatsTab({history,currentEntries,season,year,setupRows,permanentUse
         <LeaderList title="Defensive Yards (Best)" valFn={l=>l.team?.defYds||0} filterFn={hasTeamGames} asc/>
       </div>
 
-      <SectionLabel>Efficiency</SectionLabel>
+      <SectionLabel icon="🎯">Efficiency</SectionLabel>
       <div style={leaderGrid}>
         <LeaderList title="3rd Down %" valFn={l=>(l.team.thirdConv/l.team.thirdAtt)*100} filterFn={l=>(l.team?.thirdAtt||0)>0} renderVal={l=>((l.team.thirdConv/l.team.thirdAtt)*100).toFixed(1)+"%"}/>
         <LeaderList title="4th Down Attempts" valFn={l=>l.team?.fourthAtt||0} filterFn={hasTeamGames}/>
@@ -2730,14 +2755,14 @@ function YearStatsTab({history,currentEntries,season,year,setupRows,permanentUse
         <LeaderList title="2 Point Conversion %" valFn={l=>(l.team.twoPtConv/l.team.twoPtAtt)*100} filterFn={l=>(l.team?.twoPtAtt||0)>0} renderVal={l=>((l.team.twoPtConv/l.team.twoPtAtt)*100).toFixed(1)+"%"}/>
       </div>
 
-      <SectionLabel>Turnovers</SectionLabel>
+      <SectionLabel icon="🔄">Turnovers</SectionLabel>
       <div style={leaderGrid}>
         <LeaderList title="Takeaways" valFn={l=>l.team?.takeaways||0} filterFn={hasTeamGames}/>
         <LeaderList title="Giveaways (Fewest)" valFn={l=>l.team?.giveaways||0} filterFn={hasTeamGames} asc/>
         <LeaderList title="Turnover Differential" valFn={l=>l.team.takeaways-l.team.giveaways} filterFn={hasTeamGames} renderVal={l=>{const d=l.team.takeaways-l.team.giveaways;return(d>0?`+${d}`:String(d));}}/>
       </div>
 
-      <SectionLabel>Comebacks & Halftime</SectionLabel>
+      <SectionLabel icon="🔥">Comebacks & Halftime</SectionLabel>
       <div style={leaderGrid}>
         <LeaderList title="4th Quarter Comebacks" valFn={l=>l.qs?.fourthQComebacks||0} suffix="×" filterFn={l=>(l.qs?.qGames||0)>0}/>
         <LeaderList title="Comeback Wins" valFn={l=>l.qs?.comebackWins||0} suffix="×" filterFn={l=>(l.qs?.qGames||0)>0}/>
@@ -2746,7 +2771,7 @@ function YearStatsTab({history,currentEntries,season,year,setupRows,permanentUse
       </div>
 
       {qRows.length>0&&<>
-        <SectionLabel>Quarter By Quarter (Avg Points Scored)</SectionLabel>
+        <SectionLabel icon="📈">Quarter By Quarter (Avg Points Scored)</SectionLabel>
         <Card style={{overflow:"hidden"}}>
           <div style={{overflowX:"auto"}}>
             <table style={{width:"100%",borderCollapse:"collapse",fontSize:isMobile?11:12}}>
@@ -2763,7 +2788,7 @@ function YearStatsTab({history,currentEntries,season,year,setupRows,permanentUse
           </div>
         </Card>
 
-        <SectionLabel>Quarter By Quarter (Avg Points Allowed)</SectionLabel>
+        <SectionLabel icon="📉">Quarter By Quarter (Avg Points Allowed)</SectionLabel>
         <Card style={{overflow:"hidden"}}>
           <div style={{overflowX:"auto"}}>
             <table style={{width:"100%",borderCollapse:"collapse",fontSize:isMobile?11:12}}>
@@ -7236,7 +7261,77 @@ export default function App() {
               </Card>
             )}
           </>)}
-          {tab==="YearStats"&&<YearStatsTab history={history} currentEntries={activeEntries} season={season} year={year} setupRows={setup?.rows||[]} permanentUsers={setup?.permanentUsers} playerStats={setup?.playerStats} gameArchive={setup?.gameArchive}/>}
+          {tab==="YearStats"&&(<>
+            <YearStatsTab history={history} currentEntries={activeEntries} season={season} year={year} setupRows={setup?.rows||[]} permanentUsers={setup?.permanentUsers} playerStats={setup?.playerStats} gameArchive={setup?.gameArchive}/>
+
+            {/* Supporting info — mirrors the right/left sidebars below 1024px, same pattern as
+                Profiles'/Standings' mobile fallbacks: Top Headlines, Full Standings, Dynasty
+                Leader, Dynasty Info, Quick Links. */}
+            {!showSidebars&&(
+              <Card style={{overflow:"hidden"}}>
+                <CardHead>Top Headlines</CardHead>
+                <div style={{padding:"4px 0"}}>
+                  {sorted.length===0&&<div style={{padding:"12px",fontSize:12,color:"#888",fontStyle:"italic"}}>No standings yet.</div>}
+                  {articles.slice(0,5).map(a=>(
+                    <div key={a.id} onClick={()=>setActiveArticle(a)} style={{padding:"12px 14px",borderBottom:"1px solid #f0f0f0",cursor:"pointer",display:"flex",gap:12,alignItems:"flex-start"}}>
+                      {a.imageUrl
+                        ? <img src={a.imageUrl} alt="" style={{width:52,height:52,borderRadius:3,objectFit:"cover",flexShrink:0}} onError={e=>{e.target.style.display="none";}}/>
+                        : (a.reporterAvatar&&<div style={{width:52,height:52,borderRadius:3,background:a.reporterColor||RED,display:"flex",alignItems:"center",justifyContent:"center",fontSize:13,fontWeight:800,color:"#fff",flexShrink:0}}>{a.reporterAvatar}</div>)}
+                      <div style={{flex:1,minWidth:0}}>
+                        <div style={{fontSize:10,color:a.reporterColor||RED,fontWeight:700,letterSpacing:0.5,textTransform:"uppercase",marginBottom:4}}>{a.label} · S{a.season} Wk{a.week}</div>
+                        <div style={{fontSize:13,fontWeight:700,color:"#111",lineHeight:1.4,display:"-webkit-box",WebkitLineClamp:2,WebkitBoxOrient:"vertical",overflow:"hidden"}}>{articleHeadline(a.text)}</div>
+                      </div>
+                    </div>
+                  ))}
+                  {articles.length===0&&<div style={{padding:"12px 14px",fontSize:11,color:"#888",fontStyle:"italic"}}>Generate content to see articles here</div>}
+                </div>
+              </Card>
+            )}
+            {!showSidebars&&sorted.length>0&&(
+              <Card style={{overflow:"hidden"}}>
+                <CardHead>Full Standings</CardHead>
+                <div style={{padding:"4px 0"}}>
+                  {sorted.map((t,i)=>{const imgs=getPlayerImages(setup?.rows,t.userId,t.userName);const back=i===0?null:leader-calcTotal(t);return(<div key={t.teamName} style={{display:"flex",alignItems:"center",gap:10,padding:"9px 14px",borderBottom:"1px solid #f5f5f5",borderLeft:i===0?`3px solid ${RED}`:"3px solid transparent",background:i===0?"#fff8f8":"transparent"}}><span style={{fontSize:13,fontWeight:900,color:i===0?RED:"#bbb",width:18,textAlign:"right"}}>{i+1}</span>{imgs.teamLogo&&<img src={imgs.teamLogo} alt="" style={{width:24,height:24,objectFit:"contain",flexShrink:0}} onError={e=>{e.target.style.display="none";}}/>}<div style={{flex:1,minWidth:0}}><Name userId={t.userId} userName={t.userName} style={{fontSize:13,fontWeight:i===0?800:700,color:"#111",whiteSpace:"nowrap",overflow:"hidden",textOverflow:"ellipsis",display:"block"}}>{t.teamName}</Name></div><div style={{display:"flex",alignItems:"baseline",gap:5,flexShrink:0}}><span style={{fontSize:i===0?15:13,fontWeight:900,color:i===0?RED:"#333",minWidth:24,textAlign:"right"}}>{calcTotal(t)}</span><span style={{fontSize:9,color:"#aaa",fontWeight:700,minWidth:20,textAlign:"left"}}>{i===0?"":`-${back}`}</span></div></div>);})}
+                </div>
+              </Card>
+            )}
+            {!showSidebars&&sorted.length>0&&(
+              <Card style={{overflow:"hidden"}}>
+                <CardHead bg={RED}>Dynasty Leader</CardHead>
+                <div style={{padding:"12px 14px",display:"flex",alignItems:"center",gap:12}}>
+                  {(()=>{const imgs=getPlayerImages(setup?.rows,sorted[0].userId,sorted[0].userName);return imgs.teamLogo?<img src={imgs.teamLogo} alt="" style={{width:40,height:40,objectFit:"contain",flexShrink:0}} onError={e=>{e.target.style.display="none";}}/>:null;})()}
+                  <div style={{flex:1,minWidth:0}}>
+                    <div style={{fontSize:15,fontWeight:800,color:"#111",overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{sorted[0].teamName}</div>
+                    <div style={{fontSize:11,color:"#888",marginTop:1}}>{sorted[0].wins}W - {sorted[0].losses}L</div>
+                  </div>
+                  <div style={{fontSize:24,fontWeight:900,color:RED,flexShrink:0}}>{calcTotal(sorted[0])}</div>
+                </div>
+              </Card>
+            )}
+            {!showSidebars&&(
+              <Card style={{overflow:"hidden"}}>
+                <CardHead>Dynasty Info</CardHead>
+                <div style={{padding:"10px 0"}}>
+                  {[["Season",season],["Year",year],["Week",week>13?"Post":week],["Teams",entries.length]].map(([l,v])=>
+                    <div key={l} style={{display:"flex",justifyContent:"space-between",alignItems:"center",padding:"9px 16px",borderBottom:"1px solid #f5f5f5"}}>
+                      <span style={{fontSize:12,color:"#888",fontWeight:600,textTransform:"uppercase",letterSpacing:0.5}}>{l}</span>
+                      <span style={{fontSize:14,fontWeight:800,color:"#111"}}>{v}</span>
+                    </div>
+                  )}
+                </div>
+              </Card>
+            )}
+            {!showSidebars&&(
+              <Card style={{overflow:"hidden"}}>
+                <CardHead>Quick Links</CardHead>
+                <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:1,background:"#f0f0f0",padding:1}}>
+                  {NAV_TABS.map(([label,val])=>(
+                    <button key={val} onClick={()=>setTab(val)} style={{background:"#fff",border:"none",padding:"0 10px",minHeight:44,display:"flex",alignItems:"center",gap:8,cursor:"pointer",fontFamily:ff,fontSize:12,fontWeight:700,color:RED,textAlign:"left"}}>🏈 {label}</button>
+                  ))}
+                </div>
+              </Card>
+            )}
+          </>)}
           {tab==="Profiles"&&(<>
             <ProfileTab history={history} setupRows={(setup?.rows||[]).filter(r=>r.active!==false)} currentEntries={activeEntries} season={season} year={year} permanentUsers={setup?.permanentUsers?.filter(u=>(setup?.rows||[]).some(r=>r.userId===u.id&&r.active!==false))} sel={profileSel} setSel={setProfileSel} pTab={profilePTab} setPTab={setProfilePTab} articles={articles} setActiveArticle={setActiveArticle} playerStats={setup?.playerStats} gameArchive={setup?.gameArchive}/>
 
