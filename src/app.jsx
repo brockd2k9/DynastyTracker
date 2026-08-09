@@ -8,13 +8,13 @@ function Name({children, userId, userName, style={}}) {
   return <span onClick={e=>{e.stopPropagation();nav(userId, userName);}} style={{cursor:"pointer",textDecoration:"underline dotted",textUnderlineOffset:2,...style}} title={`View ${children}'s profile`}>{children}</span>;
 }
 
-function useIsMobile() {
-  const [isMobile, setIsMobile] = useState(window.innerWidth < 768);
+function useIsMobile(breakpoint=768) {
+  const [isMobile, setIsMobile] = useState(window.innerWidth < breakpoint);
   useEffect(() => {
-    const handler = () => setIsMobile(window.innerWidth < 768);
+    const handler = () => setIsMobile(window.innerWidth < breakpoint);
     window.addEventListener('resize', handler);
     return () => window.removeEventListener('resize', handler);
-  }, []);
+  }, [breakpoint]);
   return isMobile;
 }
 
@@ -1036,7 +1036,7 @@ function MatchupPreview({team1, team2, sorted, gameArchive, year, week, history,
   );
 }
 
-function WeekMatchupsCard({schedule,week,sorted,leagueName,season,setActiveArticle,articles,setArticles,commUnlocked,setupRows,gameArchive,year,history,setTab}) {
+function WeekMatchupsCard({schedule,week,sorted,leagueName,season,setActiveArticle,articles,setArticles,commUnlocked,setupRows,gameArchive,year,history,setTab,isMobile}) {
   const [generating,setGenerating] = useState(false);
   const [expandedMatchup,setExpandedMatchup] = useState({});
 
@@ -1102,120 +1102,146 @@ function WeekMatchupsCard({schedule,week,sorted,leagueName,season,setActiveArtic
   // Find existing GOTW article for this week
   const existingGOTW = (articles||[]).find(a=>a.type==="gotw" && a.week===week && a.season===season);
 
+  // Ordered SPREAD | MONEYLINE | OVER/UNDER | KEY STAT stat blocks — built once and rendered
+  // into a 2x2 grid on mobile or a single 4-column row on desktop, same data either way.
+  const oddsLine = (team,val)=>(<div key={team} style={{display:"flex",justifyContent:"space-between",gap:6,fontSize:isMobile?12:13,fontWeight:700,color:"#111"}}><span style={{overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{team}</span><span style={{flexShrink:0}}>{val}</span></div>);
+  const gotwStatBlocks = gameOfWeek ? [
+    {label:"Spread", content:[oddsLine(gameOfWeek.team1,gotwSpread1>0?`+${gotwSpread1}`:gotwSpread1),oddsLine(gameOfWeek.team2,-gotwSpread1>0?`+${-gotwSpread1}`:-gotwSpread1)]},
+    {label:"Moneyline", content:[oddsLine(gameOfWeek.team1,fmtOdds(gotwOdds1)),oddsLine(gameOfWeek.team2,fmtOdds(gotwOdds2))]},
+    {label:"Over/Under", content:<div style={{fontSize:isMobile?12:13,fontWeight:700,color:"#111"}}>O/U {gotwTotal}</div>},
+    {label:"Key Stat", content:(gotwTrend1||gotwTrend2) ? [gotwTrend1&&<div key="t1" style={{fontSize:isMobile?11:12,fontWeight:700,color:"#111"}}>{gameOfWeek.team1}: {gotwTrend1.ppgFor} PPG</div>,gotwTrend2&&<div key="t2" style={{fontSize:isMobile?11:12,fontWeight:700,color:"#111",marginTop:2}}>{gameOfWeek.team2}: {gotwTrend2.ppgFor} PPG</div>] : gotwH2H ? <div style={{fontSize:isMobile?11:12,fontWeight:700,color:"#111"}}>{gameOfWeek.team1} is {gotwH2H.wins}-{gotwH2H.losses} all-time vs {gameOfWeek.team2}</div> : <div style={{fontSize:isMobile?11:12,color:"#999",fontStyle:"italic"}}>No history yet</div>},
+  ] : [];
+
   return (
-    <div style={{display:"flex",flexDirection:"column",gap:12}}>
+    <div style={{display:"flex",flexDirection:"column",gap:isMobile?12:18}}>
 
       {/* Game of the Week */}
       {gameOfWeek&&(
-        <Card style={{overflow:"hidden",border:`2px solid #1a3a6b`}}>
-          <div style={{background:"#1a3a6b",padding:"10px 16px",display:"flex",justifyContent:"space-between",alignItems:"center"}}>
+        <Card style={{overflow:"hidden",border:"2px solid #111"}}>
+          <div style={{background:RED,padding:isMobile?"10px 16px":"14px 22px",display:"flex",justifyContent:"space-between",alignItems:"center"}}>
             <div style={{display:"flex",alignItems:"center",gap:10}}>
-              <div style={{fontSize:16}}>🏆</div>
+              <div style={{fontSize:isMobile?16:20}}>🏆</div>
               <div>
-                <div style={{fontSize:11,fontWeight:800,color:"rgba(255,255,255,0.7)",letterSpacing:2,textTransform:"uppercase"}}>Game of the Week</div>
-                <div style={{fontSize:10,color:"rgba(255,255,255,0.5)"}}>Season {season} · Week {week}</div>
+                <div style={{fontSize:isMobile?11:13,fontWeight:800,color:"#fff",letterSpacing:2,textTransform:"uppercase"}}>Game of the Week</div>
+                <div style={{fontSize:isMobile?10:11,color:"rgba(255,255,255,0.75)"}}>Season {season} · Week {week}</div>
               </div>
             </div>
             {existingGOTW
-              ? <button onClick={()=>setActiveArticle(existingGOTW)} style={{background:"rgba(255,255,255,0.15)",border:"1px solid rgba(255,255,255,0.3)",color:"#fff",borderRadius:2,padding:"5px 12px",cursor:"pointer",fontSize:11,fontWeight:700,fontFamily:"'Helvetica Neue',Arial,sans-serif",textTransform:"uppercase"}}>Read Preview →</button>
-              : commUnlocked?<button onClick={generateGOTWPreview} disabled={generating} style={{background:generating?"rgba(255,255,255,0.1)":"rgba(255,255,255,0.2)",border:"1px solid rgba(255,255,255,0.4)",color:"#fff",borderRadius:2,padding:"5px 12px",cursor:generating?"not-allowed":"pointer",fontSize:11,fontWeight:700,fontFamily:"'Helvetica Neue',Arial,sans-serif",textTransform:"uppercase"}}>{generating?"Writing...":"Generate Preview"}</button>:null
+              ? <button onClick={()=>setActiveArticle(existingGOTW)} style={{background:"rgba(0,0,0,0.2)",border:"1px solid rgba(255,255,255,0.4)",color:"#fff",borderRadius:2,padding:"5px 12px",cursor:"pointer",fontSize:11,fontWeight:700,fontFamily:"'Helvetica Neue',Arial,sans-serif",textTransform:"uppercase"}}>Read Preview →</button>
+              : commUnlocked?<button onClick={generateGOTWPreview} disabled={generating} style={{background:generating?"rgba(0,0,0,0.1)":"rgba(0,0,0,0.2)",border:"1px solid rgba(255,255,255,0.5)",color:"#fff",borderRadius:2,padding:"5px 12px",cursor:generating?"not-allowed":"pointer",fontSize:11,fontWeight:700,fontFamily:"'Helvetica Neue',Arial,sans-serif",textTransform:"uppercase"}}>{generating?"Writing...":"Generate Preview"}</button>:null
             }
           </div>
-          <div style={{padding:"14px 16px"}}>
+          <div style={{padding:isMobile?"14px 16px":"26px 32px"}}>
             <div style={{display:"flex",alignItems:"center",gap:0,width:"100%",boxSizing:"border-box"}}>
               <div style={{flex:1,textAlign:"center",minWidth:0,overflow:"hidden"}}>
-                {logoFor(gameOfWeek.team1)&&<img src={logoFor(gameOfWeek.team1)} alt="" style={{height:36,width:"auto",maxWidth:"100%",objectFit:"contain",marginBottom:6}} onError={e=>{e.target.style.display="none";}}/>}
-                <div style={{fontSize:18,fontWeight:900,color:"#111",wordBreak:"break-word",lineHeight:1.2}}>{gameOfWeek.team1}</div>
-                <div style={{fontSize:11,color:"#888",marginTop:3}}>#{gameOfWeek.rank1} in Dynasty</div>
-                <div style={{fontSize:12,color:"#555",marginTop:2}}>{sorted.find(t=>t.teamName===gameOfWeek.team1)?.wins||0}W-{sorted.find(t=>t.teamName===gameOfWeek.team1)?.losses||0}L</div>
+                {logoFor(gameOfWeek.team1)&&<img src={logoFor(gameOfWeek.team1)} alt="" style={{height:isMobile?48:80,width:"auto",maxWidth:"100%",objectFit:"contain",marginBottom:isMobile?6:12}} onError={e=>{e.target.style.display="none";}}/>}
+                <div style={{fontSize:isMobile?18:28,fontWeight:900,color:"#111",wordBreak:"break-word",lineHeight:1.15,textTransform:"uppercase",letterSpacing:isMobile?0:-0.3}}>{gameOfWeek.team1}</div>
+                <div style={{fontSize:isMobile?11:12,color:"#888",marginTop:isMobile?3:6}}>#{gameOfWeek.rank1} in Dynasty</div>
+                <div style={{fontSize:isMobile?12:14,color:"#555",fontWeight:700,marginTop:2}}>{sorted.find(t=>t.teamName===gameOfWeek.team1)?.wins||0}W-{sorted.find(t=>t.teamName===gameOfWeek.team1)?.losses||0}L</div>
               </div>
-              <div style={{padding:"0 12px",textAlign:"center",flexShrink:0}}>
-                <div style={{fontSize:13,fontWeight:900,color:"#1a3a6b",letterSpacing:2}}>VS</div>
-                <div style={{fontSize:10,color:"#aaa",marginTop:4,fontWeight:600}}>Conf</div>
+              <div style={{padding:isMobile?"0 12px":"0 28px",textAlign:"center",flexShrink:0}}>
+                <div style={{fontSize:isMobile?13:18,fontWeight:900,color:RED,letterSpacing:2}}>VS</div>
+                <div style={{fontSize:10,color:"#aaa",marginTop:4,fontWeight:600,textTransform:"uppercase"}}>Conf</div>
               </div>
               <div style={{flex:1,textAlign:"center",minWidth:0,overflow:"hidden"}}>
-                {logoFor(gameOfWeek.team2)&&<img src={logoFor(gameOfWeek.team2)} alt="" style={{height:36,width:"auto",maxWidth:"100%",objectFit:"contain",marginBottom:6}} onError={e=>{e.target.style.display="none";}}/>}
-                <div style={{fontSize:18,fontWeight:900,color:"#111",wordBreak:"break-word",lineHeight:1.2}}>{gameOfWeek.team2}</div>
-                <div style={{fontSize:11,color:"#888",marginTop:3}}>#{gameOfWeek.rank2} in Dynasty</div>
-                <div style={{fontSize:12,color:"#555",marginTop:2}}>{sorted.find(t=>t.teamName===gameOfWeek.team2)?.wins||0}W-{sorted.find(t=>t.teamName===gameOfWeek.team2)?.losses||0}L</div>
+                {logoFor(gameOfWeek.team2)&&<img src={logoFor(gameOfWeek.team2)} alt="" style={{height:isMobile?48:80,width:"auto",maxWidth:"100%",objectFit:"contain",marginBottom:isMobile?6:12}} onError={e=>{e.target.style.display="none";}}/>}
+                <div style={{fontSize:isMobile?18:28,fontWeight:900,color:"#111",wordBreak:"break-word",lineHeight:1.15,textTransform:"uppercase",letterSpacing:isMobile?0:-0.3}}>{gameOfWeek.team2}</div>
+                <div style={{fontSize:isMobile?11:12,color:"#888",marginTop:isMobile?3:6}}>#{gameOfWeek.rank2} in Dynasty</div>
+                <div style={{fontSize:isMobile?12:14,color:"#555",fontWeight:700,marginTop:2}}>{sorted.find(t=>t.teamName===gameOfWeek.team2)?.wins||0}W-{sorted.find(t=>t.teamName===gameOfWeek.team2)?.losses||0}L</div>
               </div>
             </div>
             {gotwArchived ? (
-              <div style={{marginTop:12,marginLeft:-16,marginRight:-16,marginBottom:-14}}>
+              <div style={{marginTop:16,marginLeft:isMobile?-16:-32,marginRight:isMobile?-16:-32,marginBottom:isMobile?-14:-26}}>
                 <MatchupResult archivedGame={gotwArchived} logoFor={logoFor}/>
               </div>
             ) : (<>
-              <div style={{marginTop:12,display:"grid",gridTemplateColumns:"1fr 1fr",gap:8}}>
-                <div style={{background:"#f0f4ff",borderRadius:2,padding:"8px 10px"}}>
-                  <div style={{fontSize:9,fontWeight:800,color:"#666",textTransform:"uppercase",letterSpacing:1,marginBottom:4}}>Moneyline</div>
-                  <div style={{fontSize:12,fontWeight:700,color:"#111",display:"flex",justifyContent:"space-between",gap:6}}><span style={{overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{gameOfWeek.team1}</span><span style={{flexShrink:0}}>{fmtOdds(gotwOdds1)}</span></div>
-                  <div style={{fontSize:12,fontWeight:700,color:"#111",display:"flex",justifyContent:"space-between",gap:6,marginTop:2}}><span style={{overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{gameOfWeek.team2}</span><span style={{flexShrink:0}}>{fmtOdds(gotwOdds2)}</span></div>
-                </div>
-                <div style={{background:"#f0f4ff",borderRadius:2,padding:"8px 10px"}}>
-                  <div style={{fontSize:9,fontWeight:800,color:"#666",textTransform:"uppercase",letterSpacing:1,marginBottom:4}}>Key Stat</div>
-                  {(gotwTrend1||gotwTrend2) ? (<>
-                    {gotwTrend1&&<div style={{fontSize:11,fontWeight:700,color:"#111"}}>{gameOfWeek.team1}: {gotwTrend1.ppgFor} PPG</div>}
-                    {gotwTrend2&&<div style={{fontSize:11,fontWeight:700,color:"#111",marginTop:2}}>{gameOfWeek.team2}: {gotwTrend2.ppgFor} PPG</div>}
-                  </>) : gotwH2H ? (
-                    <div style={{fontSize:11,fontWeight:700,color:"#111"}}>{gameOfWeek.team1} is {gotwH2H.wins}-{gotwH2H.losses} all-time vs {gameOfWeek.team2}</div>
-                  ) : (
-                    <div style={{fontSize:11,color:"#999",fontStyle:"italic"}}>No history yet</div>
-                  )}
-                </div>
-                <div style={{background:"#f0f4ff",borderRadius:2,padding:"8px 10px"}}>
-                  <div style={{fontSize:9,fontWeight:800,color:"#666",textTransform:"uppercase",letterSpacing:1,marginBottom:4}}>Spread</div>
-                  <div style={{fontSize:12,fontWeight:700,color:"#111",display:"flex",justifyContent:"space-between",gap:6}}><span style={{overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{gameOfWeek.team1}</span><span style={{flexShrink:0}}>{gotwSpread1>0?`+${gotwSpread1}`:gotwSpread1}</span></div>
-                  <div style={{fontSize:12,fontWeight:700,color:"#111",display:"flex",justifyContent:"space-between",gap:6,marginTop:2}}><span style={{overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{gameOfWeek.team2}</span><span style={{flexShrink:0}}>{-gotwSpread1>0?`+${-gotwSpread1}`:-gotwSpread1}</span></div>
-                </div>
-                <div style={{background:"#f0f4ff",borderRadius:2,padding:"8px 10px"}}>
-                  <div style={{fontSize:9,fontWeight:800,color:"#666",textTransform:"uppercase",letterSpacing:1,marginBottom:4}}>Over/Under</div>
-                  <div style={{fontSize:12,fontWeight:700,color:"#111"}}>O/U {gotwTotal}</div>
-                </div>
+              <div style={{marginTop:isMobile?12:22,display:"grid",gridTemplateColumns:isMobile?"1fr 1fr":"repeat(4,1fr)",gap:isMobile?8:14}}>
+                {gotwStatBlocks.map(b=>(
+                  <div key={b.label} style={{background:"#f7f7f7",border:"1px solid #eee",borderRadius:3,padding:isMobile?"8px 10px":"12px 14px"}}>
+                    <div style={{fontSize:isMobile?9:10,fontWeight:800,color:"#888",textTransform:"uppercase",letterSpacing:1,marginBottom:isMobile?4:8}}>{b.label}</div>
+                    {b.content}
+                  </div>
+                ))}
               </div>
-              {setTab&&<button onClick={()=>setTab("Redzone")} style={{marginTop:12,width:"100%",background:"#111",color:"#fff",border:"none",borderRadius:2,padding:"10px 14px",cursor:"pointer",fontFamily:"'Helvetica Neue',Arial,sans-serif",fontSize:12,fontWeight:800,textTransform:"uppercase",letterSpacing:0.5,display:"flex",alignItems:"center",justifyContent:"center",gap:8}}>📺 Watch on RedZone</button>}
+              {setTab&&<button onClick={()=>setTab("Redzone")} style={{marginTop:isMobile?12:20,width:"100%",background:"#111",color:"#fff",border:"none",borderRadius:2,padding:isMobile?"10px 14px":"13px 14px",cursor:"pointer",fontFamily:"'Helvetica Neue',Arial,sans-serif",fontSize:isMobile?12:13,fontWeight:800,textTransform:"uppercase",letterSpacing:0.5,display:"flex",alignItems:"center",justifyContent:"center",gap:8}}>📺 Watch on RedZone</button>}
             </>)}
-            {existingGOTW&&<div style={{marginTop:12,padding:"10px 14px",background:"#f0f4ff",borderRadius:2,border:"1px solid #c5d0e8",cursor:"pointer",display:"flex",justifyContent:"space-between",alignItems:"center",gap:10}} onClick={()=>setActiveArticle(existingGOTW)}>
-              <span style={{fontSize:13,fontWeight:700,color:"#1a3a6b"}}>{articleHeadline(existingGOTW.text)}</span>
-              <span style={{fontSize:12,color:"#1a3a6b",fontWeight:700,flexShrink:0}}>Read →</span>
+            {existingGOTW&&<div style={{marginTop:isMobile?12:20,padding:"10px 14px",background:"#f7f7f7",borderRadius:2,border:"1px solid #eee",cursor:"pointer",display:"flex",justifyContent:"space-between",alignItems:"center",gap:10}} onClick={()=>setActiveArticle(existingGOTW)}>
+              <span style={{fontSize:13,fontWeight:700,color:"#111"}}>{articleHeadline(existingGOTW.text)}</span>
+              <span style={{fontSize:12,color:RED,fontWeight:700,flexShrink:0}}>Read →</span>
             </div>}
           </div>
         </Card>
       )}
 
-      {/* All matchups */}
+      {/* All matchups — mobile: the stacked expandable rows from before; desktop: a tile grid
+          so the week's slate reads like a scoreboard instead of a plain list. */}
       <Card style={{overflow:"hidden"}}>
-        <CardHead bg="#333">Week {week} Matchups</CardHead>
-        <div style={{padding:"4px 14px 8px"}}>
-          {games.map(({team,opp},i)=>{
-            const isGOTW = gameOfWeek&&((team===gameOfWeek.team1&&opp===gameOfWeek.team2)||(team===gameOfWeek.team2&&opp===gameOfWeek.team1));
-            const isBye = opp==="BYE";
-            const opp2 = isCPUOpp(opp) ? (cpuOppName(opp)||"CPU") : opp;
-            const isOpen = expandedMatchup[i];
-            return(
-              <div key={i} style={{borderBottom:"1px solid #f0f0f0"}}>
-                <div onClick={isBye?undefined:()=>setExpandedMatchup(p=>({...p,[i]:!p[i]}))} style={{display:"flex",alignItems:"center",padding:"9px 0",background:isGOTW?"#f8f9ff":"transparent",gap:4,cursor:isBye?"default":"pointer"}}>
-                  {isGOTW&&<span style={{fontSize:10,flexShrink:0}}>🏆</span>}
-                  {isBye
-                    ?<><span style={{fontSize:13,fontWeight:600,color:"#888",flex:1,minWidth:0,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{team}</span><span style={{fontSize:11,color:"#aaa",background:"#f5f5f5",borderRadius:2,padding:"2px 8px",flexShrink:0}}>BYE</span></>
-                    :<>
-                        <span style={{flex:1,minWidth:0,display:"flex",alignItems:"center",justifyContent:"flex-end",gap:6,overflow:"hidden"}}>
-                          <span style={{fontSize:13,fontWeight:isGOTW?800:700,color:"#111",overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap",textAlign:"right"}}>{team}</span>
-                          {logoFor(team)&&<img src={logoFor(team)} alt="" style={{height:20,width:20,objectFit:"contain",flexShrink:0}} onError={e=>{e.target.style.display="none";}}/>}
-                        </span>
-                        <div style={{padding:"0 10px",textAlign:"center",flexShrink:0}}><span style={{fontSize:10,fontWeight:900,color:isGOTW?"#1a3a6b":"#bbb",letterSpacing:1}}>VS</span></div>
-                        <span style={{flex:1,minWidth:0,display:"flex",alignItems:"center",gap:6,overflow:"hidden"}}>
-                          {logoFor(opp)&&<img src={logoFor(opp)} alt="" style={{height:20,width:20,objectFit:"contain",flexShrink:0}} onError={e=>{e.target.style.display="none";}}/>}
-                          <span style={{fontSize:13,fontWeight:isCPUOpp(opp)?600:(isGOTW?800:700),color:isCPUOpp(opp)?"#888":"#111",overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{formatOpp(opp)}</span>
-                        </span>
-                      </>
-                  }
-                  {!isBye&&<span style={{fontSize:10,color:"#ccc",flexShrink:0,marginLeft:6}}>{isOpen?"▲":"▼"}</span>}
+        <CardHead bg="#111">Week {week} Matchups</CardHead>
+        {isMobile?(
+          <div style={{padding:"4px 14px 8px"}}>
+            {games.map(({team,opp},i)=>{
+              const isGOTW = gameOfWeek&&((team===gameOfWeek.team1&&opp===gameOfWeek.team2)||(team===gameOfWeek.team2&&opp===gameOfWeek.team1));
+              const isBye = opp==="BYE";
+              const opp2 = isCPUOpp(opp) ? (cpuOppName(opp)||"CPU") : opp;
+              const isOpen = expandedMatchup[i];
+              return(
+                <div key={i} style={{borderBottom:"1px solid #f0f0f0"}}>
+                  <div onClick={isBye?undefined:()=>setExpandedMatchup(p=>({...p,[i]:!p[i]}))} style={{display:"flex",alignItems:"center",padding:"9px 0",background:isGOTW?"#fff5f5":"transparent",gap:4,cursor:isBye?"default":"pointer"}}>
+                    {isGOTW&&<span style={{fontSize:10,flexShrink:0}}>🏆</span>}
+                    {isBye
+                      ?<><span style={{fontSize:13,fontWeight:600,color:"#888",flex:1,minWidth:0,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{team}</span><span style={{fontSize:11,color:"#aaa",background:"#f5f5f5",borderRadius:2,padding:"2px 8px",flexShrink:0}}>BYE</span></>
+                      :<>
+                          <span style={{flex:1,minWidth:0,display:"flex",alignItems:"center",justifyContent:"flex-end",gap:6,overflow:"hidden"}}>
+                            <span style={{fontSize:13,fontWeight:isGOTW?800:700,color:"#111",overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap",textAlign:"right"}}>{team}</span>
+                            {logoFor(team)&&<img src={logoFor(team)} alt="" style={{height:20,width:20,objectFit:"contain",flexShrink:0}} onError={e=>{e.target.style.display="none";}}/>}
+                          </span>
+                          <div style={{padding:"0 10px",textAlign:"center",flexShrink:0}}><span style={{fontSize:10,fontWeight:900,color:isGOTW?RED:"#bbb",letterSpacing:1}}>VS</span></div>
+                          <span style={{flex:1,minWidth:0,display:"flex",alignItems:"center",gap:6,overflow:"hidden"}}>
+                            {logoFor(opp)&&<img src={logoFor(opp)} alt="" style={{height:20,width:20,objectFit:"contain",flexShrink:0}} onError={e=>{e.target.style.display="none";}}/>}
+                            <span style={{fontSize:13,fontWeight:isCPUOpp(opp)?600:(isGOTW?800:700),color:isCPUOpp(opp)?"#888":"#111",overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{formatOpp(opp)}</span>
+                          </span>
+                        </>
+                    }
+                    {!isBye&&<span style={{fontSize:10,color:"#ccc",flexShrink:0,marginLeft:6}}>{isOpen?"▲":"▼"}</span>}
+                  </div>
+                  {isOpen&&!isBye&&<MatchupPreview team1={team} team2={opp2} sorted={sorted} gameArchive={gameArchive} year={year} week={week} history={history} logoFor={logoFor}/>}
                 </div>
-                {isOpen&&!isBye&&<MatchupPreview team1={team} team2={opp2} sorted={sorted} gameArchive={gameArchive} year={year} week={week} history={history} logoFor={logoFor}/>}
-              </div>
-            );
-          })}
-        </div>
+              );
+            })}
+          </div>
+        ):(
+          <div style={{padding:16,display:"grid",gridTemplateColumns:"repeat(auto-fill,minmax(230px,1fr))",gap:12}}>
+            {games.map(({team,opp},i)=>{
+              const isGOTW = gameOfWeek&&((team===gameOfWeek.team1&&opp===gameOfWeek.team2)||(team===gameOfWeek.team2&&opp===gameOfWeek.team1));
+              const isBye = opp==="BYE";
+              const opp2 = isCPUOpp(opp) ? (cpuOppName(opp)||"CPU") : opp;
+              const isOpen = expandedMatchup[i];
+              return(
+                <div key={i} onClick={isBye?undefined:()=>setExpandedMatchup(p=>({...p,[i]:!p[i]}))} style={{border:`1px solid ${isGOTW?RED:"#e5e5e5"}`,boxShadow:isGOTW?`0 0 0 1px ${RED}`:"none",borderRadius:4,padding:"14px 14px",background:isGOTW?"#fff5f5":"#fff",cursor:isBye?"default":"pointer",display:"flex",flexDirection:"column",gap:9}}>
+                  {isGOTW&&<div style={{fontSize:9,fontWeight:800,color:RED,textTransform:"uppercase",letterSpacing:1}}>🏆 Game of the Week</div>}
+                  {isBye?(
+                    <div style={{textAlign:"center",padding:"10px 0"}}>
+                      <div style={{fontSize:14,fontWeight:700,color:"#888"}}>{team}</div>
+                      <div style={{fontSize:10,color:"#aaa",marginTop:8,letterSpacing:1,textTransform:"uppercase"}}>Bye Week</div>
+                    </div>
+                  ):(<>
+                    <div style={{display:"flex",alignItems:"center",gap:9}}>
+                      {logoFor(team)&&<img src={logoFor(team)} alt="" style={{height:26,width:26,objectFit:"contain",flexShrink:0}} onError={e=>{e.target.style.display="none";}}/>}
+                      <span style={{flex:1,minWidth:0,fontSize:14,fontWeight:800,color:"#111",overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{team}</span>
+                    </div>
+                    <div style={{textAlign:"center",fontSize:10,fontWeight:900,color:isGOTW?RED:"#ccc",letterSpacing:1.5}}>VS</div>
+                    <div style={{display:"flex",alignItems:"center",gap:9}}>
+                      {logoFor(opp)&&<img src={logoFor(opp)} alt="" style={{height:26,width:26,objectFit:"contain",flexShrink:0}} onError={e=>{e.target.style.display="none";}}/>}
+                      <span style={{flex:1,minWidth:0,fontSize:14,fontWeight:isCPUOpp(opp)?600:800,color:isCPUOpp(opp)?"#888":"#111",overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{formatOpp(opp).replace(" (CPU)","")}</span>
+                      {isCPUOpp(opp)&&<span style={{fontSize:8,fontWeight:800,color:"#888",border:"1px solid #ddd",borderRadius:2,padding:"1px 5px",flexShrink:0,letterSpacing:0.5}}>CPU</span>}
+                    </div>
+                  </>)}
+                  {isOpen&&!isBye&&<div onClick={e=>e.stopPropagation()} style={{margin:"4px -14px -14px"}}><MatchupPreview team1={team} team2={opp2} sorted={sorted} gameArchive={gameArchive} year={year} week={week} history={history} logoFor={logoFor}/></div>}
+                </div>
+              );
+            })}
+          </div>
+        )}
       </Card>
     </div>
   );
@@ -5257,9 +5283,10 @@ function FeaturedCarousel({articles, setActiveArticle, RED, ff, isMobile}) {
           and the viewport width; a set aspect-ratio scales intentionally at every width instead —
           taller/safer on phones (less likely to cut off a face), cinematic on desktop. */}
       <img src={a.imageUrl} alt="" style={{width:"100%",aspectRatio:isMobile?"4/3":"21/9",objectFit:"cover",objectPosition:"center 25%",display:"block"}} onError={e=>{e.target.style.display="none";}}/>
-      <div style={{position:"absolute",bottom:0,left:0,right:0,background:"linear-gradient(transparent,rgba(0,0,0,0.88))",padding:isMobile?"28px 14px 12px":"40px 18px 14px"}}>
-        <div style={{fontSize:isMobile?9:10,color:a.reporterColor||RED,fontWeight:800,textTransform:"uppercase",letterSpacing:0.5,marginBottom:5,fontFamily:ff}}>{a.reporter||"Dynasty Central"} · {a.label}</div>
-        <div style={{fontSize:isMobile?16:20,fontWeight:900,color:"#fff",lineHeight:1.25,fontFamily:ff,display:"-webkit-box",WebkitLineClamp:3,WebkitBoxOrient:"vertical",overflow:"hidden"}}>{articleHeadline(a.text)}</div>
+      <div style={{position:"absolute",bottom:0,left:0,right:0,background:"linear-gradient(transparent,rgba(0,0,0,0.9))",padding:isMobile?"28px 14px 12px":"56px 40px 28px"}}>
+        <div style={{display:"inline-block",background:RED,color:"#fff",fontSize:isMobile?9:10,fontWeight:800,textTransform:"uppercase",letterSpacing:1,padding:isMobile?"3px 8px":"4px 11px",borderRadius:2,marginBottom:isMobile?8:14,fontFamily:ff}}>{a.label||"Breaking News"}</div>
+        <div style={{fontSize:isMobile?16:34,fontWeight:900,color:"#fff",lineHeight:1.15,fontFamily:ff,display:"-webkit-box",WebkitLineClamp:3,WebkitBoxOrient:"vertical",overflow:"hidden",maxWidth:isMobile?"100%":"72%"}}>{articleHeadline(a.text)}</div>
+        <div style={{fontSize:isMobile?11:13,color:"rgba(255,255,255,0.75)",fontWeight:600,marginTop:isMobile?6:14,fontFamily:ff}}>By {a.reporter||"Dynasty Central"}</div>
       </div>
       {featured.length>1&&<>
         <button onClick={e=>{e.stopPropagation();setIdx(i=>(i-1+featured.length)%featured.length);}} style={{position:"absolute",left:6,top:"50%",transform:"translateY(-50%)",background:"rgba(0,0,0,0.45)",color:"#fff",border:"none",borderRadius:"50%",width:44,height:44,cursor:"pointer",fontSize:18,lineHeight:"44px",textAlign:"center"}}>‹</button>
@@ -5786,15 +5813,15 @@ function RightRail({sorted,articles,entries,week,season,leader,setActiveArticle,
   return (
     <div style={{display:"flex",flexDirection:"column",gap:12}}>
 
-          <Card><CardHead>Top Headlines</CardHead><div style={{padding:"4px 0"}}>
+          <Card style={{overflow:"hidden"}}><CardHead>Top Headlines</CardHead><div style={{padding:"4px 0"}}>
             {sorted.length===0&&<div style={{padding:"12px",fontSize:12,color:"#888",fontStyle:"italic"}}>No standings yet.</div>}
-            {articles.slice(0,4).map(a=>(
-              <div key={a.id} onClick={()=>setActiveArticle(a)} style={{padding:"10px 12px",borderBottom:"1px solid #f0f0f0",cursor:"pointer",display:"flex",gap:10,alignItems:"flex-start"}} onMouseEnter={e=>e.currentTarget.style.background="#f7f7f7"} onMouseLeave={e=>e.currentTarget.style.background="transparent"}>
+            {articles.slice(0,5).map(a=>(
+              <div key={a.id} onClick={()=>setActiveArticle(a)} style={{padding:"12px 14px",borderBottom:"1px solid #f0f0f0",cursor:"pointer",display:"flex",gap:12,alignItems:"flex-start",transition:"background 0.12s"}} onMouseEnter={e=>e.currentTarget.style.background="#f7f7f7"} onMouseLeave={e=>e.currentTarget.style.background="transparent"}>
                 {a.imageUrl
-                  ? <img src={a.imageUrl} alt="" style={{width:40,height:40,borderRadius:3,objectFit:"cover",flexShrink:0}} onError={e=>{e.target.style.display="none";}}/>
-                  : (a.reporterAvatar&&<div style={{width:40,height:40,borderRadius:3,background:a.reporterColor||RED,display:"flex",alignItems:"center",justifyContent:"center",fontSize:11,fontWeight:800,color:"#fff",flexShrink:0}}>{a.reporterAvatar}</div>)}
+                  ? <img src={a.imageUrl} alt="" style={{width:52,height:52,borderRadius:3,objectFit:"cover",flexShrink:0}} onError={e=>{e.target.style.display="none";}}/>
+                  : (a.reporterAvatar&&<div style={{width:52,height:52,borderRadius:3,background:a.reporterColor||RED,display:"flex",alignItems:"center",justifyContent:"center",fontSize:13,fontWeight:800,color:"#fff",flexShrink:0}}>{a.reporterAvatar}</div>)}
                 <div style={{flex:1,minWidth:0}}>
-                  <div style={{fontSize:10,color:a.reporterColor||RED,fontWeight:700,letterSpacing:0.5,textTransform:"uppercase",marginBottom:3}}>{a.reporter||"Dynasty Central"} · {a.label}</div>
+                  <div style={{fontSize:10,color:a.reporterColor||RED,fontWeight:700,letterSpacing:0.5,textTransform:"uppercase",marginBottom:4}}>{a.label} · S{a.season} Wk{a.week}</div>
                   <div style={{fontSize:13,fontWeight:700,color:"#111",lineHeight:1.4,display:"-webkit-box",WebkitLineClamp:2,WebkitBoxOrient:"vertical",overflow:"hidden"}}>{articleHeadline(a.text)}</div>
                 </div>
               </div>
@@ -5803,11 +5830,11 @@ function RightRail({sorted,articles,entries,week,season,leader,setActiveArticle,
               {sorted.slice(0,3).map((t,i)=><div key={t.teamName} style={{padding:"9px 12px",borderBottom:"1px solid #f0f0f0"}}><div style={{fontSize:12,fontWeight:700,color:"#111",lineHeight:1.4}}>{i===0?"🏆":i===1?"📈":"📊"} {t.teamName} leads with {calcT(t)} pts</div><div style={{fontSize:10,color:"#888",marginTop:2}}>{t.wins}W - {t.losses}L</div></div>)}
               <div style={{padding:"9px 12px",borderBottom:"1px solid #f0f0f0"}}><div style={{fontSize:11,color:"#888",fontStyle:"italic"}}>Generate content to see articles here</div></div>
             </>}
-            <div style={{padding:"9px 12px"}}><div style={{fontSize:12,fontWeight:700,color:"#111"}}>📅 {week>13?"Post-Season":"Week "+week} · Season {season}</div><div style={{fontSize:10,color:"#888",marginTop:2}}>{entries.length} teams</div></div>
+            <div style={{padding:"10px 14px"}}><div style={{fontSize:12,fontWeight:700,color:"#111"}}>📅 {week>13?"Post-Season":"Week "+week} · Season {season}</div><div style={{fontSize:10,color:"#888",marginTop:2}}>{entries.length} teams</div></div>
           </div></Card>
-          <Card><CardHead bg={RED}>Full Standings</CardHead><div style={{padding:"4px 0"}}>
+          <Card style={{overflow:"hidden"}}><CardHead bg={RED}>Full Standings</CardHead><div style={{padding:"4px 0"}}>
             {sorted.length===0&&<div style={{padding:"12px",fontSize:12,color:"#888",fontStyle:"italic"}}>No standings yet.</div>}
-            {sorted.map((t,i)=>{const imgs=getPlayerImages(setupRows,t.userId,t.userName);const back=i===0?null:calcT(sorted[0])-calcT(t);return(<div key={t.teamName} style={{display:"flex",alignItems:"center",gap:8,padding:"6px 12px",borderBottom:"1px solid #f5f5f5"}}><span style={{fontSize:12,fontWeight:800,color:i===0?RED:"#bbb",width:18,textAlign:"right"}}>{i+1}</span>{imgs.teamLogo&&<img src={imgs.teamLogo} alt="" style={{width:20,height:20,objectFit:"contain",flexShrink:0}} onError={e=>{e.target.style.display="none";}}/>}<div style={{flex:1,minWidth:0}}><Name userId={t.userId} userName={t.userName} style={{fontSize:12,fontWeight:700,color:"#111",whiteSpace:"nowrap",overflow:"hidden",textOverflow:"ellipsis",display:"block"}}>{t.teamName}</Name></div><div style={{display:"flex",alignItems:"baseline",gap:5,flexShrink:0}}><span style={{fontSize:13,fontWeight:900,color:i===0?RED:"#333",minWidth:22,textAlign:"right"}}>{calcT(t)}</span><span style={{fontSize:9,color:"#aaa",fontWeight:700,minWidth:20,textAlign:"left"}}>{i===0?"":`-${back}`}</span></div></div>);})}
+            {sorted.map((t,i)=>{const imgs=getPlayerImages(setupRows,t.userId,t.userName);const back=i===0?null:calcT(sorted[0])-calcT(t);return(<div key={t.teamName} style={{display:"flex",alignItems:"center",gap:10,padding:"9px 14px",borderBottom:"1px solid #f5f5f5",borderLeft:i===0?`3px solid ${RED}`:"3px solid transparent",background:i===0?"#fff8f8":"transparent"}}><span style={{fontSize:13,fontWeight:900,color:i===0?RED:"#bbb",width:18,textAlign:"right"}}>{i+1}</span>{imgs.teamLogo&&<img src={imgs.teamLogo} alt="" style={{width:24,height:24,objectFit:"contain",flexShrink:0}} onError={e=>{e.target.style.display="none";}}/>}<div style={{flex:1,minWidth:0}}><Name userId={t.userId} userName={t.userName} style={{fontSize:13,fontWeight:i===0?800:700,color:"#111",whiteSpace:"nowrap",overflow:"hidden",textOverflow:"ellipsis",display:"block"}}>{t.teamName}</Name></div><div style={{display:"flex",alignItems:"baseline",gap:5,flexShrink:0}}><span style={{fontSize:i===0?15:13,fontWeight:900,color:i===0?RED:"#333",minWidth:24,textAlign:"right"}}>{calcT(t)}</span><span style={{fontSize:9,color:"#aaa",fontWeight:700,minWidth:20,textAlign:"left"}}>{i===0?"":`-${back}`}</span></div></div>);})}
           </div></Card>
     </div>
   );
@@ -5842,6 +5869,12 @@ export default function App() {
   const [commTab,setCommTab] = useState("Enter Results");
   const [schedule,setSchedule] = useState({}); // {week: {teamName: opponent}}
   const isMobile = useIsMobile();
+  // The 3-column sidebar grid needs more room than the 768px mobile breakpoint alone — between
+  // 768-1023px (tablet) there isn't space for 260px+320px fixed sidebars next to real content,
+  // so that range renders like mobile (single column, sidebars collapsed below) but keeps the
+  // richer >=768px component treatments (isMobile is false there) since a full-width tablet
+  // column has plenty of room for them.
+  const showSidebars = !useIsMobile(1024);
   const [articles,setArticles] = useState([]);
   const [activeArticle,setActiveArticle] = useState(null);
   const [isEditingArticle,setIsEditingArticle] = useState(false);
@@ -6430,27 +6463,48 @@ export default function App() {
   return (
     <NavCtx.Provider value={goToProfile}>
     <div style={{minHeight:"100vh",background:"#f0f0f0",color:"#111",fontFamily:ff,overflowX:"hidden",maxWidth:"100%",boxSizing:"border-box"}}>
-      {/* Top black bar */}
-      <div style={{background:"#111",padding:"0 8px 0 12px",height:44,display:"flex",alignItems:"center",gap:10,position:"sticky",top:0,zIndex:200}}>
-        <img src="/jackedupdynastytr.png" alt="Jacked Up Dynasty League" style={{height:36,width:"auto",flexShrink:0,objectFit:"contain"}}/>
-        <div style={{width:1,height:20,background:"#444",flexShrink:0}}/>
-        <div style={{fontSize:isMobile?10:12,color:"#aaa",fontWeight:600,textTransform:"uppercase",letterSpacing:0.5,flex:1,minWidth:0,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{leagueName}</div>
-        {!isMobile&&<div style={{display:"flex",gap:14,alignItems:"center",flexShrink:0}}>
-          {[["S",season],["YR",year],["WK",week>13?"PS":week]].map(([l,v])=><div key={l} style={{textAlign:"center"}}><div style={{fontSize:7,color:"#666",letterSpacing:1,textTransform:"uppercase"}}>{l}</div><div style={{fontSize:15,fontWeight:900,color:"#fff",lineHeight:1}}>{v}</div></div>)}
-        </div>}
-        {isMobile&&<div style={{flexShrink:0,textAlign:"right"}}><div style={{fontSize:9,color:"#666",letterSpacing:1,textTransform:"uppercase"}}>WK</div><div style={{fontSize:14,fontWeight:900,color:"#fff",lineHeight:1}}>{week>13?"PS":week}</div></div>}
-        {isMobile&&<button onClick={()=>setNavOpen(o=>!o)} aria-label={navOpen?"Close menu":"Open menu"} style={{flexShrink:0,width:44,height:44,background:"transparent",border:"none",color:"#fff",cursor:"pointer",display:"flex",flexDirection:"column",alignItems:"center",justifyContent:"center",gap:4,padding:0}}>
-          <span style={{display:"block",width:20,height:2,background:"#fff",borderRadius:1,transition:"transform 0.15s,opacity 0.15s",transform:navOpen?"translateY(6px) rotate(45deg)":"none"}}/>
-          <span style={{display:"block",width:20,height:2,background:"#fff",borderRadius:1,transition:"opacity 0.15s",opacity:navOpen?0:1}}/>
-          <span style={{display:"block",width:20,height:2,background:"#fff",borderRadius:1,transition:"transform 0.15s,opacity 0.15s",transform:navOpen?"translateY(-6px) rotate(-45deg)":"none"}}/>
-        </button>}
+      {/* Top black bar — compact single row on mobile (unchanged from the last pass), a taller
+          branded band on desktop (logo + league wordmark + season/year/week stat blocks) */}
+      <div style={{background:"#0a0a0a",position:"sticky",top:0,zIndex:200}}>
+        {isMobile?(
+          <div style={{padding:"0 8px 0 12px",height:44,display:"flex",alignItems:"center",gap:10}}>
+            <img src="/jackedupdynastytr.png" alt="Jacked Up Dynasty League" style={{height:36,width:"auto",flexShrink:0,objectFit:"contain"}}/>
+            <div style={{width:1,height:20,background:"#444",flexShrink:0}}/>
+            <div style={{fontSize:10,color:"#aaa",fontWeight:600,textTransform:"uppercase",letterSpacing:0.5,flex:1,minWidth:0,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{leagueName}</div>
+            <div style={{flexShrink:0,textAlign:"right"}}><div style={{fontSize:9,color:"#666",letterSpacing:1,textTransform:"uppercase"}}>WK</div><div style={{fontSize:14,fontWeight:900,color:"#fff",lineHeight:1}}>{week>13?"PS":week}</div></div>
+            <button onClick={()=>setNavOpen(o=>!o)} aria-label={navOpen?"Close menu":"Open menu"} style={{flexShrink:0,width:44,height:44,background:"transparent",border:"none",color:"#fff",cursor:"pointer",display:"flex",flexDirection:"column",alignItems:"center",justifyContent:"center",gap:4,padding:0}}>
+              <span style={{display:"block",width:20,height:2,background:"#fff",borderRadius:1,transition:"transform 0.15s,opacity 0.15s",transform:navOpen?"translateY(6px) rotate(45deg)":"none"}}/>
+              <span style={{display:"block",width:20,height:2,background:"#fff",borderRadius:1,transition:"opacity 0.15s",opacity:navOpen?0:1}}/>
+              <span style={{display:"block",width:20,height:2,background:"#fff",borderRadius:1,transition:"transform 0.15s,opacity 0.15s",transform:navOpen?"translateY(-6px) rotate(-45deg)":"none"}}/>
+            </button>
+          </div>
+        ):(
+          <div style={{maxWidth:1440,margin:"0 auto",padding:"14px 24px",display:"flex",alignItems:"center",gap:18,boxSizing:"border-box"}}>
+            <img src="/jackedupdynastytr.png" alt="Jacked Up Dynasty League" style={{height:50,width:"auto",flexShrink:0,objectFit:"contain"}}/>
+            <div style={{width:1,height:38,background:"#292929",flexShrink:0}}/>
+            <div style={{flex:1,minWidth:0}}>
+              <div style={{fontSize:23,fontWeight:900,color:"#fff",letterSpacing:0.3,textTransform:"uppercase",lineHeight:1.15,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{leagueName}</div>
+              <div style={{fontSize:10,color:"#777",fontWeight:700,textTransform:"uppercase",letterSpacing:2,marginTop:3}}>Dynasty Central Network</div>
+            </div>
+            <div style={{display:"flex",alignItems:"center",flexShrink:0}}>
+              {[["SEASON",season],["YEAR",year],["WEEK",week>13?"POST":week]].map(([l,v],i)=>(
+                <div key={l} style={{textAlign:"center",padding:"0 18px",borderLeft:i>0?"1px solid #262626":"none"}}>
+                  <div style={{fontSize:9,color:"#666",letterSpacing:1.5,textTransform:"uppercase",fontWeight:700}}>{l}</div>
+                  <div style={{fontSize:19,fontWeight:900,color:"#fff",lineHeight:1.3}}>{v}</div>
+                </div>
+              ))}
+            </div>
+          </div>
+        )}
       </div>
 
       {/* Nav tabs — desktop: always-visible horizontal strip */}
-      {!isMobile&&<div style={{background:RED,display:"flex",alignItems:"center",overflowX:"auto",WebkitOverflowScrolling:"touch"}}>
-        {NAV_TABS.map(([label,val])=>(
-          <button key={val} onClick={()=>setTab(val)} style={{flex:"0 0 auto",padding:"0 14px",height:40,background:tab===val?"rgba(255,255,255,0.18)":"transparent",border:"none",borderBottom:tab===val?"3px solid #fff":"3px solid transparent",color:"#fff",cursor:"pointer",fontSize:11,fontWeight:tab===val?800:500,fontFamily:ff,textTransform:"uppercase",letterSpacing:0.3,whiteSpace:"nowrap"}}>{val==="Discord"?"Join Discord":label}</button>
-        ))}
+      {!isMobile&&<div style={{background:RED,boxShadow:"0 2px 6px rgba(0,0,0,0.15)"}}>
+        <div style={{maxWidth:1440,margin:"0 auto",display:"flex",alignItems:"center",overflowX:"auto",WebkitOverflowScrolling:"touch",padding:"0 16px",boxSizing:"border-box"}}>
+          {NAV_TABS.map(([label,val])=>(
+            <button key={val} onClick={()=>setTab(val)} style={{flex:"0 0 auto",padding:"0 16px",height:46,background:tab===val?"rgba(255,255,255,0.18)":"transparent",border:"none",borderBottom:tab===val?"3px solid #fff":"3px solid transparent",color:"#fff",cursor:"pointer",fontSize:12,fontWeight:tab===val?800:600,fontFamily:ff,textTransform:"uppercase",letterSpacing:0.5,whiteSpace:"nowrap"}}>{val==="Discord"?"Join Discord":label}</button>
+          ))}
+        </div>
       </div>}
 
       {/* Nav tabs — mobile: hamburger-triggered overlay, hidden until tapped */}
@@ -6490,24 +6544,28 @@ export default function App() {
       )}
 
       {/* Main layout */}
-      <div style={{maxWidth:1180,margin:"0 auto",padding:isMobile?"12px 16px":"16px 12px",display:"grid",gridTemplateColumns:isMobile?"minmax(0,1fr)":"200px 1fr 260px",gap:isMobile?12:16,alignItems:"start",boxSizing:"border-box"}}>
+      <div style={{maxWidth:1440,margin:"0 auto",padding:isMobile?"12px 16px":"24px",display:"grid",gridTemplateColumns:showSidebars?"260px 1fr 320px":"minmax(0,1fr)",gap:isMobile?12:24,alignItems:"start",boxSizing:"border-box"}}>
 
-        {/* Left sidebar - desktop only */}
-        {isMobile?null:<div style={{display:"flex",flexDirection:"column",gap:12}}>
-          <Card><CardHead>Dynasty Info</CardHead><div style={{padding:"8px 0"}}>{[["Season",season],["Year",year],["Week",week>13?"Post":week],["Teams",entries.length]].map(([l,v])=><div key={l} style={{display:"flex",justifyContent:"space-between",padding:"6px 12px",borderBottom:"1px solid #f5f5f5"}}><span style={{fontSize:12,color:"#888"}}>{l}</span><span style={{fontSize:12,fontWeight:700,color:"#111"}}>{v}</span></div>)}</div></Card>
-          <Card><CardHead>Quick Links</CardHead><div style={{padding:"4px 0"}}>{["Home","Schedule","YearStats","Standings","History","Profiles","Rules","Redzone","Discord"].map(l=><div key={l} onClick={()=>setTab(l)} style={{padding:"8px 12px",fontSize:12,color:RED,cursor:"pointer",borderBottom:"1px solid #f5f5f5",fontWeight:500}}>🏈 {l==="History"?"Record Book":l==="YearStats"?"Stats":l}</div>)}</div></Card>
-          <Card><CardHead bg={RED}>Points Leader</CardHead>{sorted.length===0?<div style={{padding:"14px 12px",textAlign:"center",color:"#bbb",fontSize:12}}>Not started</div>:sorted.slice(0,1).map(t=><div key={t.teamName} style={{padding:"14px 12px",textAlign:"center"}}><div style={{fontSize:26,fontWeight:900,color:RED}}>{calcTotal(t)}</div><div style={{fontSize:14,fontWeight:700,color:"#111",marginTop:2}}>{t.teamName}</div><div style={{fontSize:11,color:"#555",marginTop:4}}>{t.wins}W - {t.losses}L</div></div>)}</Card>
+        {/* Left sidebar - only at true desktop widths (>=1024px); tablet (768-1023px) renders
+            single-column like mobile but keeps the richer >=768px component styling */}
+        {!showSidebars?null:<div style={{display:"flex",flexDirection:"column",gap:16}}>
+          <Card style={{overflow:"hidden"}}><CardHead>Dynasty Info</CardHead><div style={{padding:"10px 0"}}>{[["Season",season],["Year",year],["Week",week>13?"Post":week],["Teams",entries.length]].map(([l,v])=><div key={l} style={{display:"flex",justifyContent:"space-between",alignItems:"center",padding:"9px 16px",borderBottom:"1px solid #f5f5f5"}}><span style={{fontSize:12,color:"#888",fontWeight:600,textTransform:"uppercase",letterSpacing:0.5}}>{l}</span><span style={{fontSize:14,fontWeight:800,color:"#111"}}>{v}</span></div>)}</div></Card>
+          <Card style={{overflow:"hidden"}}><CardHead>Quick Links</CardHead><div style={{padding:"4px 0"}}>{["Home","Schedule","YearStats","Standings","History","Profiles","Rules","Redzone","Discord"].map(l=><div key={l} onClick={()=>setTab(l)} style={{padding:"10px 16px",fontSize:13,color:"#333",cursor:"pointer",borderBottom:"1px solid #f5f5f5",borderLeft:"3px solid transparent",fontWeight:600,transition:"background 0.12s, border-color 0.12s"}} onMouseEnter={e=>{e.currentTarget.style.background="#fff5f5";e.currentTarget.style.borderLeftColor=RED;e.currentTarget.style.color=RED;}} onMouseLeave={e=>{e.currentTarget.style.background="transparent";e.currentTarget.style.borderLeftColor="transparent";e.currentTarget.style.color="#333";}}>🏈 {l==="History"?"Record Book":l==="YearStats"?"Stats":l}</div>)}</div></Card>
+          <Card style={{overflow:"hidden"}}><CardHead bg={RED}>Dynasty Leader</CardHead>{sorted.length===0?<div style={{padding:"18px 14px",textAlign:"center",color:"#bbb",fontSize:12}}>Not started</div>:sorted.slice(0,1).map(t=>{const imgs=getPlayerImages(setup?.rows,t.userId,t.userName);return(<div key={t.teamName} style={{padding:"18px 14px",textAlign:"center"}}>{imgs.teamLogo&&<img src={imgs.teamLogo} alt="" style={{width:44,height:44,objectFit:"contain",marginBottom:8}} onError={e=>{e.target.style.display="none";}}/>}<div style={{fontSize:30,fontWeight:900,color:RED,lineHeight:1}}>{calcTotal(t)}</div><div style={{fontSize:15,fontWeight:800,color:"#111",marginTop:6}}>{t.teamName}</div><div style={{fontSize:12,color:"#555",marginTop:4,fontWeight:600}}>{t.wins}W - {t.losses}L</div></div>);})}</Card>
         </div>}
 
         {/* Center content */}
         <div style={{display:"flex",flexDirection:"column",gap:isMobile?10:14}}>
 
-          {/* Page header - compact on mobile */}
+          {/* Page header — on Home, the branded top bar already carries the logo/league name/
+              season info on desktop, so this white card would just duplicate it; it stays on
+              mobile (where the top bar is compact) and on every other tab (where it's the only
+              page-title indicator). */}
           {tab==="Home"?(
-            <Card style={{padding:isMobile?"10px 12px":"16px 20px",borderLeft:`4px solid ${RED}`,display:"flex",alignItems:"center",gap:14}}>
-              <img src="/jackedupdynastytr.png" alt="Jacked Up Dynasty League" style={{height:isMobile?52:68,width:"auto",objectFit:"contain",flexShrink:0}}/>
+            isMobile&&<Card style={{padding:"10px 12px",borderLeft:`4px solid ${RED}`,display:"flex",alignItems:"center",gap:14}}>
+              <img src="/jackedupdynastytr.png" alt="Jacked Up Dynasty League" style={{height:52,width:"auto",objectFit:"contain",flexShrink:0}}/>
               <div>
-                <div style={{fontSize:isMobile?16:22,fontWeight:900,color:"#111",textTransform:"uppercase",letterSpacing:-0.5}}>{leagueName}</div>
+                <div style={{fontSize:16,fontWeight:900,color:"#111",textTransform:"uppercase",letterSpacing:-0.5}}>{leagueName}</div>
                 <div style={{fontSize:10,color:"#888",marginTop:2}}>S{season} · {year} · {week>13?"Post":`Wk ${week}`}</div>
               </div>
             </Card>
@@ -6523,7 +6581,7 @@ export default function App() {
             <FeaturedCarousel articles={articles} setActiveArticle={setActiveArticle} RED={RED} ff={ff} isMobile={isMobile}/>
 
             {/* This week's matchups */}
-            {effectiveSchedule&&effectiveSchedule[week]&&Object.keys(effectiveSchedule[week]).length>0&&<WeekMatchupsCard schedule={effectiveSchedule} week={week} sorted={sorted} leagueName={leagueName} season={season} setActiveArticle={setActiveArticle} articles={articles} setArticles={setArticles} commUnlocked={commUnlocked} setupRows={setup?.rows} gameArchive={setup?.gameArchive} year={year} history={history} setTab={setTab}/>}
+            {effectiveSchedule&&effectiveSchedule[week]&&Object.keys(effectiveSchedule[week]).length>0&&<WeekMatchupsCard schedule={effectiveSchedule} week={week} sorted={sorted} leagueName={leagueName} season={season} setActiveArticle={setActiveArticle} articles={articles} setArticles={setArticles} commUnlocked={commUnlocked} setupRows={setup?.rows} gameArchive={setup?.gameArchive} year={year} history={history} setTab={setTab} isMobile={isMobile}/>}
 
             {/* Current standings summary */}
             <Card style={{overflow:"hidden"}}>
@@ -6534,17 +6592,17 @@ export default function App() {
               ):(
               <div style={{overflowX:"auto"}}>
                 <table style={{width:"100%",borderCollapse:"collapse",fontSize:13}}>
-                  <thead><tr style={{background:"#f7f7f7",borderBottom:`2px solid ${RED}`}}>
-                    {["RK","SCHOOL","PTS","BACK","OVR","CONF"].map(h=><th key={h} style={{padding:"8px 8px",textAlign:h==="SCHOOL"?"left":"center",color:"#555",fontSize:8,letterSpacing:1,textTransform:"uppercase",fontWeight:800,whiteSpace:"nowrap"}}>{h}</th>)}
+                  <thead><tr style={{background:"#f7f7f7",borderBottom:`3px solid ${RED}`}}>
+                    {["RK","SCHOOL","PTS","BACK","OVR","CONF"].map(h=><th key={h} style={{padding:"11px 10px",textAlign:h==="SCHOOL"?"left":"center",color:h==="CONF"?"#1a3a6b":"#555",fontSize:9,letterSpacing:1.2,textTransform:"uppercase",fontWeight:800,whiteSpace:"nowrap"}}>{h}</th>)}
                   </tr></thead>
                   <tbody>{sorted.map((t,i)=>{const tot=calcTotal(t);const beh=leader-tot;return(
-                    <tr key={t.teamName} style={{borderBottom:"1px solid #eee",background:i===0?"#fff8f8":i%2===0?"#fafafa":"#fff"}}>
-                      <td style={{padding:"9px 8px",textAlign:"center",fontWeight:900,color:i===0?RED:"#bbb"}}>{i+1}</td>
-                      <td style={{padding:"9px 8px",fontWeight:i===0?800:600,color:"#111",whiteSpace:"nowrap"}}><div style={{display:"flex",alignItems:"center",gap:6}}>{(()=>{const imgs=getPlayerImages(setup?.rows,t.userId,t.userName);return imgs.teamLogo?<img src={imgs.teamLogo} alt="" style={{width:22,height:22,objectFit:"contain",flexShrink:0}} onError={e=>{e.target.style.display="none";}}/>:null;})()}<div><Name userId={t.userId} userName={t.userName}>{t.teamName}</Name><div style={{fontSize:10,color:"#888"}}>{t.userName}{t.isActive===false&&<span style={{marginLeft:6,color:RED,fontWeight:800}}>INACTIVE</span>}</div></div></div></td>
-                      <td style={{padding:"9px 8px",textAlign:"center",fontWeight:900,color:i===0?RED:"#111",fontSize:15}}>{tot}</td>
-                      <td style={{padding:"9px 8px",textAlign:"center",color:beh===0?"#007a00":RED,fontWeight:700}}>{beh===0?"-":`-${beh}`}</td>
-                      <td style={{padding:"9px 8px",textAlign:"center",color:"#555",fontWeight:600,fontSize:12}}>{t.wins}-{t.losses}</td>
-                      <td style={{padding:"9px 8px",textAlign:"center",color:"#1a3a6b",fontWeight:700,fontSize:12}}>{(t.confWins||0)}-{(t.confLosses||0)}</td>
+                    <tr key={t.teamName} style={{borderBottom:"1px solid #eee",background:i===0?"#fff5f5":i%2===0?"#fafafa":"#fff"}}>
+                      <td style={{padding:"13px 10px",textAlign:"center",fontWeight:900,fontSize:i===0?18:14,color:i===0?RED:"#bbb",borderLeft:i===0?`4px solid ${RED}`:"4px solid transparent"}}>{i+1}</td>
+                      <td style={{padding:"13px 10px",fontWeight:i===0?800:600,color:"#111",whiteSpace:"nowrap"}}><div style={{display:"flex",alignItems:"center",gap:9}}>{(()=>{const imgs=getPlayerImages(setup?.rows,t.userId,t.userName);return imgs.teamLogo?<img src={imgs.teamLogo} alt="" style={{width:28,height:28,objectFit:"contain",flexShrink:0}} onError={e=>{e.target.style.display="none";}}/>:null;})()}<div><Name userId={t.userId} userName={t.userName}>{t.teamName}</Name><div style={{fontSize:11,color:"#888",fontWeight:400}}>{t.userName}{t.isActive===false&&<span style={{marginLeft:6,color:RED,fontWeight:800}}>INACTIVE</span>}</div></div></div></td>
+                      <td style={{padding:"13px 10px",textAlign:"center",fontWeight:900,color:i===0?RED:"#111",fontSize:i===0?20:16}}>{tot}</td>
+                      <td style={{padding:"13px 10px",textAlign:"center",color:beh===0?"#007a00":RED,fontWeight:700}}>{beh===0?"-":`-${beh}`}</td>
+                      <td style={{padding:"13px 10px",textAlign:"center",color:"#555",fontWeight:600,fontSize:13}}>{t.wins}-{t.losses}</td>
+                      <td style={{padding:"13px 10px",textAlign:"center",color:"#1a3a6b",fontWeight:700,fontSize:13}}>{(t.confWins||0)}-{(t.confLosses||0)}</td>
                     </tr>);})}</tbody>
                 </table>
               </div>)}
@@ -6569,10 +6627,11 @@ export default function App() {
               </div>
             </Card>}
 
-            {/* Dynasty Leader + Quick Links — desktop already shows these in the left sidebar;
-                on mobile that sidebar doesn't render at all, so give them a compact spot lower
-                in the page instead of dropping them entirely. */}
-            {isMobile&&sorted.length>0&&(
+            {/* Dynasty Leader + Quick Links — only in the left sidebar at true desktop widths
+                (showSidebars); below 1024px (mobile and tablet alike) that sidebar doesn't
+                render at all, so give them a compact spot lower in the page instead of dropping
+                them entirely. */}
+            {!showSidebars&&sorted.length>0&&(
               <Card style={{overflow:"hidden"}}>
                 <CardHead bg={RED}>Dynasty Leader</CardHead>
                 <div style={{padding:"12px 14px",display:"flex",alignItems:"center",gap:12}}>
@@ -6585,7 +6644,7 @@ export default function App() {
                 </div>
               </Card>
             )}
-            {isMobile&&(
+            {!showSidebars&&(
               <Card style={{overflow:"hidden"}}>
                 <CardHead>Quick Links</CardHead>
                 <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:1,background:"#f0f0f0",padding:1}}>
@@ -6598,8 +6657,9 @@ export default function App() {
           </>)}
 
           {tab==="Standings"&&(<>
-            {/* Mobile: latest article teaser */}
-            {isMobile&&articles.length>0&&(
+            {/* Latest article teaser — shown whenever the RightRail (with Top Headlines) isn't
+                rendered, i.e. below the true-desktop showSidebars threshold */}
+            {!showSidebars&&articles.length>0&&(
               <div onClick={()=>setActiveArticle(articles[0])} style={{background:"#111",borderRadius:2,padding:"12px 14px",cursor:"pointer",display:"flex",justifyContent:"space-between",alignItems:"center",gap:10}}>
                 <div style={{flex:1,minWidth:0}}>
                   <div style={{display:"flex",alignItems:"center",gap:6,marginBottom:4}}>
@@ -6624,26 +6684,26 @@ export default function App() {
                 ):(
                 <div style={{overflowX:"auto"}}>
                   <table style={{width:"100%",borderCollapse:"collapse",fontSize:13}}>
-                    <thead><tr style={{background:"#f7f7f7",borderBottom:`2px solid ${RED}`}}>
+                    <thead><tr style={{background:"#f7f7f7",borderBottom:`3px solid ${RED}`}}>
                       {["RK","SCHOOL","PTS","BACK","OVR","CONF","GAME","BONUS","CSTAND","CC","BOWL","REC","AWD"].map(h=>(
-                        <th key={h} style={{padding:"9px 7px",textAlign:h==="SCHOOL"?"left":"center",color:h==="CONF"?"#1a3a6b":"#555",fontSize:8,letterSpacing:1,textTransform:"uppercase",fontWeight:800,whiteSpace:"nowrap",borderRight:"1px solid #eee"}}>{h}</th>
+                        <th key={h} style={{padding:"11px 9px",textAlign:h==="SCHOOL"?"left":"center",color:h==="CONF"?"#1a3a6b":"#555",fontSize:9,letterSpacing:1.1,textTransform:"uppercase",fontWeight:800,whiteSpace:"nowrap",borderRight:"1px solid #eee"}}>{h}</th>
                       ))}
                     </tr></thead>
                     <tbody>{sorted.map((t,i)=>{const tot=calcTotal(t);const beh=leader-tot;return(
-                      <tr key={t.teamName} style={{borderBottom:"1px solid #eee",background:i===0?"#fff8f8":i%2===0?"#fafafa":"#fff"}}>
-                        <td style={{padding:"10px 7px",textAlign:"center",fontWeight:900,fontSize:14,color:i===0?RED:"#bbb",borderRight:"1px solid #eee"}}>{i+1}</td>
-                        <td style={{padding:"10px 7px",fontWeight:i===0?800:600,color:"#111",whiteSpace:"nowrap",borderRight:"1px solid #eee",maxWidth:140,overflow:"hidden",textOverflow:"ellipsis"}}><div style={{display:"flex",alignItems:"center",gap:6}}>{(()=>{const imgs=getPlayerImages(setup?.rows,t.userId,t.userName);return imgs.teamLogo?<img src={imgs.teamLogo} alt="" style={{width:22,height:22,objectFit:"contain",flexShrink:0}} onError={e=>{e.target.style.display="none";}}/>:null;})()}<div><div style={{display:"flex",alignItems:"center",gap:5}}><Name userId={t.userId} userName={t.userName}>{t.teamName}</Name>{t.isActive===false&&<span style={{fontSize:8,fontWeight:800,color:RED,border:`1px solid ${RED}`,borderRadius:2,padding:"1px 3px",flexShrink:0}}>INACTIVE</span>}</div><div style={{fontSize:10,color:"#888",fontWeight:400}}>{t.userName}</div></div></div></td>
-                        <td style={{padding:"10px 7px",textAlign:"center",fontWeight:900,color:i===0?RED:"#111",fontSize:16,background:i===0?"#fff0f0":"transparent",borderRight:"2px solid #ddd"}}>{tot}</td>
-                        <td style={{padding:"10px 7px",textAlign:"center",color:beh===0?"#007a00":RED,fontWeight:700,fontSize:12,borderRight:"2px solid #ddd",whiteSpace:"nowrap"}}>{beh===0?"-":`-${beh}`}</td>
-                        <td style={{padding:"10px 7px",textAlign:"center",color:"#555",fontWeight:600,fontSize:12,borderRight:"1px solid #eee",whiteSpace:"nowrap"}}>{t.wins}-{t.losses}</td>
-                        <td style={{padding:"10px 7px",textAlign:"center",color:"#1a3a6b",fontWeight:700,fontSize:12,borderRight:"2px solid #ddd",whiteSpace:"nowrap"}}>{(t.confWins||0)}-{(t.confLosses||0)}</td>
-                        <td style={{padding:"10px 7px",textAlign:"center",borderRight:"1px solid #eee"}}>{t.gamePts}</td>
-                        <td style={{padding:"10px 7px",textAlign:"center",color:"#cc7700",fontWeight:700,borderRight:"1px solid #eee"}}>{t.rankedBonusPts>0?`+${t.rankedBonusPts}`:"—"}</td>
-                        <td style={{padding:"10px 7px",textAlign:"center",borderRight:"1px solid #eee"}}>{t.confStandPts}</td>
-                        <td style={{padding:"10px 7px",textAlign:"center",borderRight:"1px solid #eee"}}>{t.confChampPts}</td>
-                        <td style={{padding:"10px 7px",textAlign:"center",borderRight:"1px solid #eee"}}>{t.bowlPts}</td>
-                        <td style={{padding:"10px 7px",textAlign:"center",borderRight:"1px solid #eee"}}>{t.recruitingPts}</td>
-                        <td style={{padding:"10px 7px",textAlign:"center"}}>{t.prestigePts+t.heismanPts}</td>
+                      <tr key={t.teamName} style={{borderBottom:"1px solid #eee",background:i===0?"#fff5f5":i%2===0?"#fafafa":"#fff"}}>
+                        <td style={{padding:"12px 9px",textAlign:"center",fontWeight:900,fontSize:i===0?17:14,color:i===0?RED:"#bbb",borderRight:"1px solid #eee",borderLeft:i===0?`4px solid ${RED}`:"4px solid transparent"}}>{i+1}</td>
+                        <td style={{padding:"12px 9px",fontWeight:i===0?800:600,color:"#111",whiteSpace:"nowrap",borderRight:"1px solid #eee",maxWidth:150,overflow:"hidden",textOverflow:"ellipsis"}}><div style={{display:"flex",alignItems:"center",gap:8}}>{(()=>{const imgs=getPlayerImages(setup?.rows,t.userId,t.userName);return imgs.teamLogo?<img src={imgs.teamLogo} alt="" style={{width:26,height:26,objectFit:"contain",flexShrink:0}} onError={e=>{e.target.style.display="none";}}/>:null;})()}<div><div style={{display:"flex",alignItems:"center",gap:5}}><Name userId={t.userId} userName={t.userName}>{t.teamName}</Name>{t.isActive===false&&<span style={{fontSize:8,fontWeight:800,color:RED,border:`1px solid ${RED}`,borderRadius:2,padding:"1px 3px",flexShrink:0}}>INACTIVE</span>}</div><div style={{fontSize:11,color:"#888",fontWeight:400}}>{t.userName}</div></div></div></td>
+                        <td style={{padding:"12px 9px",textAlign:"center",fontWeight:900,color:i===0?RED:"#111",fontSize:i===0?19:16,background:i===0?"#fff0f0":"transparent",borderRight:"2px solid #ddd"}}>{tot}</td>
+                        <td style={{padding:"12px 9px",textAlign:"center",color:beh===0?"#007a00":RED,fontWeight:700,fontSize:12,borderRight:"2px solid #ddd",whiteSpace:"nowrap"}}>{beh===0?"-":`-${beh}`}</td>
+                        <td style={{padding:"12px 9px",textAlign:"center",color:"#555",fontWeight:600,fontSize:12,borderRight:"1px solid #eee",whiteSpace:"nowrap"}}>{t.wins}-{t.losses}</td>
+                        <td style={{padding:"12px 9px",textAlign:"center",color:"#1a3a6b",fontWeight:700,fontSize:12,borderRight:"2px solid #ddd",whiteSpace:"nowrap"}}>{(t.confWins||0)}-{(t.confLosses||0)}</td>
+                        <td style={{padding:"12px 9px",textAlign:"center",borderRight:"1px solid #eee"}}>{t.gamePts}</td>
+                        <td style={{padding:"12px 9px",textAlign:"center",color:"#cc7700",fontWeight:700,borderRight:"1px solid #eee"}}>{t.rankedBonusPts>0?`+${t.rankedBonusPts}`:"—"}</td>
+                        <td style={{padding:"12px 9px",textAlign:"center",borderRight:"1px solid #eee"}}>{t.confStandPts}</td>
+                        <td style={{padding:"12px 9px",textAlign:"center",borderRight:"1px solid #eee"}}>{t.confChampPts}</td>
+                        <td style={{padding:"12px 9px",textAlign:"center",borderRight:"1px solid #eee"}}>{t.bowlPts}</td>
+                        <td style={{padding:"12px 9px",textAlign:"center",borderRight:"1px solid #eee"}}>{t.recruitingPts}</td>
+                        <td style={{padding:"12px 9px",textAlign:"center"}}>{t.prestigePts+t.heismanPts}</td>
                       </tr>
                     );})}</tbody>
                   </table>
@@ -6651,8 +6711,8 @@ export default function App() {
               }
             </Card>
 
-            {/* Mobile articles feed */}
-            {isMobile&&articles.length>1&&(
+            {/* Articles feed — same reasoning as the teaser above */}
+            {!showSidebars&&articles.length>1&&(
               <Card style={{overflow:"hidden"}}>
                 <CardHead>Latest Articles</CardHead>
                 <div style={{padding:"4px 0"}}>
@@ -6714,7 +6774,7 @@ export default function App() {
         </div>
 
         {/* Right rail - desktop only */}
-        {tab!=="Redzone"&&tab!=="Discord"&&!isMobile&&<RightRail sorted={sorted} articles={articles} entries={activeEntries} week={week} season={season} leader={leader} setActiveArticle={setActiveArticle} setupRows={setup?.rows}/>}
+        {tab!=="Redzone"&&tab!=="Discord"&&showSidebars&&<RightRail sorted={sorted} articles={articles} entries={activeEntries} week={week} season={season} leader={leader} setActiveArticle={setActiveArticle} setupRows={setup?.rows}/>}
       </div>
 
       {/* Hidden footer */}
