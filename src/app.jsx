@@ -1140,8 +1140,6 @@ function WeekMatchupsCard({schedule,week,sorted,leagueName,season,setActiveArtic
                   {isGOTW&&<span style={{fontSize:10,flexShrink:0}}>🏆</span>}
                   {isBye
                     ?<><span style={{fontSize:13,fontWeight:600,color:"#888",flex:1,minWidth:0,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{team}</span><span style={{fontSize:11,color:"#aaa",background:"#f5f5f5",borderRadius:2,padding:"2px 8px",flexShrink:0}}>BYE</span></>
-                    :isCPUOpp(opp)
-                    ?<><span style={{fontSize:13,fontWeight:700,color:"#111",flex:1,minWidth:0,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{team}</span><span style={{fontSize:10,fontWeight:800,color:"#bbb",padding:"0 8px",flexShrink:0}}>VS</span><span style={{fontSize:13,fontWeight:600,color:"#888",flex:1,minWidth:0,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{formatOpp(opp)}</span></>
                     :<>
                         <span style={{flex:1,minWidth:0,display:"flex",alignItems:"center",justifyContent:"flex-end",gap:6,overflow:"hidden"}}>
                           <span style={{fontSize:13,fontWeight:isGOTW?800:700,color:"#111",overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap",textAlign:"right"}}>{team}</span>
@@ -1150,7 +1148,7 @@ function WeekMatchupsCard({schedule,week,sorted,leagueName,season,setActiveArtic
                         <div style={{padding:"0 10px",textAlign:"center",flexShrink:0}}><span style={{fontSize:10,fontWeight:900,color:isGOTW?"#1a3a6b":"#bbb",letterSpacing:1}}>VS</span></div>
                         <span style={{flex:1,minWidth:0,display:"flex",alignItems:"center",gap:6,overflow:"hidden"}}>
                           {logoFor(opp)&&<img src={logoFor(opp)} alt="" style={{height:20,width:20,objectFit:"contain",flexShrink:0}} onError={e=>{e.target.style.display="none";}}/>}
-                          <span style={{fontSize:13,fontWeight:isGOTW?800:700,color:"#111",overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{opp}</span>
+                          <span style={{fontSize:13,fontWeight:isCPUOpp(opp)?600:(isGOTW?800:700),color:isCPUOpp(opp)?"#888":"#111",overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{formatOpp(opp)}</span>
                         </span>
                       </>
                   }
