@@ -2091,65 +2091,64 @@ function ScheduleTab({schedule,entries,week,season,year,setup,setupRows,history}
     const WL = ({won}) => <span style={{fontSize:10,fontWeight:800,padding:"1px 5px",borderRadius:2,background:won?"#e8f5e9":"#fff0f0",color:won?"#007a00":RED,flexShrink:0}}>{won?"W":"L"}</span>;
     const CpuTag = () => <span style={{fontSize:8,fontWeight:800,color:"#999",border:"1px solid #ddd",borderRadius:2,padding:"1px 4px",textTransform:"uppercase",letterSpacing:0.5,flexShrink:0}}>CPU</span>;
 
-    const nameMaxW = isMobile?90:150;
-    const nameStyle = won => ({fontSize:isMobile?12:(prominent?15:13),fontWeight:played?(won?800:500):700,color:played?(won?"#111":"#999"):"#111",textTransform:"uppercase",letterSpacing:0.2,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap",maxWidth:nameMaxW});
+    const nameStyle = won => ({fontSize:isMobile?13:(prominent?15:13),fontWeight:played?(won?800:500):700,color:played?(won?"#111":"#999"):"#111",textTransform:"uppercase",letterSpacing:0.2,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap",maxWidth:220});
+
+    const scoreCenter = (
+      <div style={{display:"flex",flexDirection:"column",alignItems:"center",gap:3}}>
+        {played ? (
+          <>
+            <div style={{display:"flex",alignItems:"center",gap:3}}>
+              {result.scoreA!=null&&<span style={{fontSize:isMobile?18:22,fontWeight:900,color:winHome?"#111":"#999"}}>{result.scoreA}</span>}
+              <span style={{fontSize:10,fontWeight:800,color:"#ccc"}}>–</span>
+              {result.scoreB!=null&&<span style={{fontSize:isMobile?18:22,fontWeight:900,color:winAway?"#111":"#999"}}>{result.scoreB}</span>}
+            </div>
+            <span style={{fontSize:8,fontWeight:800,color:"#4caf50",background:"rgba(76,175,80,0.1)",border:"1px solid rgba(76,175,80,0.3)",borderRadius:2,padding:"1px 5px",textTransform:"uppercase",letterSpacing:0.5}}>Final</span>
+          </>
+        ) : (
+          <span style={{fontSize:isMobile?11:(prominent?13:11),fontWeight:800,color:isBye?"#bbb":"#999",padding:isMobile?"2px 7px":"3px 8px",border:isBye?"none":"1px solid #eee",borderRadius:2}}>{isBye?"BYE":"VS"}</span>
+        )}
+      </div>
+    );
+    const awayCell = (
+      <div style={{display:"flex",flexDirection:"column",alignItems:isMobile?"center":"flex-end",gap:4,minWidth:0}}>
+        <TeamNameLink name={home} style={nameStyle(winHome)}/>
+        <TeamLogo url={logoByTeam[home]} size={logoSize}/>
+        {played&&<WL won={winHome}/>}
+        {!isMobile&&!played&&<div style={{fontSize:10,color:"#aaa",fontWeight:600}}>{recordByTeam[home]}</div>}
+      </div>
+    );
+    const homeCell = (
+      <div style={{display:"flex",flexDirection:"column",alignItems:isMobile?"center":"flex-start",gap:4,minWidth:0}}>
+        <TeamLogo url={logoByTeam[away]} size={logoSize}/>
+        <div style={{display:"flex",alignItems:"center",gap:5,minWidth:0}}>
+          <TeamNameLink name={away} display={oppDisplay} style={{...nameStyle(winAway),color:isCPU||isBye?"#aaa":nameStyle(winAway).color}}/>
+          {showCpuPill&&<CpuTag/>}
+        </div>
+        {played&&<WL won={winAway}/>}
+        {!isMobile&&!played&&!isBye&&<div style={{fontSize:10,color:"#aaa",fontWeight:600}}>{isCPU?"":recordByTeam[away]}</div>}
+      </div>
+    );
 
     return (
       <div style={{border:"1px solid #eee",borderRadius:2,margin:"0 12px 8px",background:"#fff",overflow:"hidden"}}>
+        {/* game-row spans the full card width; matchup is a fit-content block auto-margined to
+            true center within it. The arrow lives in its own equal-width track on the other side
+            from an empty spacer track, so its presence never skews where matchup centers. */}
         <div
           onClick={played ? ()=>setExpanded(p=>({...p,[key]:!p[key]})) : undefined}
-          style={{position:"relative",padding:isMobile?"10px 34px 10px 10px":"14px 40px",cursor:played?"pointer":"default",background:isOpen?"#fafafa":"transparent"}}
+          style={{display:"grid",gridTemplateColumns:"1fr auto 1fr",alignItems:"center",width:"100%",padding:isMobile?"12px 10px":"14px 16px",cursor:played?"pointer":"default",background:isOpen?"#fafafa":"transparent",boxSizing:"border-box"}}
           onMouseEnter={played?e=>e.currentTarget.style.background="#fafafa":undefined}
           onMouseLeave={played?e=>e.currentTarget.style.background=isOpen?"#fafafa":"transparent":undefined}
         >
-          {/* Matchup group — a single content-sized flex row, centered as a unit within the card.
-              No flex-grow on any child, so the group's own width never stretches to fill the
-              row; centering comes purely from justifyContent on this wrapper. */}
-          <div style={{display:"flex",alignItems:"center",justifyContent:"center",gap:isMobile?8:16,flexWrap:"nowrap"}}>
-            {/* Away side (left) — minWidth:0 lets this column shrink below its content size at
-                narrow widths instead of forcing the whole group to overflow; the name span's own
-                maxWidth+ellipsis (nameStyle) does the actual truncating as room gets tight. */}
-            <div style={{display:"flex",flexDirection:"column",alignItems:"center",gap:3,minWidth:0}}>
-              {/* width:100% forces this row to actually match the (now-shrunk) column width —
-                  without it, alignItems:"center" on the column lets this row keep its natural
-                  content width and silently overflow instead of letting the name ellipsize. */}
-              <div style={{display:"flex",alignItems:"center",justifyContent:"center",gap:5,minWidth:0,width:"100%"}}>
-                <TeamNameLink name={home} style={nameStyle(winHome)}/>
-                <TeamLogo url={logoByTeam[home]} size={logoSize}/>
-              </div>
-              {played&&<WL won={winHome}/>}
-              {!isMobile&&!played&&<div style={{fontSize:10,color:"#aaa",fontWeight:600}}>{recordByTeam[home]}</div>}
-            </div>
-
-            {/* Score / VS center */}
-            <div style={{display:"flex",flexDirection:"column",alignItems:"center",gap:3,flexShrink:0}}>
-              {played ? (
-                <>
-                  <div style={{display:"flex",alignItems:"center",gap:3}}>
-                    {result.scoreA!=null&&<span style={{fontSize:isMobile?15:22,fontWeight:900,color:winHome?"#111":"#999"}}>{result.scoreA}</span>}
-                    <span style={{fontSize:10,fontWeight:800,color:"#ccc"}}>–</span>
-                    {result.scoreB!=null&&<span style={{fontSize:isMobile?15:22,fontWeight:900,color:winAway?"#111":"#999"}}>{result.scoreB}</span>}
-                  </div>
-                  <span style={{fontSize:8,fontWeight:800,color:"#4caf50",background:"rgba(76,175,80,0.1)",border:"1px solid rgba(76,175,80,0.3)",borderRadius:2,padding:"1px 5px",textTransform:"uppercase",letterSpacing:0.5}}>Final</span>
-                </>
-              ) : (
-                <span style={{fontSize:isMobile?10:(prominent?13:11),fontWeight:800,color:isBye?"#bbb":"#999",padding:isMobile?"1px 5px":"3px 8px",border:isBye?"none":"1px solid #eee",borderRadius:2}}>{isBye?"BYE":"VS"}</span>
-              )}
-            </div>
-
-            {/* Home side (right) */}
-            <div style={{display:"flex",flexDirection:"column",alignItems:"center",gap:3,minWidth:0}}>
-              <div style={{display:"flex",alignItems:"center",justifyContent:"center",gap:5,minWidth:0,width:"100%"}}>
-                <TeamLogo url={logoByTeam[away]} size={logoSize}/>
-                <TeamNameLink name={away} display={oppDisplay} style={{...nameStyle(winAway),color:isCPU||isBye?"#aaa":nameStyle(winAway).color}}/>
-                {showCpuPill&&<CpuTag/>}
-              </div>
-              {played&&<WL won={winAway}/>}
-              {!isMobile&&!played&&!isBye&&<div style={{fontSize:10,color:"#aaa",fontWeight:600}}>{isCPU?"":recordByTeam[away]}</div>}
-            </div>
+          <div/>
+          <div style={isMobile?{display:"flex",flexDirection:"column",alignItems:"center",gap:8,width:"fit-content",maxWidth:"100%"}:{display:"grid",gridTemplateColumns:"minmax(150px,1fr) 100px minmax(150px,1fr)",alignItems:"center",gap:18,width:"fit-content",maxWidth:"100%"}}>
+            {awayCell}
+            {scoreCenter}
+            {homeCell}
           </div>
-
-          {played&&<span style={{position:"absolute",right:isMobile?10:14,top:"50%",transform:"translateY(-50%)",fontSize:11,color:"#ccc"}}>{isOpen?"▲":"▼"}</span>}
+          <div style={{justifySelf:"end"}}>
+            {played&&<span style={{fontSize:11,color:"#ccc"}}>{isOpen?"▲":"▼"}</span>}
+          </div>
         </div>
         {played&&isOpen&&<BoxScore teamA={home} teamB={away} result={result} week={w}/>}
       </div>
