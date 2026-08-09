@@ -5978,7 +5978,7 @@ function ScoresTicker({ sorted, setupRows, schedule, week, year, season, gameArc
     rank: i + 1,
     teamName: t.teamName,
     pts: calcTotal(t),
-    back: i === 0 ? null : calcTotal(sorted[i - 1]) - calcTotal(t),
+    back: i === 0 ? null : calcTotal(sorted[0]) - calcTotal(t),
     logo: getPlayerImages(setupRows, t.userId, t.userName).teamLogo,
   }));
 
