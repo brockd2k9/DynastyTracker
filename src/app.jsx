@@ -2883,14 +2883,48 @@ function ProfileTab({history,setupRows,currentEntries,season,year,permanentUsers
 
   // Roster entries resolved once (display name/team can differ from the setup-row fallback when
   // a permanentUser has since renamed), so search/sort operate on exactly what's rendered.
+  // isActive comes from the matching setupRow — deactivated coaches still get a profile card,
+  // just sorted into their own section below the active roster (same "keep them visible, mark
+  // them inactive" pattern already used for Standings).
   const rosterUsers = allUsers.map(u=>{
     const key=u.userId||u.userName;
     const curEntry=currentEntries.find(e=>u.userId?e.userId===u.userId:e.userName===u.userName);
-    return{u,key,displayName:curEntry?.userName||u.userName,displayTeam:curEntry?.teamName||u.teamName};
+    const row=(setupRows||[]).find(r=>u.userId?r.userId===u.userId:r.userName===u.userName);
+    const isActive=row?row.active!==false:true;
+    return{u,key,displayName:curEntry?.userName||u.userName,displayTeam:curEntry?.teamName||u.teamName,isActive};
   });
   const q=search.trim().toLowerCase();
   let visibleUsers=q?rosterUsers.filter(r=>r.displayName.toLowerCase().includes(q)||r.displayTeam.toLowerCase().includes(q)):rosterUsers;
   if(sortAZ)visibleUsers=[...visibleUsers].sort((a,b)=>a.displayName.localeCompare(b.displayName));
+  const activeVisible=visibleUsers.filter(r=>r.isActive);
+  const inactiveVisible=visibleUsers.filter(r=>!r.isActive);
+  const hasInactive=rosterUsers.some(r=>!r.isActive);
+  const coachGridStyle={display:"grid",gridTemplateColumns:veryNarrow?"1fr":isMobile?"1fr 1fr":"repeat(auto-fill,minmax(220px,1fr))",gap:14};
+  const CoachCard=({r})=>{
+    const {u,key,displayName,displayTeam,isActive}=r;
+    const imgs=getPlayerImages(setupRows,u.userId,u.userName);
+    const isSel=sel===key;
+    return(
+      <div key={key} onClick={()=>setSel(isSel?null:key)}
+        style={{border:`1px solid ${isSel?RED:"#eee"}`,background:isSel?"#fff8f8":"#fff",borderRadius:2,overflow:"hidden",cursor:"pointer",boxShadow:isSel?"0 3px 10px rgba(204,0,0,0.15)":"0 1px 3px rgba(0,0,0,0.05)",transition:"transform 0.15s, box-shadow 0.15s, border-color 0.15s",opacity:isActive?1:0.72}}
+        onMouseEnter={e=>{if(!isMobile){e.currentTarget.style.transform="translateY(-3px)";e.currentTarget.style.boxShadow="0 6px 16px rgba(0,0,0,0.12)";e.currentTarget.style.borderColor=RED;const vp=e.currentTarget.querySelector(".view-profile");if(vp)vp.style.opacity=1;}}}
+        onMouseLeave={e=>{if(!isMobile){e.currentTarget.style.transform="none";e.currentTarget.style.boxShadow=isSel?"0 3px 10px rgba(204,0,0,0.15)":"0 1px 3px rgba(0,0,0,0.05)";e.currentTarget.style.borderColor=isSel?RED:"#eee";const vp=e.currentTarget.querySelector(".view-profile");if(vp)vp.style.opacity=0.55;}}}
+      >
+        <div style={{position:"relative",width:"100%",aspectRatio:"4/3",background:"#e8e8e8",overflow:"hidden",filter:isActive?"none":"grayscale(60%)"}}>
+          {imgs.profilePic
+            ? <img key={imgs.profilePic} src={imgs.profilePic} alt="" style={{width:"100%",height:"100%",objectFit:"cover",display:"block"}} onError={e=>{e.target.style.display="none";}}/>
+            : <div style={{width:"100%",height:"100%",display:"flex",alignItems:"center",justifyContent:"center",fontSize:44,fontWeight:900,color:"#bbb"}}>{(displayName||"?")[0]?.toUpperCase()}</div>}
+          {imgs.teamLogo&&<div style={{position:"absolute",bottom:8,right:8,width:40,height:40,borderRadius:"50%",background:"#fff",border:"2px solid #fff",display:"flex",alignItems:"center",justifyContent:"center",padding:5,boxShadow:"0 1px 5px rgba(0,0,0,0.25)"}}><img key={imgs.teamLogo} src={imgs.teamLogo} alt="" style={{width:"100%",height:"100%",objectFit:"contain"}} onError={e=>{e.target.parentElement.style.display="none";}}/></div>}
+          {!isActive&&<div style={{position:"absolute",top:8,left:8,fontSize:9,fontWeight:800,color:"#fff",background:"rgba(0,0,0,0.65)",border:`1px solid ${RED}`,borderRadius:2,padding:"2px 6px",textTransform:"uppercase",letterSpacing:0.5}}>Inactive</div>}
+        </div>
+        <div style={{padding:"10px 12px 12px"}}>
+          <div style={{fontWeight:900,fontSize:16,color:"#111",lineHeight:1.2}}>{displayName}</div>
+          <div style={{fontSize:11,color:"#888",textTransform:"uppercase",letterSpacing:0.5,marginTop:2}}>{displayTeam}</div>
+          <div className="view-profile" style={{fontSize:11,fontWeight:800,color:RED,marginTop:8,opacity:isMobile?1:0.55,transition:"opacity 0.15s"}}>View Profile →</div>
+        </div>
+      </div>
+    );
+  };
 
   return (
     <div style={{display:"flex",flexDirection:"column",gap:14}}>
@@ -2899,32 +2933,18 @@ function ProfileTab({history,setupRows,currentEntries,season,year,permanentUsers
         <input value={search} onChange={e=>setSearch(e.target.value)} placeholder="Search coaches…" style={{flex:isMobile?"1 1 100%":"0 1 240px",padding:"9px 12px",border:"1px solid #ddd",borderRadius:4,fontSize:13,fontFamily:ff,color:"#111",boxSizing:"border-box"}}/>
         <button onClick={()=>setSortAZ(s=>!s)} style={{padding:"9px 16px",borderRadius:20,border:"1px solid",borderColor:sortAZ?RED:"#ddd",background:sortAZ?RED:"#fff",color:sortAZ?"#fff":"#555",cursor:"pointer",fontSize:11,fontWeight:800,fontFamily:ff,textTransform:"uppercase",letterSpacing:0.5,whiteSpace:"nowrap"}}>A–Z</button>
       </div>
-      <div style={{display:"grid",gridTemplateColumns:veryNarrow?"1fr":isMobile?"1fr 1fr":"repeat(auto-fill,minmax(220px,1fr))",gap:14}}>
-        {visibleUsers.map(({u,key,displayName,displayTeam})=>{
-          const imgs=getPlayerImages(setupRows,u.userId,u.userName);
-          const isSel=sel===key;
-          return(
-            <div key={key} onClick={()=>setSel(isSel?null:key)}
-              style={{border:`1px solid ${isSel?RED:"#eee"}`,background:isSel?"#fff8f8":"#fff",borderRadius:2,overflow:"hidden",cursor:"pointer",boxShadow:isSel?"0 3px 10px rgba(204,0,0,0.15)":"0 1px 3px rgba(0,0,0,0.05)",transition:"transform 0.15s, box-shadow 0.15s, border-color 0.15s"}}
-              onMouseEnter={e=>{if(!isMobile){e.currentTarget.style.transform="translateY(-3px)";e.currentTarget.style.boxShadow="0 6px 16px rgba(0,0,0,0.12)";e.currentTarget.style.borderColor=RED;const vp=e.currentTarget.querySelector(".view-profile");if(vp)vp.style.opacity=1;}}}
-              onMouseLeave={e=>{if(!isMobile){e.currentTarget.style.transform="none";e.currentTarget.style.boxShadow=isSel?"0 3px 10px rgba(204,0,0,0.15)":"0 1px 3px rgba(0,0,0,0.05)";e.currentTarget.style.borderColor=isSel?RED:"#eee";const vp=e.currentTarget.querySelector(".view-profile");if(vp)vp.style.opacity=0.55;}}}
-            >
-              <div style={{position:"relative",width:"100%",aspectRatio:"4/3",background:"#e8e8e8",overflow:"hidden"}}>
-                {imgs.profilePic
-                  ? <img key={imgs.profilePic} src={imgs.profilePic} alt="" style={{width:"100%",height:"100%",objectFit:"cover",display:"block"}} onError={e=>{e.target.style.display="none";}}/>
-                  : <div style={{width:"100%",height:"100%",display:"flex",alignItems:"center",justifyContent:"center",fontSize:44,fontWeight:900,color:"#bbb"}}>{(displayName||"?")[0]?.toUpperCase()}</div>}
-                {imgs.teamLogo&&<div style={{position:"absolute",bottom:8,right:8,width:40,height:40,borderRadius:"50%",background:"#fff",border:"2px solid #fff",display:"flex",alignItems:"center",justifyContent:"center",padding:5,boxShadow:"0 1px 5px rgba(0,0,0,0.25)"}}><img key={imgs.teamLogo} src={imgs.teamLogo} alt="" style={{width:"100%",height:"100%",objectFit:"contain"}} onError={e=>{e.target.parentElement.style.display="none";}}/></div>}
-              </div>
-              <div style={{padding:"10px 12px 12px"}}>
-                <div style={{fontWeight:900,fontSize:16,color:"#111",lineHeight:1.2}}>{displayName}</div>
-                <div style={{fontSize:11,color:"#888",textTransform:"uppercase",letterSpacing:0.5,marginTop:2}}>{displayTeam}</div>
-                <div className="view-profile" style={{fontSize:11,fontWeight:800,color:RED,marginTop:8,opacity:isMobile?1:0.55,transition:"opacity 0.15s"}}>View Profile →</div>
-              </div>
-            </div>
-          );
-        })}
-        {!visibleUsers.length&&<div style={{gridColumn:"1/-1",padding:"24px",textAlign:"center",color:"#888",fontSize:13}}>No coaches match "{search}".</div>}
+      <div style={coachGridStyle}>
+        {activeVisible.map(r=><CoachCard key={r.key} r={r}/>)}
+        {!activeVisible.length&&<div style={{gridColumn:"1/-1",padding:"24px",textAlign:"center",color:"#888",fontSize:13}}>{search?`No active coaches match "${search}".`:"No active coaches."}</div>}
       </div>
+
+      {hasInactive&&<>
+        <SL>Inactive Teams</SL>
+        <div style={coachGridStyle}>
+          {inactiveVisible.map(r=><CoachCard key={r.key} r={r}/>)}
+          {!inactiveVisible.length&&<div style={{gridColumn:"1/-1",padding:"24px",textAlign:"center",color:"#888",fontSize:13}}>No inactive coaches match "{search}".</div>}
+        </div>
+      </>}
       {profile&&user&&<Card style={{borderTop:`3px solid ${RED}`,overflow:"hidden"}}>
         <div style={{background:"#f7f7f7",padding:"14px 18px",display:"flex",justifyContent:"space-between",alignItems:"flex-start",flexWrap:"wrap",gap:10}}>
           {(()=>{const curEntry=currentEntries.find(e=>user.userId?e.userId===user.userId:e.userName===user.userName);const displayName=curEntry?.userName||user.userName;const displayTeam=curEntry?.teamName||user.teamName;const imgs=getPlayerImages(setupRows,user.userId,user.userName);return(
@@ -7336,7 +7356,7 @@ export default function App() {
             )}
           </>)}
           {tab==="Profiles"&&(<>
-            <ProfileTab history={history} setupRows={(setup?.rows||[]).filter(r=>r.active!==false)} currentEntries={activeEntries} season={season} year={year} permanentUsers={setup?.permanentUsers?.filter(u=>(setup?.rows||[]).some(r=>r.userId===u.id&&r.active!==false))} sel={profileSel} setSel={setProfileSel} pTab={profilePTab} setPTab={setProfilePTab} articles={articles} setActiveArticle={setActiveArticle} playerStats={setup?.playerStats} gameArchive={setup?.gameArchive}/>
+            <ProfileTab history={history} setupRows={setup?.rows||[]} currentEntries={entries} season={season} year={year} permanentUsers={setup?.permanentUsers} sel={profileSel} setSel={setProfileSel} pTab={profilePTab} setPTab={setProfilePTab} articles={articles} setActiveArticle={setActiveArticle} playerStats={setup?.playerStats} gameArchive={setup?.gameArchive}/>
 
             {/* Supporting info — mirrors the right/left sidebars below 1024px, same pattern as
                 Standings'/Schedule's mobile fallbacks: Top Headlines, Full Standings, Dynasty
