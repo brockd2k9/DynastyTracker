@@ -2140,10 +2140,13 @@ function ScheduleTab({schedule,entries,week,season,year,setup,setupRows,history}
                card) width. Each team column is a real minmax(0,1fr) track sized against that
                fixed row width, so logos land at the same x position on every card regardless
                of how long that particular row's team/opponent names are — nesting a second
-               fit-content grid inside an auto-sized outer track (the old approach) let each
-               row's content length silently resize its own tracks, which is what mis-aligned
-               logos card-to-card. */
-            ? {display:"grid",gridTemplateColumns:"minmax(0,1fr) auto minmax(0,1fr) 16px",alignItems:"center",gap:10,width:"100%",padding:"12px 10px",cursor:played?"pointer":"default",background:isOpen?"#fafafa":"transparent",boxSizing:"border-box"}
+               fit-content grid inside an auto-sized outer track (an earlier approach) let each
+               row's content length silently resize its own tracks. The score column is a fixed
+               80px (not auto) for the same reason: an auto column's width still tracks that
+               row's own score digit count ("7" vs "100"), which shifts how much space is left
+               for the two fr team columns and drifts the logos by a few px row to row — a fixed
+               width removes that last variable, mirroring desktop's fixed 100px score column. */
+            ? {display:"grid",gridTemplateColumns:"minmax(0,1fr) 80px minmax(0,1fr) 16px",alignItems:"center",gap:10,width:"100%",padding:"12px 10px",cursor:played?"pointer":"default",background:isOpen?"#fafafa":"transparent",boxSizing:"border-box"}
             : {display:"grid",gridTemplateColumns:"1fr auto 1fr",alignItems:"center",width:"100%",padding:"14px 16px",cursor:played?"pointer":"default",background:isOpen?"#fafafa":"transparent",boxSizing:"border-box"}}
           onMouseEnter={played?e=>e.currentTarget.style.background="#fafafa":undefined}
           onMouseLeave={played?e=>e.currentTarget.style.background=isOpen?"#fafafa":"transparent":undefined}
