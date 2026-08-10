@@ -4,6 +4,21 @@
   functions = "netlify/functions"
 
 [[redirects]]
+  from = "/a/:id/image"
+  to = "/.netlify/functions/share-article-image?id=:id"
+  status = 200
+
+[[redirects]]
+  from = "/a/:id"
+  to = "/.netlify/functions/share-article?id=:id"
+  status = 200
+
+[[redirects]]
+  from = "/redzone"
+  to = "/.netlify/functions/share-redzone"
+  status = 200
+
+[[redirects]]
   from = "/*"
   to = "/index.html"
   status = 200
