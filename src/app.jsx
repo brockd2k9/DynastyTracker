@@ -2929,7 +2929,7 @@ function ProfileTab({history,setupRows,currentEntries,season,year,permanentUsers
     const imgs=getPlayerImages(setupRows,u.userId,u.userName);
     const isSel=sel===key;
     return(
-      <div key={key} onClick={()=>setSel(isSel?null:key)}
+      <div key={key} onClick={()=>{setSel(isSel?null:key);if(!isSel)window.scrollTo({top:0,behavior:"smooth"});}}
         style={{border:`1px solid ${isSel?RED:"#eee"}`,background:isSel?"#fff8f8":"#fff",borderRadius:2,overflow:"hidden",cursor:"pointer",boxShadow:isSel?"0 3px 10px rgba(204,0,0,0.15)":"0 1px 3px rgba(0,0,0,0.05)",transition:"transform 0.15s, box-shadow 0.15s, border-color 0.15s",opacity:isActive?1:0.72}}
         onMouseEnter={e=>{if(!isMobile){e.currentTarget.style.transform="translateY(-3px)";e.currentTarget.style.boxShadow="0 6px 16px rgba(0,0,0,0.12)";e.currentTarget.style.borderColor=RED;const vp=e.currentTarget.querySelector(".view-profile");if(vp)vp.style.opacity=1;}}}
         onMouseLeave={e=>{if(!isMobile){e.currentTarget.style.transform="none";e.currentTarget.style.boxShadow=isSel?"0 3px 10px rgba(204,0,0,0.15)":"0 1px 3px rgba(0,0,0,0.05)";e.currentTarget.style.borderColor=isSel?RED:"#eee";const vp=e.currentTarget.querySelector(".view-profile");if(vp)vp.style.opacity=0.55;}}}
@@ -2957,18 +2957,6 @@ function ProfileTab({history,setupRows,currentEntries,season,year,permanentUsers
         <input value={search} onChange={e=>setSearch(e.target.value)} placeholder="Search coaches…" style={{flex:isMobile?"1 1 100%":"0 1 240px",padding:"9px 12px",border:"1px solid #ddd",borderRadius:4,fontSize:13,fontFamily:ff,color:"#111",boxSizing:"border-box"}}/>
         <button onClick={()=>setSortAZ(s=>!s)} style={{padding:"9px 16px",borderRadius:20,border:"1px solid",borderColor:sortAZ?RED:"#ddd",background:sortAZ?RED:"#fff",color:sortAZ?"#fff":"#555",cursor:"pointer",fontSize:11,fontWeight:800,fontFamily:ff,textTransform:"uppercase",letterSpacing:0.5,whiteSpace:"nowrap"}}>A–Z</button>
       </div>
-      <div style={coachGridStyle}>
-        {activeVisible.map(r=><CoachCard key={r.key} r={r}/>)}
-        {!activeVisible.length&&<div style={{gridColumn:"1/-1",padding:"24px",textAlign:"center",color:"#888",fontSize:13}}>{search?`No active coaches match "${search}".`:"No active coaches."}</div>}
-      </div>
-
-      {hasInactive&&<>
-        <SL>Inactive Teams</SL>
-        <div style={coachGridStyle}>
-          {inactiveVisible.map(r=><CoachCard key={r.key} r={r}/>)}
-          {!inactiveVisible.length&&<div style={{gridColumn:"1/-1",padding:"24px",textAlign:"center",color:"#888",fontSize:13}}>No inactive coaches match "{search}".</div>}
-        </div>
-      </>}
       {profile&&user&&<Card style={{borderTop:`3px solid ${RED}`,overflow:"hidden"}}>
         <div style={{background:"#f7f7f7",padding:"14px 18px",display:"flex",justifyContent:"space-between",alignItems:"flex-start",flexWrap:"wrap",gap:10}}>
           {(()=>{const curEntry=currentEntries.find(e=>user.userId?e.userId===user.userId:e.userName===user.userName);const displayName=curEntry?.userName||user.userName;const displayTeam=curEntry?.teamName||user.teamName;const imgs=getPlayerImages(setupRows,user.userId,user.userName);return(
@@ -3253,6 +3241,18 @@ function ProfileTab({history,setupRows,currentEntries,season,year,permanentUsers
           })()}
         </div>
       </Card>}
+      <div style={coachGridStyle}>
+        {activeVisible.map(r=><CoachCard key={r.key} r={r}/>)}
+        {!activeVisible.length&&<div style={{gridColumn:"1/-1",padding:"24px",textAlign:"center",color:"#888",fontSize:13}}>{search?`No active coaches match "${search}".`:"No active coaches."}</div>}
+      </div>
+
+      {hasInactive&&<>
+        <SL>Inactive Teams</SL>
+        <div style={coachGridStyle}>
+          {inactiveVisible.map(r=><CoachCard key={r.key} r={r}/>)}
+          {!inactiveVisible.length&&<div style={{gridColumn:"1/-1",padding:"24px",textAlign:"center",color:"#888",fontSize:13}}>No inactive coaches match "{search}".</div>}
+        </div>
+      </>}
     </div>
   );
 }
