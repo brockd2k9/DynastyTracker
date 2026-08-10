@@ -2837,8 +2837,12 @@ function ProfileTab({history,setupRows,currentEntries,season,year,permanentUsers
   const [expandedH2HGame,setExpandedH2HGame] = useState({});
   const [search,setSearch] = useState("");
   const [sortAZ,setSortAZ] = useState(false);
-  // Merge permanentUsers with setupRows so no one gets dropped
-  const puList = (permanentUsers||[]).map(u=>({userId:u.id,userName:u.defaultName,teamName:(setupRows||[]).find(r=>r.userId===u.id)?.teamName||u.teamName||""}));
+  // Merge permanentUsers with setupRows so no one active gets dropped, but a permanentUser who
+  // was removed from setupRows (deleted, not just deactivated) and has no career history to show
+  // is a stale record left behind by a past deletion — drop it rather than showing an empty card.
+  const rowIds = new Set((setupRows||[]).map(r=>r.userId).filter(Boolean));
+  const hasCareerHistory = uid => (history||[]).some(s=>(s.finalStandings||[]).some(t=>t.userId===uid));
+  const puList = (permanentUsers||[]).filter(u=>rowIds.has(u.id)||hasCareerHistory(u.id)).map(u=>({userId:u.id,userName:u.defaultName,teamName:(setupRows||[]).find(r=>r.userId===u.id)?.teamName||u.teamName||""}));
   const puIds = new Set(puList.map(u=>u.userId));
   const extraRows = (setupRows||[]).filter(r=>r.userId&&!puIds.has(r.userId)).map(r=>({userId:r.userId,userName:r.userName,teamName:r.teamName}));
   const allUsers = [...puList,...extraRows].filter(u=>u.userName);
@@ -2904,12 +2908,13 @@ function ProfileTab({history,setupRows,currentEntries,season,year,permanentUsers
   // a permanentUser has since renamed), so search/sort operate on exactly what's rendered.
   // isActive comes from the matching setupRow — deactivated coaches still get a profile card,
   // just sorted into their own section below the active roster (same "keep them visible, mark
-  // them inactive" pattern already used for Standings).
+  // them inactive" pattern already used for Standings). A user with no setupRow at all was
+  // removed from the roster entirely (not just deactivated), so they're historical, not active.
   const rosterUsers = allUsers.map(u=>{
     const key=u.userId||u.userName;
     const curEntry=currentEntries.find(e=>u.userId?e.userId===u.userId:e.userName===u.userName);
     const row=(setupRows||[]).find(r=>u.userId?r.userId===u.userId:r.userName===u.userName);
-    const isActive=row?row.active!==false:true;
+    const isActive=row?row.active!==false:false;
     return{u,key,displayName:curEntry?.userName||u.userName,displayTeam:curEntry?.teamName||u.teamName,isActive};
   });
   const q=search.trim().toLowerCase();
@@ -4057,14 +4062,18 @@ function SetupPanel({entries,setup,postSeasonInputs,setPSI,handleStart,setCommis
       const ex=(setup?.rows||[]).find(r=>r.userId&&r.userId===sr.userId)||(setup?.rows||[]).find(r=>r.teamName===sr.teamName)||(setup?.rows||[]).find(r=>oldTeamMap[r.teamName]===sr.teamName.trim());
       return {...(ex||{}),userId:sr.userId||ex?.userId||"",userName:sr.userName.trim(),teamName:sr.teamName.trim(),aliases:sr.aliases||""};
     });
-    const updatedPerm=(setup?.permanentUsers||[]).map(p=>{const n=userIdToName[p.id];return n?{...p,defaultName:n}:p;});
+    // Build set of active userIds/teamNames from the new rows so we can remove orphaned entries
+    const activeUserIds=new Set(updatedRows.map(r=>r.userId).filter(Boolean));
+    const activeTeamNames=new Set(updatedRows.map(r=>r.teamName));
+    // Rows removed with the × button (no longer in updatedRows) should actually disappear from
+    // permanentUsers too — unless they have career history, in which case dropping them here
+    // would silently delete their past-season stats from the record book/profiles.
+    const updatedPerm=(setup?.permanentUsers||[]).map(p=>{const n=userIdToName[p.id];return n?{...p,defaultName:n}:p;})
+      .filter(p=>activeUserIds.has(p.id)||(history||[]).some(s=>(s.finalStandings||[]).some(t=>t.userId===p.id)));
     const updated={...setup,rows:updatedRows,permanentUsers:updatedPerm};
     // Skip the rows sync effect for this one update — we own these values
     skipRowsSync.current=true;
     setSetup(updated);
-    // Build set of active userIds/teamNames from the new rows so we can remove orphaned entries
-    const activeUserIds=new Set(updatedRows.map(r=>r.userId).filter(Boolean));
-    const activeTeamNames=new Set(updatedRows.map(r=>r.teamName));
     // Update live entries: rename + remove entries no longer in the roster
     const updatedEntries=entries.map(e=>{
       const newName=userIdToName[e.userId]||oldNameMap[e.userName]||e.userName;
