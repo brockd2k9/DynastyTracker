@@ -2306,7 +2306,8 @@ function longestStatStreak(games,pred){
 
 function LeagueRecordBook({history,currentEntries,season,year,permanentUsers,setupRows,gameArchive,playerStats}) {
   const isMobile=useIsMobile();
-  const [lrYear,setLrYear]=useState(null);
+  // Three distinct record types — see comments below on `buckets` for what each one compares.
+  const [lrMode,setLrMode]=useState("career"); // "career" | "year" | "season"
   const allUsers=(permanentUsers?.length?permanentUsers.map(u=>({userId:u.id,userName:u.defaultName,teamName:(setupRows||[]).find(r=>r.userId===u.id)?.teamName||u.teamName||""})):setupRows)||[];
   if(!allUsers.length)return null;
 
@@ -2315,332 +2316,395 @@ function LeagueRecordBook({history,currentEntries,season,year,permanentUsers,set
       const srt=[...s.finalStandings].sort((a,b)=>calcTotal(b)-calcTotal(a));
       const entry=srt.find(t=>(userId&&t.userId===userId)||(t.userName===fallbackUserName));
       if(!entry)return null;
-      const rank=srt.findIndex(t=>(userId&&t.userId===userId)||(t.userName===fallbackUserName))+1;
       const userName=entry.userName;
       const nattyWin=(entry.nattyWinner||((entry.nattyWins||0)>0))||(s.nattyWinners?.includes(entry.teamName))||(s.nattyWinner&&s.nattyWinner.split(", ").includes(entry.teamName));
       const confChamp=(entry.confChampion||((entry.confChampWins||0)>0))||(s.confWinners?.includes(entry.teamName))||(s.confChampion&&s.confChampion.split(", ").includes(entry.teamName))||s.confChampion===entry.teamName||s.confChampion===userName;
-      return{year:s.year,seasonNum:s.seasonNum,rank,total:calcTotal(entry),wins:entry.wins,losses:entry.losses,teamName:entry.teamName,userName,champion:s.champion===userName,confChamp,confChampWins:entry.confChampWins||0,confChampLosses:entry.confChampLosses||0,nattyWin,nattyWins:entry.nattyWins||0,nattyLosses:entry.nattyLosses||0,weekLog:entry.weekLog||[],gamePts:entry.gamePts||0,h2h:entry.h2h||{},playoffWins:entry.playoffWins||0,playoffLosses:entry.playoffLosses||0,bowlResult:entry.bowlResult||"none",bowlWins:entry.bowlWins,bowlLosses:entry.bowlLosses,top25Wins:entry.top25Wins||0,top10Wins:entry.top10Wins||0,isHistorical:s.isHistorical||false,confChampPts:entry.confChampPts||0};
+      return{year:s.year,seasonNum:s.seasonNum,total:calcTotal(entry),wins:entry.wins,losses:entry.losses,teamName:entry.teamName,userName,champion:s.champion===userName,confChamp,confChampWins:entry.confChampWins||0,confChampLosses:entry.confChampLosses||0,nattyWin,nattyWins:entry.nattyWins||0,nattyLosses:entry.nattyLosses||0,weekLog:entry.weekLog||[],gamePts:entry.gamePts||0,h2h:entry.h2h||{},playoffWins:entry.playoffWins||0,playoffLosses:entry.playoffLosses||0,bowlResult:entry.bowlResult||"none",bowlWins:entry.bowlWins,bowlLosses:entry.bowlLosses,top25Wins:entry.top25Wins||0,top10Wins:entry.top10Wins||0,isHistorical:s.isHistorical||false,confChampPts:entry.confChampPts||0};
     }).filter(Boolean);
     const cur=currentEntries.find(e=>(userId&&e.userId===userId)||(e.userName===fallbackUserName));
-    const totalWins=seasons.reduce((a,s)=>a+s.wins,0)+(cur?.wins||0);
-    const totalLosses=seasons.reduce((a,s)=>a+s.losses,0)+(cur?.losses||0);
-    const totalPts=seasons.reduce((a,s)=>a+s.total,0)+(cur?calcTotal(cur):0);
-    const championships=seasons.filter(s=>s.champion).length;
-    const winPct=totalWins+totalLosses>0?((totalWins/(totalWins+totalLosses))*100).toFixed(1):0;
-    const careerPlayoffWins=seasons.reduce((a,s)=>a+(s.playoffWins||0),0);
-    const careerPlayoffLosses=seasons.reduce((a,s)=>a+(s.playoffLosses||0),0);
-    const bowlWins=seasons.reduce((a,s)=>a+(s.bowlWins!=null?s.bowlWins:(s.bowlResult==="win"?1:0)),0);
-    const bowlLosses=seasons.reduce((a,s)=>a+(s.bowlLosses!=null?s.bowlLosses:(s.bowlResult==="loss"?1:0)),0);
-    const allWeekLogs=[...seasons.flatMap(s=>s.weekLog||[]),(cur?.weekLog||[])].flat();
-    const rankedWins=allWeekLogs.filter(w=>w.result==="win"&&(w.ranked25||w.ranked10)).length;
-    const h2hMerged={};
-    [...seasons.map(s=>s.h2h||{}),(cur?.h2h||{})].forEach(h2h=>{Object.entries(h2h).forEach(([opp,rec])=>{if(!h2hMerged[opp])h2hMerged[opp]={wins:0,losses:0};h2hMerged[opp].wins+=(rec.wins||0);h2hMerged[opp].losses+=(rec.losses||0);});});
-    return{seasons,cur,totalWins,totalLosses,totalPts,championships,winPct,careerPlayoffWins,careerPlayoffLosses,bowlWins,bowlLosses,rankedWins,h2hMerged};
+    return{seasons,cur};
   }
 
-  function getLR(filterYear=null){
-    const recs={};
-    const displayToId={};
-    allUsers.forEach(u=>{try{const curEntry=currentEntries.find(e=>u.userId?e.userId===u.userId:e.userName===u.userName);const displayName=curEntry?.userName||u.userName;recs[displayName]=getProfile(u.userId||null,u.userName);displayToId[displayName]=u.userId||null;}catch{}});
-    const e=Object.entries(recs).filter(([,p])=>p);
-    if(!e.length)return{};
-    // Career passing totals pulled from playerStats (season-by-season box score aggregates), summed
-    // across all years or narrowed to filterYear when a single season is selected.
-    const getPassingTotals=(userId)=>{
-      const stats=playerStats?.[userId]||{};
-      const yearsToSum=filterYear!=null?[filterYear]:Object.keys(stats).map(Number);
-      return yearsToSum.reduce((acc,y)=>{const p=stats[y]?.passing;if(!p)return acc;return{att:acc.att+(p.att||0),comp:acc.comp+(p.comp||0),tds:acc.tds+(p.tds||0),int:acc.int+(p.int||0),yds:acc.yds+(p.yds||0)};},{att:0,comp:0,tds:0,int:0,yds:0});
-    };
-    const passingEntries=e.map(([name])=>[name,getPassingTotals(displayToId[name])]);
-    const mostPassAtt=[...passingEntries].sort((a,b)=>b[1].att-a[1].att)[0];
-    const mostPassComp=[...passingEntries].sort((a,b)=>b[1].comp-a[1].comp)[0];
-    const mostPassTD=[...passingEntries].sort((a,b)=>b[1].tds-a[1].tds)[0];
-    const mostInt=[...passingEntries].sort((a,b)=>b[1].int-a[1].int)[0];
-    const bestCompPct=[...passingEntries].filter(([,t])=>t.att>0).sort((a,b)=>(b[1].comp/b[1].att)-(a[1].comp/a[1].att))[0];
-    const bestYPC=[...passingEntries].filter(([,t])=>t.comp>0).sort((a,b)=>(b[1].yds/b[1].comp)-(a[1].yds/a[1].comp))[0];
-    // Career rushing totals pulled from playerStats the same way as passing totals above.
-    const getRushingTotals=(userId)=>{
-      const stats=playerStats?.[userId]||{};
-      const yearsToSum=filterYear!=null?[filterYear]:Object.keys(stats).map(Number);
-      return yearsToSum.reduce((acc,y)=>{const r=stats[y]?.rushing;if(!r)return acc;return{att:acc.att+(r.att||0),yds:acc.yds+(r.yds||0),tds:acc.tds+(r.tds||0)};},{att:0,yds:0,tds:0});
-    };
-    const rushingEntries=e.map(([name])=>[name,getRushingTotals(displayToId[name])]);
-    const mostRushAtt=[...rushingEntries].sort((a,b)=>b[1].att-a[1].att)[0];
-    const mostRushYds=[...rushingEntries].sort((a,b)=>b[1].yds-a[1].yds)[0];
-    const mostRushTD=[...rushingEntries].sort((a,b)=>b[1].tds-a[1].tds)[0];
-    const bestYPCarry=[...rushingEntries].filter(([,t])=>t.att>0).sort((a,b)=>(b[1].yds/b[1].att)-(a[1].yds/a[1].att))[0];
-    // Best-effort year -> season-number lookup for records that playerStats/gameArchive only
-    // track per calendar year rather than per finalized season. A year can hold more than one
-    // season (see YearStatsTab above), so this only resolves when that coach had exactly one
-    // season in the given year — otherwise the year-level stat blends both and can't be
-    // attributed to just one, so it's left unlabeled rather than showing a misleading season #.
-    const resolveSeasonNum=(name,yr)=>{
-      const prof=recs[name];
-      if(!prof)return null;
-      const nums=new Set(prof.seasons.filter(s=>!s.isHistorical&&s.year===yr).map(s=>s.seasonNum));
-      if(prof.cur&&yr===year)nums.add(season);
-      return nums.size===1?[...nums][0]:null;
-    };
-    // Single-season passing/rushing records: same fields as the career versions above, but each
-    // (user, year) pair from playerStats is its own entry instead of being summed across years.
-    const singleSeasonPassing=[], singleSeasonRushing=[];
+  const recs={},displayToId={};
+  allUsers.forEach(u=>{try{const curEntry=currentEntries.find(e=>u.userId?e.userId===u.userId:e.userName===u.userName);const displayName=curEntry?.userName||u.userName;recs[displayName]=getProfile(u.userId||null,u.userName);displayToId[displayName]=u.userId||null;}catch{}});
+  const e=Object.entries(recs).filter(([,p])=>p);
+  if(!e.length)return null;
+  const idToDisplay={};Object.entries(displayToId).forEach(([name,id])=>{if(id)idToDisplay[id]=name;});
+  const isUvU=(w)=>w.opponent&&!isCPUOpp(w.opponent)&&w.opponent!=="BYE"&&w.opponent!=="Unknown"&&w.opponent!=="";
+
+  // ── Periods ────────────────────────────────────────────────────────────
+  // A "period" is one finalized dynasty season (from history) or the in-progress current season.
+  // This is the atomic unit everything below is built from:
+  //   CAREER = every period for a user, summed together.
+  //   YEAR   = periods sharing the same calendar `year`, summed together (a year can hold more
+  //            than one finalized season if the commissioner advances seasonNum without bumping
+  //            the year — those get combined, matching what "this calendar year" actually means).
+  //   SEASON = a single period on its own — no summing, since a season already is the atomic unit.
+  const periodBowlWins=(p)=>p.bowlWins!=null?p.bowlWins:(p.bowlResult==="win"?1:0);
+  const periodRankedWins=(p)=>(p.weekLog||[]).filter(w=>w.result==="win"&&(w.ranked25||w.ranked10)).length;
+  const periodConfApps=(p)=>{const g=(p.confChampWins||0)+(p.confChampLosses||0);return g>0?g:((p.confChamp||p.confChampPts>0)?1:0);};
+  const periodNattyApps=(p)=>{const g=Math.min((p.nattyWins||0)+(p.nattyLosses||0),5);return g>0?g:(p.nattyWin?1:0);};
+  const getPeriods=(name)=>{
+    const prof=recs[name];
+    const periods=prof.seasons.map(s=>({...s}));
+    if(prof.cur)periods.push({year,seasonNum:season,teamName:prof.cur.teamName,wins:prof.cur.wins||0,losses:prof.cur.losses||0,total:calcTotal(prof.cur),champion:false,confChamp:false,confChampWins:prof.cur.confChampWins||0,confChampLosses:prof.cur.confChampLosses||0,nattyWin:false,nattyWins:prof.cur.nattyWins||0,nattyLosses:prof.cur.nattyLosses||0,bowlResult:prof.cur.bowlResult||"none",bowlWins:prof.cur.bowlWins,bowlLosses:prof.cur.bowlLosses,playoffWins:prof.cur.playoffWins||0,playoffLosses:prof.cur.playoffLosses||0,weekLog:prof.cur.weekLog||[],isHistorical:false,isCurrent:true});
+    return periods;
+  };
+  const allPeriods=[];e.forEach(([name])=>getPeriods(name).forEach(p=>allPeriods.push({name,...p})));
+  const sortPeriods=(periods)=>[...periods].sort((a,b)=>(a.year-b.year)||((a.seasonNum||0)-(b.seasonNum||0)));
+
+  // Best-effort year -> season-number lookup, used wherever a calendar year needs to be
+  // attributed to one specific dynasty season number (playerStats/gameArchive only track a
+  // calendar year, not a season, so this only resolves when that coach had exactly one season
+  // in that year — otherwise it's genuinely ambiguous and left unresolved rather than guessed).
+  const resolveSeasonNum=(name,yr)=>{
+    const prof=recs[name];if(!prof)return null;
+    const nums=new Set(prof.seasons.filter(s=>!s.isHistorical&&s.year===yr).map(s=>s.seasonNum));
+    if(prof.cur&&yr===year)nums.add(season);
+    return nums.size===1?[...nums][0]:null;
+  };
+
+  // Buckets are the grouping unit records get compared across, built once per selected mode.
+  const buildBuckets=(mode)=>{
+    if(mode==="career")return e.map(([name])=>{const periods=getPeriods(name);return{name,year:null,seasonNum:null,teamName:periods[periods.length-1]?.teamName||"",periods};});
+    if(mode==="year"){
+      const byKey={};
+      allPeriods.forEach(p=>{const key=p.name+"|"+p.year;if(!byKey[key])byKey[key]={name:p.name,year:p.year,seasonNum:null,teamName:p.teamName,periods:[]};byKey[key].periods.push(p);byKey[key].teamName=p.teamName;});
+      return Object.values(byKey);
+    }
+    return allPeriods.map(p=>({name:p.name,year:p.year,seasonNum:p.seasonNum,teamName:p.teamName,periods:[p]}));
+  };
+  const buckets=buildBuckets(lrMode);
+
+  // Picks the all-time best bucket(s) for a stat. `computeFn(periods)` returns {value,...extra}
+  // or null (not applicable). Ties (same value, tiny float noise ignored) are ALL kept, rather
+  // than arbitrarily picking one — the record book shows every tied record holder together.
+  function pickBest(bkts,computeFn,dir=1){
+    let bestVal=null,holders=[];
+    bkts.forEach(b=>{
+      const r=computeFn(b.periods);
+      if(!r)return;
+      const rv=Math.round(r.value*dir*1e6)/1e6;
+      if(bestVal==null||rv>bestVal){bestVal=rv;holders=[{...b,...r}];}
+      else if(rv===bestVal){
+        if(!holders.some(h=>h.name===b.name&&h.year===b.year&&h.seasonNum===b.seasonNum))holders.push({...b,...r});
+      }
+    });
+    return bestVal==null?null:{value:bestVal,holders};
+  }
+  // Same idea, but for record types (passing/rushing totals, game-archive aggregates) that
+  // aren't built from `periods` — the bucket itself already carries whatever computeFn needs.
+  function pickBestRaw(bkts,computeFn,dir=1){
+    let bestVal=null,holders=[];
+    bkts.forEach(b=>{
+      const r=computeFn(b);
+      if(!r)return;
+      const rv=Math.round(r.value*dir*1e6)/1e6;
+      if(bestVal==null||rv>bestVal){bestVal=rv;holders=[{...b,...r}];}
+      else if(rv===bestVal){
+        if(!holders.some(h=>h.name===b.name&&h.year===b.year&&h.seasonNum===b.seasonNum))holders.push({...b,...r});
+      }
+    });
+    return bestVal==null?null:{value:bestVal,holders};
+  }
+
+  // ── General (win/loss/points/etc.) records — all built off `buckets` ─────────────────────
+  const sumWins=(periods)=>periods.reduce((a,p)=>a+(p.wins||0),0);
+  const sumLosses=(periods)=>periods.reduce((a,p)=>a+(p.losses||0),0);
+  const mostWins=pickBest(buckets,periods=>({value:sumWins(periods)}));
+  const mostLosses=pickBest(buckets,periods=>{const v=sumLosses(periods);return v>0?{value:v}:null;});
+  const mostPts=pickBest(buckets,periods=>({value:periods.reduce((a,p)=>a+(p.total||0),0)}));
+  const bestWinPct=pickBest(buckets,periods=>{const w=sumWins(periods),l=sumLosses(periods);return (w+l)>0?{value:w/(w+l),w,l}:null;});
+  const mostRW=pickBest(buckets,periods=>{const v=periods.reduce((a,p)=>a+periodRankedWins(p),0);return v>0?{value:v}:null;});
+  const mostGamesPlayed=pickBest(buckets,periods=>{const v=sumWins(periods)+sumLosses(periods);return v>0?{value:v}:null;});
+  const mostChamps=lrMode==="season"?null:pickBest(buckets,periods=>{const v=periods.filter(p=>p.champion).length;return v>0?{value:v}:null;});
+  const mostBowlWins=pickBest(buckets,periods=>{const v=periods.reduce((a,p)=>a+periodBowlWins(p),0);return v>0?{value:v}:null;});
+  const mostPlayoffApp=pickBest(buckets,periods=>{const w=periods.reduce((a,p)=>a+(p.playoffWins||0),0),l=periods.reduce((a,p)=>a+(p.playoffLosses||0),0);return (w+l)>0?{value:w+l}:null;});
+  const mostConfApp=pickBest(buckets,periods=>{const v=periods.reduce((a,p)=>a+periodConfApps(p),0);return v>0?{value:v}:null;});
+  const mostNattyApp=pickBest(buckets,periods=>{const v=periods.reduce((a,p)=>a+periodNattyApps(p),0);return v>0?{value:v}:null;});
+  const bestUvU=pickBest(buckets,periods=>{let w=0,l=0;periods.forEach(p=>(p.weekLog||[]).forEach(wk=>{if(!isUvU(wk))return;if(wk.result==="win")w++;else if(wk.result==="loss")l++;}));return (w+l)>0?{value:w/(w+l),w,l}:null;});
+  const worstUvU=pickBest(buckets,periods=>{let w=0,l=0;periods.forEach(p=>(p.weekLog||[]).forEach(wk=>{if(!isUvU(wk))return;if(wk.result==="win")w++;else if(wk.result==="loss")l++;}));return (w+l)>0?{value:w/(w+l),w,l}:null;},-1);
+
+  // ── Win / stat streaks — bounded to whatever `buckets` currently groups by ────────────────
+  const getUserGamesFor=(logs)=>logs.map(w=>{
+    const g=(gameArchive||[]).find(g=>g.year===w.year&&g.week===w.week&&(g.team1.name===w.teamName||g.team2.name===w.teamName));
+    if(!g)return null;
+    const isTeam1=g.team1.name===w.teamName;
+    return{...w,stats:isTeam1?g.team1:g.team2,oppStats:isTeam1?g.team2:g.team1};
+  }).filter(Boolean);
+  const logsFromPeriods=(periods)=>{const logs=[];sortPeriods(periods).forEach(p=>(p.weekLog||[]).forEach(w=>logs.push({...w,year:p.year,seasonNum:p.seasonNum,teamName:p.teamName})));return logs;};
+  const longestWinRun=(logs)=>{
+    let max=0,cur=0,startIdx=0,bestStart=0,bestEnd=0;
+    logs.forEach((w,i)=>{if(w.result==="win"){if(cur===0)startIdx=i;cur++;if(cur>max){max=cur;bestStart=startIdx;bestEnd=i;}}else cur=0;});
+    if(!max)return null;
+    const spanLabel=seasonSpanLabel(logs.slice(bestStart,bestEnd+1).map(w=>({year:w.year,seasonNum:w.seasonNum})));
+    return{len:max,spanLabel,teamName:logs[bestStart]?.teamName||""};
+  };
+  const winStreakRecord=pickBest(buckets,periods=>{const logs=logsFromPeriods(periods);const r=longestWinRun(logs);return r?{value:r.len,streakSpan:r.spanLabel,streakTeam:r.teamName}:null;});
+  const statStreakRecords=STAT_STREAK_DEFS.map(def=>{
+    const best=pickBest(buckets,periods=>{const games=getUserGamesFor(logsFromPeriods(periods));const r=longestStatStreak(games,def.pred);return r?{value:r.len,streakSpan:r.span,streakTeam:r.teamName}:null;});
+    return{key:def.key,label:def.label,best};
+  });
+
+  // ── Rivalry (head-to-head) — career-only; "vs a single opponent" doesn't cleanly separate
+  // into a single-year/single-season framing the way the other categories do ─────────────────
+  const mostH2HWins=lrMode!=="career"?null:pickBest(buckets,periods=>{
+    const byOpp={};logsFromPeriods(periods).filter(isUvU).forEach(w=>{if(w.result==="win")byOpp[w.opponent]=(byOpp[w.opponent]||0)+1;});
+    let bestOpp=null,bestWins=0;Object.entries(byOpp).forEach(([opp,wins])=>{if(wins>bestWins){bestWins=wins;bestOpp=opp;}});
+    return bestWins>0?{value:bestWins,opp:bestOpp}:null;
+  });
+  const longestH2HStreak=lrMode!=="career"?null:pickBest(buckets,periods=>{
+    const logs=logsFromPeriods(periods);
+    const opponents=[...new Set(logs.filter(isUvU).map(w=>w.opponent))];
+    let best=null;
+    opponents.forEach(opp=>{let cur=0,max=0;logs.filter(w=>w.opponent===opp).forEach(w=>{if(w.result==="win"){cur++;if(cur>max)max=cur;}else cur=0;});if(max>0&&(!best||max>best.len))best={opp,len:max};});
+    return best?{value:best.len,opp:best.opp}:null;
+  });
+
+  // ── Passing / rushing — playerStats is stored per calendar YEAR only (box scores are matched
+  // by year+week, never tagged with a dynasty season number), so:
+  //   CAREER = sum every year on record for that user.
+  //   YEAR   = each (user, year) pair on its own — this is exactly what the data already is.
+  //   SEASON = only (user, year) pairs that resolve to exactly one dynasty season (see
+  //            resolveSeasonNum) — a year holding two seasons can't be split between them
+  //            without fabricating a breakdown that was never recorded, so those are excluded.
+  const getPassingTotals=(userId,years)=>{const stats=playerStats?.[userId]||{};return years.reduce((acc,y)=>{const p=stats[y]?.passing;if(!p)return acc;return{att:acc.att+(p.att||0),comp:acc.comp+(p.comp||0),tds:acc.tds+(p.tds||0),int:acc.int+(p.int||0),yds:acc.yds+(p.yds||0)};},{att:0,comp:0,tds:0,int:0,yds:0});};
+  const getRushingTotals=(userId,years)=>{const stats=playerStats?.[userId]||{};return years.reduce((acc,y)=>{const r=stats[y]?.rushing;if(!r)return acc;return{att:acc.att+(r.att||0),yds:acc.yds+(r.yds||0),tds:acc.tds+(r.tds||0)};},{att:0,yds:0,tds:0});};
+  const buildStatBuckets=(mode)=>{
+    const out=[];
     e.forEach(([name])=>{
       const stats=playerStats?.[displayToId[name]]||{};
-      Object.keys(stats).map(Number).filter(y=>filterYear==null||y===filterYear).forEach(y=>{
-        if(stats[y]?.passing)singleSeasonPassing.push({name,year:y,seasonNum:resolveSeasonNum(name,y),...stats[y].passing});
-        if(stats[y]?.rushing)singleSeasonRushing.push({name,year:y,seasonNum:resolveSeasonNum(name,y),...stats[y].rushing});
+      const years=Object.keys(stats).map(Number);
+      if(mode==="career"){out.push({name,year:null,seasonNum:null,years});return;}
+      years.forEach(y=>{
+        if(mode==="season"){const sn=resolveSeasonNum(name,y);if(sn==null)return;out.push({name,year:y,seasonNum:sn,years:[y]});}
+        else out.push({name,year:y,seasonNum:null,years:[y]});
       });
     });
-    const ssMostPassAtt=[...singleSeasonPassing].sort((a,b)=>b.att-a.att)[0];
-    const ssMostPassComp=[...singleSeasonPassing].sort((a,b)=>b.comp-a.comp)[0];
-    const ssMostPassTD=[...singleSeasonPassing].sort((a,b)=>b.tds-a.tds)[0];
-    const ssMostInt=[...singleSeasonPassing].sort((a,b)=>b.int-a.int)[0];
-    const ssBestCompPct=[...singleSeasonPassing].filter(p=>p.att>0).sort((a,b)=>(b.comp/b.att)-(a.comp/a.att))[0];
-    const ssBestYPC=[...singleSeasonPassing].filter(p=>p.comp>0).sort((a,b)=>(b.yds/b.comp)-(a.yds/a.comp))[0];
-    const ssMostRushAtt=[...singleSeasonRushing].sort((a,b)=>b.att-a.att)[0];
-    const ssMostRushYds=[...singleSeasonRushing].sort((a,b)=>b.yds-a.yds)[0];
-    const ssMostRushTD=[...singleSeasonRushing].sort((a,b)=>b.tds-a.tds)[0];
-    const ssBestYPCarry=[...singleSeasonRushing].filter(r=>r.att>0).sort((a,b)=>(b.yds/b.att)-(a.yds/a.att))[0];
-    // Single-season 4th quarter comeback wins, counted per (user, year) directly off the archive.
-    const idToDisplay={};
-    Object.entries(displayToId).forEach(([name,id])=>{if(id)idToDisplay[id]=name;});
-    const seasonComebacks={};
-    (gameArchive||[]).filter(g=>filterYear==null||g.year===filterYear).forEach(g=>{
-      [[g.team1,g.team2],[g.team2,g.team1]].forEach(([team,opp])=>{
-        const name=idToDisplay[team.userId];
-        if(!name)return;
-        const tq=team.quarters||[], oq=opp.quarters||[];
-        if(tq.length<4||oq.length<4)return;
-        const teamWon=(team.score||0)>(opp.score||0);
-        const q4Deficit=(oq[0]+oq[1]+oq[2])-(tq[0]+tq[1]+tq[2]);
-        if(teamWon&&q4Deficit>0){
-          const key=`${name}|${g.year}`;
-          seasonComebacks[key]=(seasonComebacks[key]||0)+1;
-        }
-      });
-    });
-    let ssMost4thQComebacks=null;
-    Object.entries(seasonComebacks).forEach(([key,n])=>{
-      const [name,yr]=key.split("|");
-      if(!ssMost4thQComebacks||n>ssMost4thQComebacks.n)ssMost4thQComebacks={name,year:Number(yr),seasonNum:resolveSeasonNum(name,Number(yr)),n};
-    });
-    const getUserLogs=(name)=>{const prof=recs[name];if(!prof)return[];const logs=[];prof.seasons.filter(s=>!s.isHistorical&&(filterYear==null||s.year===filterYear)).forEach(s=>{(s.weekLog||[]).forEach(w=>logs.push({...w,seasonNum:s.seasonNum,year:s.year,teamName:s.teamName}));});if(!filterYear&&prof.cur)(prof.cur.weekLog||[]).forEach(w=>logs.push({...w,seasonNum:season,year,teamName:prof.cur.teamName}));return logs;};
-    // Join each weekLog entry with its archived box score (if one was scanned) so stat-based
-    // streaks (pass yards, rush TDs, turnovers, etc.) have something to test.
-    const getUserGames=(name)=>getUserLogs(name).map(w=>{
-      const archivedGame=(gameArchive||[]).find(g=>g.year===w.year&&g.week===w.week&&(g.team1.name===w.teamName||g.team2.name===w.teamName));
-      if(!archivedGame)return null;
-      const isTeam1=archivedGame.team1.name===w.teamName;
-      const stats=isTeam1?archivedGame.team1:archivedGame.team2;
-      const oppStats=isTeam1?archivedGame.team2:archivedGame.team1;
-      return{...w,stats,oppStats};
-    }).filter(Boolean);
-    const statStreaks={};
-    STAT_STREAK_DEFS.forEach(def=>{
-      let best=null;
-      e.forEach(([name])=>{const s=longestStatStreak(getUserGames(name),def.pred);if(s&&(!best||s.len>best.data.len))best={name,data:s};});
-      statStreaks[def.key]=best;
-    });
-    const getWinStreakAllTime=(name)=>{const logs=getUserLogs(name);let max=0,cur=0,startIdx=0,bestStart=0,bestEnd=0;logs.forEach((w,i)=>{if(w.result==="win"){if(cur===0)startIdx=i;cur++;if(cur>max){max=cur;bestStart=startIdx;bestEnd=i;}}else cur=0;});if(!max)return null;const spanLabel=seasonSpanLabel(logs.slice(bestStart,bestEnd+1).map(w=>({year:w.year,seasonNum:w.seasonNum})));return{len:max,spanLabel,teamName:logs[bestStart]?.teamName||""};};
-    const getWinStreakSeason=(name)=>{const prof=recs[name];if(!prof)return null;let best=null;const allS=[...prof.seasons.filter(s=>!s.isHistorical&&(filterYear==null||s.year===filterYear))];if(!filterYear&&prof.cur)allS.push({...prof.cur,year,seasonNum:season,isHistorical:false});allS.forEach(s=>{let cur=0,max=0;(s.weekLog||[]).forEach(w=>{if(w.result==="win"){cur++;if(cur>max)max=cur;}else cur=0;});if(max>0&&(!best||max>best.len))best={len:max,year:s.year,seasonNum:s.seasonNum,teamName:s.teamName};});return best;};
-    const isUvU=(w)=>w.opponent&&!isCPUOpp(w.opponent)&&w.opponent!=="BYE"&&w.opponent!=="Unknown"&&w.opponent!=="";
-    let bestSeason=null,worstSeason=null,mostSeasonLosses=null;
-    e.forEach(([name,prof])=>{const allS=[...prof.seasons.filter(s=>!s.isHistorical&&(filterYear==null||s.year===filterYear))];if(!filterYear&&prof.cur)allS.push({...prof.cur,year,seasonNum:season,isHistorical:false});allS.forEach(s=>{const uvuW=(s.weekLog||[]).filter(w=>isUvU(w)&&w.result==="win").length;const uvuL=(s.weekLog||[]).filter(w=>isUvU(w)&&w.result==="loss").length;if(uvuW+uvuL===0)return;const pct=uvuW/(uvuW+uvuL);if(!bestSeason||pct>bestSeason.pct||(pct===bestSeason.pct&&uvuW>bestSeason.w))bestSeason={name,w:uvuW,l:uvuL,pct,year:s.year,seasonNum:s.seasonNum,teamName:s.teamName};if(!worstSeason||pct<worstSeason.pct||(pct===worstSeason.pct&&uvuL>worstSeason.l))worstSeason={name,w:uvuW,l:uvuL,pct,year:s.year,seasonNum:s.seasonNum,teamName:s.teamName};const totL=(s.weekLog||[]).filter(w=>w.result==="loss").length;if(!mostSeasonLosses||totL>mostSeasonLosses.l)mostSeasonLosses={name,l:totL,year:s.year,seasonNum:s.seasonNum,teamName:s.teamName};});});
-    // Built from getUserLogs (already year-filtered) rather than prof.h2hMerged, which is an
-    // all-time aggregate computed once in getProfile() and would ignore the year filter entirely.
-    let mostH2HWins=null;e.forEach(([name])=>{const byOpp={};getUserLogs(name).filter(isUvU).forEach(w=>{if(w.result==="win")byOpp[w.opponent]=(byOpp[w.opponent]||0)+1;});Object.entries(byOpp).forEach(([opp,wins])=>{if(!mostH2HWins||wins>mostH2HWins.wins)mostH2HWins={name,opp,wins};});});
-    let longestH2HStreak=null;e.forEach(([name])=>{const logs=getUserLogs(name);const opponents=[...new Set(logs.filter(isUvU).map(w=>w.opponent))];opponents.forEach(opp=>{const oppLogs=logs.filter(w=>w.opponent===opp);let cur=0,max=0;oppLogs.forEach(w=>{if(w.result==="win"){cur++;if(cur>max)max=cur;}else cur=0;});if(max>0&&(!longestH2HStreak||max>longestH2HStreak.len))longestH2HStreak={name,opp,len:max};});});
-    let mostConfApp=null,mostNattyApp=null;e.forEach(([name,prof])=>{const filteredS=prof.seasons.filter(s=>filterYear==null||s.year===filterYear);const confApps=filteredS.reduce((a,s)=>{const games=(s.confChampWins||0)+(s.confChampLosses||0);return a+(games>0?games:(s.confChamp||s.confChampPts>0?1:0));},0);const nattyApps=filteredS.reduce((a,s)=>{const games=Math.min((s.nattyWins||0)+(s.nattyLosses||0),5);return a+(games>0?games:(s.nattyWin?1:0));},0);if(!mostConfApp||confApps>mostConfApp.n)mostConfApp={name,n:confApps};if(!mostNattyApp||nattyApps>mostNattyApp.n)mostNattyApp={name,n:nattyApps};});
-    const streakAllTime={},streakSeason={};e.forEach(([name])=>{streakAllTime[name]=getWinStreakAllTime(name);streakSeason[name]=getWinStreakSeason(name);});
-    const bestStreakAllTime=[...e].map(([name])=>({name,data:streakAllTime[name]})).filter(x=>x.data).sort((a,b)=>b.data.len-a.data.len)[0];
-    const bestStreakSeason=[...e].map(([name])=>({name,data:streakSeason[name]})).filter(x=>x.data).sort((a,b)=>b.data.len-a.data.len)[0];
+    return out;
+  };
+  const statBuckets=buildStatBuckets(lrMode);
+  function bestStat(totalsFn,valFn){return pickBestRaw(statBuckets,b=>{const t=totalsFn(displayToId[b.name],b.years);const v=valFn(t);return(v!=null&&v>0)?{value:v,totals:t}:null;});}
+  const mostPassAtt=bestStat(getPassingTotals,t=>t.att);
+  const mostPassComp=bestStat(getPassingTotals,t=>t.comp);
+  const mostPassTD=bestStat(getPassingTotals,t=>t.tds);
+  const mostInt=bestStat(getPassingTotals,t=>t.int);
+  const bestCompPct=bestStat(getPassingTotals,t=>t.att>0?t.comp/t.att:null);
+  const bestYPC=bestStat(getPassingTotals,t=>t.comp>0?t.yds/t.comp:null);
+  const mostRushAtt=bestStat(getRushingTotals,t=>t.att);
+  const mostRushYds=bestStat(getRushingTotals,t=>t.yds);
+  const mostRushTD=bestStat(getRushingTotals,t=>t.tds);
+  const bestYPCarry=bestStat(getRushingTotals,t=>t.att>0?t.yds/t.att:null);
 
-    // Offensive plays run — summed straight off each archived box score's misc.totalPlays for
-    // this coach's side, same year-filter as everything else. Like the quarter-based stats below,
-    // this only reflects games that actually got a box score scanned into gameArchive.
-    const offPlaysTotals={};
-    (gameArchive||[]).filter(g=>filterYear==null||g.year===filterYear).forEach(g=>{
-      [g.team1,g.team2].forEach(team=>{const name=idToDisplay[team?.userId];if(!name)return;offPlaysTotals[name]=(offPlaysTotals[name]||0)+(team.misc?.totalPlays||0);});
-    });
-    const mostOffPlays=Object.entries(offPlaysTotals).sort((a,b)=>b[1]-a[1])[0];
-
-    // Overtime record — a game "went to OT" once its quarters array runs past the 4 regulation
-    // entries (see the scoring-summary OT column logic above). Not restricted to UvU, matching
-    // the other quarter-derived coach stats (leadHalf, comebacks, etc.) which aren't either.
-    const otRecord={};
-    (gameArchive||[]).filter(g=>filterYear==null||g.year===filterYear).forEach(g=>{
+  // ── gameArchive-derived aggregates (offensive plays, OT record, trailing-at-half record,
+  // 4th quarter comebacks) — gameArchive only carries a calendar `year` per game, same
+  // limitation/handling as passing & rushing above.
+  const addAcc=(a,b)=>{const out={};Object.keys(a).forEach(k=>out[k]=(a[k]||0)+(b[k]||0));return out;};
+  function aggregateGamesByMode(mode,initFn,reduceFn){
+    const byYearKey={};
+    (gameArchive||[]).forEach(g=>{
       [[g.team1,g.team2],[g.team2,g.team1]].forEach(([team,opp])=>{
         const name=idToDisplay[team?.userId];if(!name)return;
-        const tq=team.quarters||[],oq=opp.quarters||[];
-        if(tq.length<=4||oq.length<=4)return;
-        if(!otRecord[name])otRecord[name]={w:0,l:0};
-        if((team.score||0)>(opp.score||0))otRecord[name].w++;else if((team.score||0)<(opp.score||0))otRecord[name].l++;
+        const key=name+"|"+g.year;
+        if(!byYearKey[key])byYearKey[key]={name,year:g.year,acc:initFn()};
+        byYearKey[key].acc=reduceFn(byYearKey[key].acc,team,opp);
       });
     });
-    const bestOT=Object.entries(otRecord).filter(([,r])=>r.w+r.l>0).sort((a,b)=>(b[1].w/(b[1].w+b[1].l))-(a[1].w/(a[1].w+a[1].l))||(b[1].w+b[1].l)-(a[1].w+a[1].l))[0];
+    if(mode==="year")return Object.values(byYearKey).map(b=>({...b,seasonNum:null}));
+    if(mode==="season")return Object.values(byYearKey).map(b=>({...b,seasonNum:resolveSeasonNum(b.name,b.year)})).filter(b=>b.seasonNum!=null);
+    const byName={};
+    Object.values(byYearKey).forEach(({name,acc})=>{byName[name]=byName[name]?addAcc(byName[name],acc):{...acc};});
+    return Object.entries(byName).map(([name,acc])=>({name,year:null,seasonNum:null,acc}));
+  }
+  const offPlaysBuckets=aggregateGamesByMode(lrMode,()=>({plays:0}),(acc,team)=>addAcc(acc,{plays:team.misc?.totalPlays||0}));
+  const mostOffPlays=pickBestRaw(offPlaysBuckets,b=>b.acc.plays>0?{value:b.acc.plays}:null);
+  const otBuckets=aggregateGamesByMode(lrMode,()=>({w:0,l:0}),(acc,team,opp)=>{const tq=team.quarters||[],oq=opp.quarters||[];if(tq.length<=4||oq.length<=4)return acc;if((team.score||0)>(opp.score||0))return addAcc(acc,{w:1,l:0});if((team.score||0)<(opp.score||0))return addAcc(acc,{w:0,l:1});return acc;});
+  const bestOT=pickBestRaw(otBuckets,b=>(b.acc.w+b.acc.l)>0?{value:b.acc.w/(b.acc.w+b.acc.l),w:b.acc.w,l:b.acc.l}:null);
+  const trailHalfBuckets=aggregateGamesByMode(lrMode,()=>({w:0,l:0}),(acc,team,opp)=>{const tq=team.quarters||[],oq=opp.quarters||[];if(tq.length<4||oq.length<4)return acc;const tHalf=tq[0]+tq[1],oHalf=oq[0]+oq[1];if(tHalf>=oHalf)return acc;return addAcc(acc,(team.score||0)>(opp.score||0)?{w:1,l:0}:{w:0,l:1});});
+  const bestTrailHalf=pickBestRaw(trailHalfBuckets,b=>(b.acc.w+b.acc.l)>0?{value:b.acc.w/(b.acc.w+b.acc.l),w:b.acc.w,l:b.acc.l}:null);
+  const comebackBuckets=aggregateGamesByMode(lrMode,()=>({n:0}),(acc,team,opp)=>{const tq=team.quarters||[],oq=opp.quarters||[];if(tq.length<4||oq.length<4)return acc;const teamWon=(team.score||0)>(opp.score||0);const q4Deficit=(oq[0]+oq[1]+oq[2])-(tq[0]+tq[1]+tq[2]);return(teamWon&&q4Deficit>0)?addAcc(acc,{n:1}):acc;});
+  const most4thQComebacks=pickBestRaw(comebackBuckets,b=>b.acc.n>0?{value:b.acc.n}:null);
 
-    // Record when trailing at halftime — reuses computeQuarterStats (already tracks trailHalfW/L
-    // for the Profile page's Misc Stats tab) rather than re-deriving the same halftime-cumulative
-    // logic a third time in this function.
-    const trailHalfRecords=e.map(([name])=>{const qs=computeQuarterStats(gameArchive,displayToId[name],filterYear);return[name,{w:qs.trailHalfW,l:qs.trailHalfL}];}).filter(([,r])=>r.w+r.l>0);
-    const bestTrailHalf=[...trailHalfRecords].sort((a,b)=>(b[1].w/(b[1].w+b[1].l))-(a[1].w/(a[1].w+a[1].l))||(b[1].w+b[1].l)-(a[1].w+a[1].l))[0];
-
-    // Single-game records — restricted to true user-vs-user games (both sides resolve to a known
-    // coach via idToDisplay), unlike the career/coach stats above which count every game played.
-    const isUvUGame=(g)=>!!(idToDisplay[g.team1?.userId]&&idToDisplay[g.team2?.userId]);
+  // ── Single-game records — a game inherently belongs to one specific season, so these only
+  // make sense (and only get shown) under Season Records, restricted to games whose year
+  // resolves to exactly one season (see resolveSeasonNum) for the same reason as above.
+  const isUvUGame=(g)=>!!(idToDisplay[g.team1?.userId]&&idToDisplay[g.team2?.userId]);
+  let gameRecords=null;
+  if(lrMode==="season"){
     let mostPtsGame=null,mostCombinedPtsGame=null,fewestPtsGame=null,mostTOPGame=null,biggestComebackGame=null,biggest4thQComebackGame=null;
-    (gameArchive||[]).filter(g=>(filterYear==null||g.year===filterYear)&&isUvUGame(g)).forEach(g=>{
-      if(typeof g.team1.score==="number"&&typeof g.team2.score==="number"){
+    (gameArchive||[]).filter(isUvUGame).forEach(g=>{
+      const n1=idToDisplay[g.team1.userId],n2=idToDisplay[g.team2.userId];
+      const sn1=resolveSeasonNum(n1,g.year),sn2=resolveSeasonNum(n2,g.year);
+      if(sn1!=null&&typeof g.team1.score==="number"&&typeof g.team2.score==="number"){
         const combined=g.team1.score+g.team2.score;
-        if(!mostCombinedPtsGame||combined>mostCombinedPtsGame.combined)mostCombinedPtsGame={combined,team1:idToDisplay[g.team1.userId],team2:idToDisplay[g.team2.userId],score:`${g.team1.score}-${g.team2.score}`,year:g.year,week:g.week};
+        if(!mostCombinedPtsGame||combined>mostCombinedPtsGame.combined)mostCombinedPtsGame={combined,team1:n1,team2:n2,score:`${g.team1.score}-${g.team2.score}`,year:g.year,week:g.week,seasonNum:sn1};
       }
-      [[g.team1,g.team2],[g.team2,g.team1]].forEach(([team,opp])=>{
+      [[g.team1,g.team2,sn1],[g.team2,g.team1,sn2]].forEach(([team,opp,sn])=>{
+        if(sn==null)return;
         const name=idToDisplay[team.userId];
-        const seasonNum=resolveSeasonNum(name,g.year);
         if(typeof team.score==="number"){
-          if(!mostPtsGame||team.score>mostPtsGame.pts)mostPtsGame={name,pts:team.score,opp:opp.name,year:g.year,week:g.week,seasonNum};
-          if(!fewestPtsGame||team.score<fewestPtsGame.pts)fewestPtsGame={name,pts:team.score,opp:opp.name,year:g.year,week:g.week,seasonNum};
+          if(!mostPtsGame||team.score>mostPtsGame.pts)mostPtsGame={name,pts:team.score,opp:opp.name,year:g.year,week:g.week,seasonNum:sn};
+          if(!fewestPtsGame||team.score<fewestPtsGame.pts)fewestPtsGame={name,pts:team.score,opp:opp.name,year:g.year,week:g.week,seasonNum:sn};
         }
         const topSec=parseTOP(team.misc?.timeOfPossession);
-        if(topSec!=null&&(!mostTOPGame||topSec>mostTOPGame.sec))mostTOPGame={name,sec:topSec,opp:opp.name,year:g.year,week:g.week,seasonNum};
+        if(topSec!=null&&(!mostTOPGame||topSec>mostTOPGame.sec))mostTOPGame={name,sec:topSec,opp:opp.name,year:g.year,week:g.week,seasonNum:sn};
         const tq=team.quarters||[],oq=opp.quarters||[];
         if(tq.length>=4&&oq.length>=4&&(team.score||0)>(opp.score||0)){
           const tCum=[tq[0],tq[0]+tq[1],tq[0]+tq[1]+tq[2]],oCum=[oq[0],oq[0]+oq[1],oq[0]+oq[1]+oq[2]];
           const maxDeficit=Math.max(oCum[0]-tCum[0],oCum[1]-tCum[1],oCum[2]-tCum[2]);
-          if(maxDeficit>0&&(!biggestComebackGame||maxDeficit>biggestComebackGame.deficit))biggestComebackGame={name,deficit:maxDeficit,opp:opp.name,score:`${team.score}-${opp.score}`,year:g.year,week:g.week,seasonNum};
+          if(maxDeficit>0&&(!biggestComebackGame||maxDeficit>biggestComebackGame.deficit))biggestComebackGame={name,deficit:maxDeficit,opp:opp.name,score:`${team.score}-${opp.score}`,year:g.year,week:g.week,seasonNum:sn};
           const q4Deficit=oCum[2]-tCum[2];
-          if(q4Deficit>0&&(!biggest4thQComebackGame||q4Deficit>biggest4thQComebackGame.deficit))biggest4thQComebackGame={name,deficit:q4Deficit,opp:opp.name,score:`${team.score}-${opp.score}`,year:g.year,week:g.week,seasonNum};
+          if(q4Deficit>0&&(!biggest4thQComebackGame||q4Deficit>biggest4thQComebackGame.deficit))biggest4thQComebackGame={name,deficit:q4Deficit,opp:opp.name,score:`${team.score}-${opp.score}`,year:g.year,week:g.week,seasonNum:sn};
         }
       });
     });
-
-    const getYearStats=(prof)=>{if(!filterYear)return prof;const s=prof.seasons.find(s=>s.year===filterYear);const w=(s?.weekLog||[]);return{totalWins:s?.wins||0,totalLosses:s?.losses||0,totalPts:s?.total||0,championships:s?.champion?1:0,winPct:(s&&(s.wins+s.losses)>0)?((s.wins/(s.wins+s.losses))*100).toFixed(1):"0",bowlWins:s?(s.bowlWins!=null?s.bowlWins:(s.bowlResult==="win"?1:0)):0,careerPlayoffWins:s?.playoffWins||0,careerPlayoffLosses:s?.playoffLosses||0,rankedWins:w.filter(wk=>wk.result==="win"&&(wk.ranked25||wk.ranked10)).length};};
-    const eys=e.map(([name,prof])=>[name,getYearStats(prof)]);
-    const mostGamesPlayed=[...eys].sort((a,b)=>(b[1].totalWins+b[1].totalLosses)-(a[1].totalWins+a[1].totalLosses))[0];
-    return{mostWins:[...eys].sort((a,b)=>b[1].totalWins-a[1].totalWins)[0],mostLosses:[...eys].sort((a,b)=>b[1].totalLosses-a[1].totalLosses)[0],mostPts:[...eys].sort((a,b)=>b[1].totalPts-a[1].totalPts)[0],mostChamps:[...eys].sort((a,b)=>b[1].championships-a[1].championships)[0],bestWinPct:[...eys].filter(([,p])=>p.totalWins+p.totalLosses>0).sort((a,b)=>parseFloat(b[1].winPct)-parseFloat(a[1].winPct))[0],mostBowlWins:[...eys].sort((a,b)=>b[1].bowlWins-a[1].bowlWins)[0],mostPlayoffApp:[...eys].sort((a,b)=>(b[1].careerPlayoffWins+b[1].careerPlayoffLosses)-(a[1].careerPlayoffWins+a[1].careerPlayoffLosses))[0],mostRW:[...eys].sort((a,b)=>b[1].rankedWins-a[1].rankedWins)[0],mostConfApp,mostNattyApp,mostGamesPlayed,mostOffPlays,bestOT,bestTrailHalf,bestSeason,worstSeason,mostSeasonLosses,mostH2HWins,longestH2HStreak,bestStreakAllTime,bestStreakSeason,statStreaks,mostPassAtt,mostPassComp,mostPassTD,mostInt,bestCompPct,bestYPC,mostRushAtt,mostRushYds,mostRushTD,bestYPCarry,ssMostPassAtt,ssMostPassComp,ssMostPassTD,ssMostInt,ssBestCompPct,ssBestYPC,ssMostRushAtt,ssMostRushYds,ssMostRushTD,ssBestYPCarry,ssMost4thQComebacks,mostPtsGame,mostCombinedPtsGame,fewestPtsGame,mostTOPGame,biggestComebackGame,biggest4thQComebackGame};
+    gameRecords={mostPtsGame,mostCombinedPtsGame,fewestPtsGame,mostTOPGame,biggestComebackGame,biggest4thQComebackGame};
   }
 
-  const lr=getLR(lrYear);
-  if(!Object.keys(lr).length)return null;
-  // "2026" is ambiguous once a year holds more than one finalized season — labels it "2026 S1"
-  // when the season number is known (see resolveSeasonNum above), else fall back to just the year.
-  const ys=(yr,seasonNum)=>seasonNum?`${yr} S${seasonNum}`:String(yr);
-  // Record "accomplishment" card — replaces the old RR spreadsheet-row renderer. Same data
-  // contract (label/holder/val/sub) so no record value/logic changes, just presentation.
-  const RC=({label,holder,val,sub,big})=>{
-    const u=allUsers.find(u=>u.userName===holder);
-    const imgs=u?getPlayerImages(setupRows,u.userId,u.userName):null;
-    const avatarSize=big?26:20;
+  // ── Display helpers ───────────────────────────────────────────────────────────────────────
+  const MODE_LABEL={career:"Career",year:"Year",season:"Season"};
+  const suffixFor=(label)=>lrMode==="career"?label:`${label} in a ${MODE_LABEL[lrMode]}`;
+  // Metadata line under a holder's name: nothing for Career, the bare year for Year, "Season N"
+  // for Season (falling back to the year if a season number wasn't resolvable). Rivalry and
+  // streak records carry their own per-holder detail (`opp`/`streakSpan`), which takes priority
+  // so a tie between holders with different opponents/spans doesn't get flattened to one label.
+  const holderSub=(h)=>{
+    if(h.opp)return `vs ${h.opp}`;
+    if(lrMode==="career")return h.teamName||h.streakSpan||null;
+    const period=lrMode==="year"?String(h.year):(h.seasonNum!=null?`SEASON ${h.seasonNum}`:String(h.year));
+    return h.teamName?`${h.teamName} · ${period}`:period;
+  };
+  const holderSubGame=(g)=>{
+    const period=g.seasonNum!=null?`SEASON ${g.seasonNum}`:String(g.year);
+    return period;
+  };
+
+  // Record "accomplishment" card. `val` is the shared headline value; `holders` is one or more
+  // tied record holders (each rendered with its own avatar/name/sub-line) rather than an
+  // arbitrarily chosen single winner.
+  const RC=({label,val,holders,sub,big})=>{
+    if(!holders||!holders.length)return null;
+    const single=holders.length===1;
     return(
       <div style={{border:"1px solid #e5e5e5",borderTop:`3px solid ${RED}`,borderRadius:2,background:"#fff",padding:big?"18px 20px":"12px 14px",display:"flex",flexDirection:"column",gap:2,transition:"box-shadow 0.15s"}}
-        onMouseEnter={e=>{e.currentTarget.style.boxShadow="0 2px 8px rgba(0,0,0,0.08)";}}
-        onMouseLeave={e=>{e.currentTarget.style.boxShadow="none";}}>
+        onMouseEnter={ev=>{ev.currentTarget.style.boxShadow="0 2px 8px rgba(0,0,0,0.08)";}}
+        onMouseLeave={ev=>{ev.currentTarget.style.boxShadow="none";}}>
         <div style={{fontSize:big?10:9,fontWeight:800,color:"#999",textTransform:"uppercase",letterSpacing:1}}>{label}</div>
-        <div style={{display:"flex",alignItems:"center",gap:6,marginTop:1,minWidth:0}}>
-          {u&&<div style={{position:"relative",width:avatarSize,height:avatarSize,flexShrink:0}}>
-            <div style={{width:avatarSize,height:avatarSize,borderRadius:"50%",background:"#e8e8e8",display:"flex",alignItems:"center",justifyContent:"center",fontSize:avatarSize*0.42,fontWeight:900,color:"#aaa"}}>{(holder||"?")[0]?.toUpperCase()}</div>
-            {imgs?.profilePic&&<img key={imgs.profilePic} src={imgs.profilePic} alt="" style={{position:"absolute",top:0,left:0,width:avatarSize,height:avatarSize,borderRadius:"50%",objectFit:"cover",border:"1px solid #fff",boxShadow:"0 1px 3px rgba(0,0,0,0.15)"}} onError={e=>{e.target.style.display="none";}}/>}
-          </div>}
-          <div style={{fontSize:big?15:13,fontWeight:800,color:"#111",minWidth:0,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{u?<Name userId={u.userId} userName={holder} style={{textDecoration:"none"}}>{holder}</Name>:holder}</div>
-        </div>
-        <div style={{fontSize:big?34:20,fontWeight:900,color:RED,lineHeight:1,marginTop:2}}>{val}</div>
-        {sub&&<div style={{fontSize:10,color:"#aaa",marginTop:2}}>{sub}</div>}
+        {single?(()=>{const h=holders[0];const u=allUsers.find(uu=>uu.userName===h.name);const imgs=u?getPlayerImages(setupRows,u.userId,u.userName):null;const avatarSize=big?26:20;const holderSubLabel=sub!==undefined?sub:holderSub(h);return(<>
+          <div style={{display:"flex",alignItems:"center",gap:6,marginTop:1,minWidth:0}}>
+            {u&&<div style={{position:"relative",width:avatarSize,height:avatarSize,flexShrink:0}}>
+              <div style={{width:avatarSize,height:avatarSize,borderRadius:"50%",background:"#e8e8e8",display:"flex",alignItems:"center",justifyContent:"center",fontSize:avatarSize*0.42,fontWeight:900,color:"#aaa"}}>{(h.name||"?")[0]?.toUpperCase()}</div>
+              {imgs?.profilePic&&<img key={imgs.profilePic} src={imgs.profilePic} alt="" style={{position:"absolute",top:0,left:0,width:avatarSize,height:avatarSize,borderRadius:"50%",objectFit:"cover",border:"1px solid #fff",boxShadow:"0 1px 3px rgba(0,0,0,0.15)"}} onError={ev=>{ev.target.style.display="none";}}/>}
+            </div>}
+            <div style={{fontSize:big?15:13,fontWeight:800,color:"#111",minWidth:0,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{u?<Name userId={u.userId} userName={h.name} style={{textDecoration:"none"}}>{h.name}</Name>:h.name}</div>
+          </div>
+          <div style={{fontSize:big?34:20,fontWeight:900,color:RED,lineHeight:1,marginTop:2}}>{val}</div>
+          {holderSubLabel&&<div style={{fontSize:10,color:"#aaa",marginTop:2}}>{holderSubLabel}</div>}
+        </>);})():(<>
+          <div style={{fontSize:big?28:18,fontWeight:900,color:RED,lineHeight:1,margin:"3px 0 6px"}}>{val}</div>
+          <div style={{display:"flex",flexDirection:"column",gap:6}}>
+            {holders.map((h,i)=>{const u=allUsers.find(uu=>uu.userName===h.name);const imgs=u?getPlayerImages(setupRows,u.userId,u.userName):null;const holderSubLabel=holderSub(h);return(
+              <div key={h.name+"|"+h.year+"|"+h.seasonNum+"|"+i} style={{display:"flex",alignItems:"center",gap:6,minWidth:0}}>
+                <div style={{position:"relative",width:20,height:20,flexShrink:0}}>
+                  <div style={{width:20,height:20,borderRadius:"50%",background:"#e8e8e8",display:"flex",alignItems:"center",justifyContent:"center",fontSize:9,fontWeight:900,color:"#aaa"}}>{(h.name||"?")[0]?.toUpperCase()}</div>
+                  {imgs?.profilePic&&<img key={imgs.profilePic} src={imgs.profilePic} alt="" style={{position:"absolute",top:0,left:0,width:20,height:20,borderRadius:"50%",objectFit:"cover",border:"1px solid #fff",boxShadow:"0 1px 3px rgba(0,0,0,0.15)"}} onError={ev=>{ev.target.style.display="none";}}/>}
+                </div>
+                <div style={{fontSize:13,fontWeight:800,color:"#111",minWidth:0,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap",flex:1}}>{u?<Name userId={u.userId} userName={h.name} style={{textDecoration:"none"}}>{h.name}</Name>:h.name}</div>
+                {holderSubLabel&&<div style={{fontSize:10,color:"#aaa",flexShrink:0}}>{holderSubLabel}</div>}
+              </div>
+            );})}
+          </div>
+        </>)}
       </div>
     );
   };
-  // Section wrapper — every record category gets its own strong CardHead + a card grid.
-  // `dense` sections (everything but Career) pack more, smaller cards per row on desktop.
-  const Section=({title,bg,dense,children})=>(
-    <Card style={{overflow:"hidden"}}>
-      <CardHead bg={bg}>{title}</CardHead>
-      <div style={{padding:isMobile?12:16,display:"grid",gridTemplateColumns:isMobile?"1fr":dense?"repeat(auto-fill,minmax(200px,1fr))":"1fr 1fr",gap:isMobile?10:dense?12:14}}>
-        {children}
-      </div>
-    </Card>
-  );
+  const Section=({title,bg,dense,children})=>{
+    const kids=Array.isArray(children)?children.filter(Boolean):(children?[children]:[]);
+    if(!kids.length)return null;
+    return(
+      <Card style={{overflow:"hidden"}}>
+        <CardHead bg={bg}>{title}</CardHead>
+        <div style={{padding:isMobile?12:16,display:"grid",gridTemplateColumns:isMobile?"1fr":dense?"repeat(auto-fill,minmax(200px,1fr))":"1fr 1fr",gap:isMobile?10:dense?12:14}}>
+          {kids}
+        </div>
+      </Card>
+    );
+  };
+
+  const modeTitle=lrMode==="career"?"Career Records":lrMode==="year"?"Year Records":"Season Records";
+  const modeBlurb=lrMode==="career"?"Best cumulative career performance — totals summed across a coach's entire dynasty history.":lrMode==="year"?"Best single calendar-year performance in league history. Only the all-time best is shown, not a per-year breakdown.":"Best single dynasty-season performance in league history. Only the all-time best is shown, not a per-season breakdown.";
+
   return(
     <div style={{display:"flex",flexDirection:"column",gap:14}}>
       <Card style={{overflow:"hidden"}}>
-        <div style={{padding:isMobile?"12px 14px 8px":"14px 18px 10px",display:"flex",alignItems:"center",gap:isMobile?6:8,flexWrap:"nowrap",overflowX:"auto",WebkitOverflowScrolling:"touch"}}>
-          {[null,...[...new Set(history.map(s=>s.year))].sort((a,b)=>b-a)].map(y=>(
-            <button key={y??'all'} onClick={()=>setLrYear(y)} style={{padding:isMobile?"8px 14px":"6px 16px",borderRadius:20,border:"1px solid",borderColor:lrYear===y?RED:"#ddd",background:lrYear===y?RED:"#fafafa",color:lrYear===y?"#fff":"#555",cursor:"pointer",fontSize:11,fontFamily:ff,fontWeight:800,textTransform:"uppercase",letterSpacing:0.5,whiteSpace:"nowrap",flexShrink:0}}>{y==null?"All Time":y}</button>
+        <div style={{padding:isMobile?"12px 14px 8px":"14px 18px 10px",display:"flex",gap:8,flexWrap:"wrap"}}>
+          {["career","year","season"].map(m=>(
+            <button key={m} onClick={()=>setLrMode(m)} style={{flex:isMobile?"1 1 auto":"0 0 auto",padding:isMobile?"10px 14px":"8px 20px",borderRadius:20,border:"1px solid",borderColor:lrMode===m?RED:"#ddd",background:lrMode===m?RED:"#fafafa",color:lrMode===m?"#fff":"#555",cursor:"pointer",fontSize:12,fontFamily:ff,fontWeight:800,textTransform:"uppercase",letterSpacing:0.5,whiteSpace:"nowrap"}}>{MODE_LABEL[m]} Records</button>
           ))}
         </div>
-        <div style={{padding:"0 18px 12px",fontSize:10,color:"#aaa",fontStyle:"italic"}}>Rivalry and game records are user vs user matchups only. Win streaks count all games.</div>
+        <div style={{padding:"0 18px 12px",fontSize:10,color:"#aaa",fontStyle:"italic"}}>{modeBlurb} Rivalry and single-game records are user vs user matchups only.</div>
       </Card>
 
-      <Section title="Career Records" bg="#111">
-        {lr.mostWins&&<RC big label="Most Wins" holder={lr.mostWins[0]} val={lr.mostWins[1].totalWins+"W"}/>}
-        {lr.mostLosses&&<RC big label="Most Losses" holder={lr.mostLosses[0]} val={lr.mostLosses[1].totalLosses+"L"}/>}
-        {lr.mostPts&&<RC big label="Most Pts" holder={lr.mostPts[0]} val={String(lr.mostPts[1].totalPts)}/>}
-        {lr.mostChamps&&<RC big label="Most Titles" holder={lr.mostChamps[0]} val={lr.mostChamps[1].championships+"×"}/>}
-        {lr.bestWinPct&&<RC big label="Best Win%" holder={lr.bestWinPct[0]} val={lr.bestWinPct[1].winPct+"%"}/>}
-        {lr.mostRW&&<RC big label="Most Ranked Wins" holder={lr.mostRW[0]} val={lr.mostRW[1].rankedWins+"W"}/>}
-        {lr.mostBowlWins&&lr.mostBowlWins[1].bowlWins>0&&<RC big label="Most Bowl Wins" holder={lr.mostBowlWins[0]} val={lr.mostBowlWins[1].bowlWins+"W"}/>}
-        {lr.mostPlayoffApp&&(lr.mostPlayoffApp[1].careerPlayoffWins+lr.mostPlayoffApp[1].careerPlayoffLosses)>0&&<RC big label="Most Playoff Games" holder={lr.mostPlayoffApp[0]} val={(lr.mostPlayoffApp[1].careerPlayoffWins+lr.mostPlayoffApp[1].careerPlayoffLosses)+"×"}/>}
-        {lr.mostConfApp?.n>0&&<RC big label="Most Conf Champ Apps" holder={lr.mostConfApp.name} val={lr.mostConfApp.n+"×"}/>}
-        {lr.mostNattyApp?.n>0&&<RC big label="Most Natty Apps" holder={lr.mostNattyApp.name} val={lr.mostNattyApp.n+"×"}/>}
-        {lr.mostGamesPlayed&&<RC big label="Most Games Played" holder={lr.mostGamesPlayed[0]} val={(lr.mostGamesPlayed[1].totalWins+lr.mostGamesPlayed[1].totalLosses)+"G"}/>}
-        {lr.mostOffPlays&&lr.mostOffPlays[1]>0&&<RC big label="Most Offensive Plays" holder={lr.mostOffPlays[0]} val={lr.mostOffPlays[1]+" PLAYS"}/>}
-        {lr.bestOT&&<RC big label="Best Overtime Record" holder={lr.bestOT[0]} val={`${lr.bestOT[1].w}-${lr.bestOT[1].l}`}/>}
-        {lr.bestTrailHalf&&<RC big label="Best Record When Trailing At Half" holder={lr.bestTrailHalf[0]} val={`${lr.bestTrailHalf[1].w}-${lr.bestTrailHalf[1].l}`}/>}
+      <Section title={`General ${modeTitle}`} bg="#111">
+        {mostWins&&<RC big label={suffixFor("Most Wins")} val={mostWins.holders[0].value+"W"} holders={mostWins.holders}/>}
+        {mostLosses&&<RC big label={suffixFor("Most Losses")} val={mostLosses.holders[0].value+"L"} holders={mostLosses.holders}/>}
+        {mostPts&&<RC big label={suffixFor("Most Pts")} val={String(mostPts.holders[0].value)} holders={mostPts.holders}/>}
+        {mostChamps&&<RC big label={suffixFor("Most Titles")} val={mostChamps.holders[0].value+"×"} holders={mostChamps.holders}/>}
+        {bestWinPct&&<RC big label={suffixFor("Best Win%")} val={(bestWinPct.holders[0].value*100).toFixed(1)+"%"} holders={bestWinPct.holders}/>}
+        {bestUvU&&<RC big label={suffixFor("Best Record (UvU)")} val={`${bestUvU.holders[0].w}-${bestUvU.holders[0].l}`} holders={bestUvU.holders}/>}
+        {worstUvU&&<RC big label={suffixFor("Worst Record (UvU)")} val={`${worstUvU.holders[0].w}-${worstUvU.holders[0].l}`} holders={worstUvU.holders}/>}
+        {mostRW&&<RC big label={suffixFor("Most Ranked Wins")} val={mostRW.holders[0].value+"W"} holders={mostRW.holders}/>}
+        {mostGamesPlayed&&<RC big label={suffixFor("Most Games Played")} val={mostGamesPlayed.holders[0].value+"G"} holders={mostGamesPlayed.holders}/>}
+        {mostOffPlays&&<RC big label={suffixFor("Most Offensive Plays")} val={mostOffPlays.holders[0].value+" PLAYS"} holders={mostOffPlays.holders}/>}
+        {bestOT&&<RC big label={suffixFor("Best Overtime Record")} val={`${bestOT.holders[0].w}-${bestOT.holders[0].l}`} holders={bestOT.holders}/>}
+        {bestTrailHalf&&<RC big label={suffixFor("Best Record When Trailing At Half")} val={`${bestTrailHalf.holders[0].w}-${bestTrailHalf.holders[0].l}`} holders={bestTrailHalf.holders}/>}
       </Section>
 
-      <Section title="Passing Records" bg={RED} dense>
-        {lr.mostPassAtt&&lr.mostPassAtt[1].att>0&&<RC label="Pass Attempts" holder={lr.mostPassAtt[0]} val={lr.mostPassAtt[1].att+" ATT"}/>}
-        {lr.mostPassComp&&lr.mostPassComp[1].comp>0&&<RC label="Pass Completions" holder={lr.mostPassComp[0]} val={lr.mostPassComp[1].comp+" COMP"}/>}
-        {lr.bestCompPct&&<RC label="Completion Percentage" holder={lr.bestCompPct[0]} val={((lr.bestCompPct[1].comp/lr.bestCompPct[1].att)*100).toFixed(1)+"%"}/>}
-        {lr.mostPassTD&&lr.mostPassTD[1].tds>0&&<RC label="Passing Touchdowns" holder={lr.mostPassTD[0]} val={lr.mostPassTD[1].tds+" TD"}/>}
-        {lr.mostInt&&lr.mostInt[1].int>0&&<RC label="Interceptions" holder={lr.mostInt[0]} val={lr.mostInt[1].int+" INT"}/>}
-        {lr.bestYPC&&<RC label="Yards Per Completion" holder={lr.bestYPC[0]} val={(lr.bestYPC[1].yds/lr.bestYPC[1].comp).toFixed(1)}/>}
+      <Section title={`Passing ${modeTitle}`} bg={RED} dense>
+        {mostPassAtt&&<RC label={suffixFor("Pass Attempts")} val={mostPassAtt.holders[0].totals.att+" ATT"} holders={mostPassAtt.holders}/>}
+        {mostPassComp&&<RC label={suffixFor("Pass Completions")} val={mostPassComp.holders[0].totals.comp+" COMP"} holders={mostPassComp.holders}/>}
+        {bestCompPct&&<RC label={suffixFor("Completion Percentage")} val={((bestCompPct.holders[0].totals.comp/bestCompPct.holders[0].totals.att)*100).toFixed(1)+"%"} holders={bestCompPct.holders}/>}
+        {mostPassTD&&<RC label={suffixFor("Passing Touchdowns")} val={mostPassTD.holders[0].totals.tds+" TD"} holders={mostPassTD.holders}/>}
+        {mostInt&&<RC label={suffixFor("Interceptions")} val={mostInt.holders[0].totals.int+" INT"} holders={mostInt.holders}/>}
+        {bestYPC&&<RC label={suffixFor("Yards Per Completion")} val={(bestYPC.holders[0].totals.yds/bestYPC.holders[0].totals.comp).toFixed(1)} holders={bestYPC.holders}/>}
       </Section>
 
-      <Section title="Rushing Records" bg="#111" dense>
-        {lr.mostRushAtt&&lr.mostRushAtt[1].att>0&&<RC label="Rushing Attempts" holder={lr.mostRushAtt[0]} val={lr.mostRushAtt[1].att+" ATT"}/>}
-        {lr.mostRushYds&&lr.mostRushYds[1].yds>0&&<RC label="Rushing Yards" holder={lr.mostRushYds[0]} val={lr.mostRushYds[1].yds.toLocaleString()+" YDS"}/>}
-        {lr.mostRushTD&&lr.mostRushTD[1].tds>0&&<RC label="Rushing Touchdowns" holder={lr.mostRushTD[0]} val={lr.mostRushTD[1].tds+" TD"}/>}
-        {lr.bestYPCarry&&<RC label="Yards Per Carry" holder={lr.bestYPCarry[0]} val={(lr.bestYPCarry[1].yds/lr.bestYPCarry[1].att).toFixed(1)}/>}
+      <Section title={`Rushing ${modeTitle}`} bg="#111" dense>
+        {mostRushAtt&&<RC label={suffixFor("Rushing Attempts")} val={mostRushAtt.holders[0].totals.att+" ATT"} holders={mostRushAtt.holders}/>}
+        {mostRushYds&&<RC label={suffixFor("Rushing Yards")} val={mostRushYds.holders[0].totals.yds.toLocaleString()+" YDS"} holders={mostRushYds.holders}/>}
+        {mostRushTD&&<RC label={suffixFor("Rushing Touchdowns")} val={mostRushTD.holders[0].totals.tds+" TD"} holders={mostRushTD.holders}/>}
+        {bestYPCarry&&<RC label={suffixFor("Yards Per Carry")} val={(bestYPCarry.holders[0].totals.yds/bestYPCarry.holders[0].totals.att).toFixed(1)} holders={bestYPCarry.holders}/>}
       </Section>
 
-      <Section title="Single Season Records" bg={RED} dense>
-        {lr.bestSeason&&<RC label="Best Season (UvU)" holder={lr.bestSeason.name} val={`${lr.bestSeason.w}W-${lr.bestSeason.l}L`} sub={`${lr.bestSeason.teamName} · ${ys(lr.bestSeason.year,lr.bestSeason.seasonNum)}`}/>}
-        {lr.worstSeason&&<RC label="Worst Season (UvU)" holder={lr.worstSeason.name} val={`${lr.worstSeason.w}W-${lr.worstSeason.l}L`} sub={`${lr.worstSeason.teamName} · ${ys(lr.worstSeason.year,lr.worstSeason.seasonNum)}`}/>}
-        {lr.mostSeasonLosses&&lr.mostSeasonLosses.l>0&&<RC label="Most Losses in a Season" holder={lr.mostSeasonLosses.name} val={lr.mostSeasonLosses.l+"L"} sub={`${lr.mostSeasonLosses.teamName} · ${ys(lr.mostSeasonLosses.year,lr.mostSeasonLosses.seasonNum)}`}/>}
-        {lr.ssMostPassAtt&&lr.ssMostPassAtt.att>0&&<RC label="Pass Attempts (Season)" holder={lr.ssMostPassAtt.name} val={lr.ssMostPassAtt.att+" ATT"} sub={ys(lr.ssMostPassAtt.year,lr.ssMostPassAtt.seasonNum)}/>}
-        {lr.ssMostPassComp&&lr.ssMostPassComp.comp>0&&<RC label="Pass Completions (Season)" holder={lr.ssMostPassComp.name} val={lr.ssMostPassComp.comp+" COMP"} sub={ys(lr.ssMostPassComp.year,lr.ssMostPassComp.seasonNum)}/>}
-        {lr.ssBestCompPct&&<RC label="Completion Percentage (Season)" holder={lr.ssBestCompPct.name} val={((lr.ssBestCompPct.comp/lr.ssBestCompPct.att)*100).toFixed(1)+"%"} sub={ys(lr.ssBestCompPct.year,lr.ssBestCompPct.seasonNum)}/>}
-        {lr.ssMostPassTD&&lr.ssMostPassTD.tds>0&&<RC label="Passing Touchdowns (Season)" holder={lr.ssMostPassTD.name} val={lr.ssMostPassTD.tds+" TD"} sub={ys(lr.ssMostPassTD.year,lr.ssMostPassTD.seasonNum)}/>}
-        {lr.ssMostInt&&lr.ssMostInt.int>0&&<RC label="Interceptions (Season)" holder={lr.ssMostInt.name} val={lr.ssMostInt.int+" INT"} sub={ys(lr.ssMostInt.year,lr.ssMostInt.seasonNum)}/>}
-        {lr.ssBestYPC&&<RC label="Yards Per Completion (Season)" holder={lr.ssBestYPC.name} val={(lr.ssBestYPC.yds/lr.ssBestYPC.comp).toFixed(1)} sub={ys(lr.ssBestYPC.year,lr.ssBestYPC.seasonNum)}/>}
-        {lr.ssMostRushAtt&&lr.ssMostRushAtt.att>0&&<RC label="Rushing Attempts (Season)" holder={lr.ssMostRushAtt.name} val={lr.ssMostRushAtt.att+" ATT"} sub={ys(lr.ssMostRushAtt.year,lr.ssMostRushAtt.seasonNum)}/>}
-        {lr.ssMostRushYds&&lr.ssMostRushYds.yds>0&&<RC label="Rushing Yards (Season)" holder={lr.ssMostRushYds.name} val={lr.ssMostRushYds.yds.toLocaleString()+" YDS"} sub={ys(lr.ssMostRushYds.year,lr.ssMostRushYds.seasonNum)}/>}
-        {lr.ssMostRushTD&&lr.ssMostRushTD.tds>0&&<RC label="Rushing Touchdowns (Season)" holder={lr.ssMostRushTD.name} val={lr.ssMostRushTD.tds+" TD"} sub={ys(lr.ssMostRushTD.year,lr.ssMostRushTD.seasonNum)}/>}
-        {lr.ssBestYPCarry&&<RC label="Yards Per Carry (Season)" holder={lr.ssBestYPCarry.name} val={(lr.ssBestYPCarry.yds/lr.ssBestYPCarry.att).toFixed(1)} sub={ys(lr.ssBestYPCarry.year,lr.ssBestYPCarry.seasonNum)}/>}
-        {lr.ssMost4thQComebacks&&<RC label="4th Quarter Comebacks (Season)" holder={lr.ssMost4thQComebacks.name} val={lr.ssMost4thQComebacks.n+"×"} sub={ys(lr.ssMost4thQComebacks.year,lr.ssMost4thQComebacks.seasonNum)}/>}
+      <Section title={`Playoff / Championship ${modeTitle}`} bg={RED} dense>
+        {mostBowlWins&&<RC label={suffixFor("Most Bowl Wins")} val={mostBowlWins.holders[0].value+"W"} holders={mostBowlWins.holders}/>}
+        {mostPlayoffApp&&<RC label={suffixFor("Most Playoff Games")} val={mostPlayoffApp.holders[0].value+"×"} holders={mostPlayoffApp.holders}/>}
+        {mostConfApp&&<RC label={suffixFor("Most Conf Champ Apps")} val={mostConfApp.holders[0].value+"×"} holders={mostConfApp.holders}/>}
+        {mostNattyApp&&<RC label={suffixFor("Most Natty Apps")} val={mostNattyApp.holders[0].value+"×"} holders={mostNattyApp.holders}/>}
+        {most4thQComebacks&&lrMode!=="career"&&<RC label={suffixFor("4th Quarter Comebacks")} val={most4thQComebacks.holders[0].value+"×"} holders={most4thQComebacks.holders}/>}
       </Section>
 
-      <Section title="Game Records (UvU)" bg="#111" dense>
-        {lr.mostPtsGame&&<RC label="Most Points Scored" holder={lr.mostPtsGame.name} val={lr.mostPtsGame.pts+" PTS"} sub={`vs ${lr.mostPtsGame.opp} · Wk${lr.mostPtsGame.week} · ${ys(lr.mostPtsGame.year,lr.mostPtsGame.seasonNum)}`}/>}
-        {lr.mostCombinedPtsGame&&<RC label="Most Combined Points" holder={`${lr.mostCombinedPtsGame.team1} vs ${lr.mostCombinedPtsGame.team2}`} val={lr.mostCombinedPtsGame.combined+" PTS"} sub={`${lr.mostCombinedPtsGame.score} · Wk${lr.mostCombinedPtsGame.week} · ${lr.mostCombinedPtsGame.year}`}/>}
-        {lr.fewestPtsGame&&<RC label="Fewest Points Scored" holder={lr.fewestPtsGame.name} val={lr.fewestPtsGame.pts+" PTS"} sub={`vs ${lr.fewestPtsGame.opp} · Wk${lr.fewestPtsGame.week} · ${ys(lr.fewestPtsGame.year,lr.fewestPtsGame.seasonNum)}`}/>}
-        {lr.mostTOPGame&&<RC label="Most Time of Possession" holder={lr.mostTOPGame.name} val={formatTOP(lr.mostTOPGame.sec)} sub={`vs ${lr.mostTOPGame.opp} · Wk${lr.mostTOPGame.week} · ${ys(lr.mostTOPGame.year,lr.mostTOPGame.seasonNum)}`}/>}
-        {lr.biggestComebackGame&&<RC label="Biggest Comeback" holder={lr.biggestComebackGame.name} val={lr.biggestComebackGame.deficit+" PT COMEBACK"} sub={`${lr.biggestComebackGame.score} vs ${lr.biggestComebackGame.opp} · Wk${lr.biggestComebackGame.week} · ${ys(lr.biggestComebackGame.year,lr.biggestComebackGame.seasonNum)}`}/>}
-        {lr.biggest4thQComebackGame&&<RC label="Biggest 4th Quarter Comeback" holder={lr.biggest4thQComebackGame.name} val={lr.biggest4thQComebackGame.deficit+" PT COMEBACK"} sub={`${lr.biggest4thQComebackGame.score} vs ${lr.biggest4thQComebackGame.opp} · Wk${lr.biggest4thQComebackGame.week} · ${ys(lr.biggest4thQComebackGame.year,lr.biggest4thQComebackGame.seasonNum)}`}/>}
+      <Section title="Win Streaks" bg="#111" dense>
+        {winStreakRecord&&<RC label={suffixFor("Longest Win Streak")} val={winStreakRecord.holders[0].value+"G"} holders={winStreakRecord.holders.map(h=>({...h,teamName:h.streakTeam}))}/>}
       </Section>
 
-      <Section title="Win Streaks" bg={RED} dense>
-        {lr.bestStreakAllTime&&<RC label="Longest Win Streak All Time" holder={lr.bestStreakAllTime.name} val={lr.bestStreakAllTime.data.len+"G"} sub={lr.bestStreakAllTime.data.spanLabel?`${lr.bestStreakAllTime.data.teamName} · ${lr.bestStreakAllTime.data.spanLabel}`:""}/>}
-        {lr.bestStreakSeason&&<RC label="Longest Win Streak (Season)" holder={lr.bestStreakSeason.name} val={lr.bestStreakSeason.data.len+"G"} sub={`${lr.bestStreakSeason.data.teamName} · ${ys(lr.bestStreakSeason.data.year,lr.bestStreakSeason.data.seasonNum)}`}/>}
+      <Section title="Stat Streaks" bg={RED} dense>
+        {statStreakRecords.map(({key,label,best})=>best&&<RC key={key} label={`Longest ${label} Streak`} val={best.holders[0].value+"G"} holders={best.holders.map(h=>({...h,teamName:h.streakTeam}))}/>)}
       </Section>
 
-      <Section title="Stat Streaks" bg="#111" dense>
-        {STAT_STREAK_DEFS.map(def=>{const s=lr.statStreaks?.[def.key];return s&&<RC key={def.key} label={`Longest ${def.label} Streak`} holder={s.name} val={s.data.len+"G"} sub={s.data.span?`${s.data.teamName} · ${s.data.span}`:""}/>;})}
-      </Section>
+      {gameRecords&&<Section title="Game Records (UvU)" bg="#111" dense>
+        {gameRecords.mostPtsGame&&<RC label="Most Points Scored" val={gameRecords.mostPtsGame.pts+" PTS"} holders={[{name:gameRecords.mostPtsGame.name}]} sub={`vs ${gameRecords.mostPtsGame.opp} · Wk${gameRecords.mostPtsGame.week} · ${holderSubGame(gameRecords.mostPtsGame)}`}/>}
+        {gameRecords.mostCombinedPtsGame&&<RC label="Most Combined Points" val={gameRecords.mostCombinedPtsGame.combined+" PTS"} holders={[{name:`${gameRecords.mostCombinedPtsGame.team1} vs ${gameRecords.mostCombinedPtsGame.team2}`}]} sub={`${gameRecords.mostCombinedPtsGame.score} · Wk${gameRecords.mostCombinedPtsGame.week} · ${holderSubGame(gameRecords.mostCombinedPtsGame)}`}/>}
+        {gameRecords.fewestPtsGame&&<RC label="Fewest Points Scored" val={gameRecords.fewestPtsGame.pts+" PTS"} holders={[{name:gameRecords.fewestPtsGame.name}]} sub={`vs ${gameRecords.fewestPtsGame.opp} · Wk${gameRecords.fewestPtsGame.week} · ${holderSubGame(gameRecords.fewestPtsGame)}`}/>}
+        {gameRecords.mostTOPGame&&<RC label="Most Time of Possession" val={formatTOP(gameRecords.mostTOPGame.sec)} holders={[{name:gameRecords.mostTOPGame.name}]} sub={`vs ${gameRecords.mostTOPGame.opp} · Wk${gameRecords.mostTOPGame.week} · ${holderSubGame(gameRecords.mostTOPGame)}`}/>}
+        {gameRecords.biggestComebackGame&&<RC label="Biggest Comeback" val={gameRecords.biggestComebackGame.deficit+" PT COMEBACK"} holders={[{name:gameRecords.biggestComebackGame.name}]} sub={`${gameRecords.biggestComebackGame.score} vs ${gameRecords.biggestComebackGame.opp} · Wk${gameRecords.biggestComebackGame.week} · ${holderSubGame(gameRecords.biggestComebackGame)}`}/>}
+        {gameRecords.biggest4thQComebackGame&&<RC label="Biggest 4th Quarter Comeback" val={gameRecords.biggest4thQComebackGame.deficit+" PT COMEBACK"} holders={[{name:gameRecords.biggest4thQComebackGame.name}]} sub={`${gameRecords.biggest4thQComebackGame.score} vs ${gameRecords.biggest4thQComebackGame.opp} · Wk${gameRecords.biggest4thQComebackGame.week} · ${holderSubGame(gameRecords.biggest4thQComebackGame)}`}/>}
+      </Section>}
 
-      <Section title="Rivalry Records (UvU)" bg={RED} dense>
-        {lr.mostH2HWins&&lr.mostH2HWins.wins>0&&<RC label="Most Wins vs Single Opponent" holder={lr.mostH2HWins.name} val={lr.mostH2HWins.wins+"W"} sub={`vs ${lr.mostH2HWins.opp}`}/>}
-        {lr.longestH2HStreak&&lr.longestH2HStreak.len>0&&<RC label="Longest Streak vs Opponent" holder={lr.longestH2HStreak.name} val={lr.longestH2HStreak.len+"W"} sub={`vs ${lr.longestH2HStreak.opp}`}/>}
-      </Section>
+      {lrMode==="career"&&<Section title="Rivalry Records (UvU)" bg={RED} dense>
+        {mostH2HWins&&<RC label="Most Wins vs Single Opponent" val={mostH2HWins.holders[0].value+"W"} holders={mostH2HWins.holders}/>}
+        {longestH2HStreak&&<RC label="Longest Streak vs Opponent" val={longestH2HStreak.holders[0].value+"W"} holders={longestH2HStreak.holders}/>}
+      </Section>}
     </div>
   );
 }
