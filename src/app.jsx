@@ -361,6 +361,10 @@ async function postToGroupMe(text) {
 
 const ff = "'Helvetica Neue',Arial,sans-serif";
 const RED = "#cc0000";
+// Canonical public domain for share links — deliberately not window.location.origin, since the
+// app is also reachable at the bare workers.dev URL and shared links should always point at the
+// real domain regardless of which host the sharer happened to be browsing from.
+const SITE_URL = "https://jackedupdynasty.com";
 
 // ── Game Archive helpers ──────────────────────────────────────────────────────
 
@@ -3707,7 +3711,7 @@ function DynastyRedzone({setup,entries,setTab,autoLiveStatuses,autoEmbedUrls,sch
   const isMobile = useIsMobile();
   const [shareCopied,setShareCopied] = useState(false);
   async function shareRedzone() {
-    const shareUrl = `${window.location.origin}/redzone`;
+    const shareUrl = `${SITE_URL}/redzone`;
     if (navigator.share) {
       try { await navigator.share({title:"Dynasty RedZone — Watch Live Now", url:shareUrl}); } catch(e) { /* user dismissed the share sheet */ }
       return;
@@ -6493,7 +6497,7 @@ export default function App() {
     setIsEditingArticle(false);
   }
   async function shareArticle(article) {
-    const shareUrl = `${window.location.origin}/a/${article.id}`;
+    const shareUrl = `${SITE_URL}/a/${article.id}`;
     const headline = articleHeadline(article.text);
     if (navigator.share) {
       try { await navigator.share({title:headline, url:shareUrl}); } catch(e) { /* user dismissed the share sheet */ }
