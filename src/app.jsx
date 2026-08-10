@@ -2372,7 +2372,12 @@ function LeagueRecordBook({history,currentEntries,season,year,permanentUsers,set
       allPeriods.forEach(p=>{const key=p.name+"|"+p.year;if(!byKey[key])byKey[key]={name:p.name,year:p.year,seasonNum:null,teamName:p.teamName,periods:[]};byKey[key].periods.push(p);byKey[key].teamName=p.teamName;});
       return Object.values(byKey);
     }
-    return allPeriods.map(p=>({name:p.name,year:p.year,seasonNum:p.seasonNum,teamName:p.teamName,periods:[p]}));
+    // Bulk-imported historical seasons only carry a `year` (seasonNum is explicitly null — see
+    // finalizeSeason's historical-import path), so there's no real season number to attribute
+    // them to. Rather than fall back to showing a bare year on a "Season Records" card (which
+    // reads as a Year record wearing the wrong label), those periods are excluded here — they
+    // still count fully under Year Records, just not under Season Records.
+    return allPeriods.filter(p=>p.seasonNum!=null).map(p=>({name:p.name,year:p.year,seasonNum:p.seasonNum,teamName:p.teamName,periods:[p]}));
   };
   const buckets=buildBuckets(lrMode);
 
