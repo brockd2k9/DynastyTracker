@@ -2119,11 +2119,11 @@ function ScheduleTab({schedule,entries,week,season,year,setup,setupRows,history}
     );
     const homeCell = (
       <div style={{display:"flex",flexDirection:"column",alignItems:"flex-start",gap:4,minWidth:0}}>
-        <TeamLogo url={logoByTeam[away]} size={logoSize}/>
         <div style={{display:"flex",alignItems:"center",gap:5,minWidth:0,width:"100%"}}>
           <TeamNameLink name={away} display={oppDisplay} style={{...nameStyle(winAway),color:isCPU||isBye?"#aaa":nameStyle(winAway).color,textAlign:"left"}}/>
           {showCpuPill&&<CpuTag/>}
         </div>
+        <TeamLogo url={logoByTeam[away]} size={logoSize}/>
         {played&&<WL won={winAway}/>}
         {!isMobile&&!played&&!isBye&&<div style={{fontSize:10,color:"#aaa",fontWeight:600}}>{isCPU?"":recordByTeam[away]}</div>}
       </div>
