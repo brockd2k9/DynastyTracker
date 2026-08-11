@@ -232,7 +232,7 @@ function NumField({value, onChange, width=52, style={}, fontSize=12, bold=true})
   const [str, setStr] = useState(String(value??0));
   const focused = useRef(false);
   useEffect(()=>{if(!focused.current)setStr(String(value??0));},[value]);
-  const ff2="'Helvetica Neue',Arial,sans-serif";
+  const ff2="var(--app-font)";
   return <input type="text" inputMode="numeric" pattern="[0-9]*"
     value={str}
     onFocus={e=>{focused.current=true;setStr(String(value??0));e.target.select();}}
@@ -359,8 +359,17 @@ async function postToGroupMe(text) {
   if (!r.ok) { const e = await r.json().catch(()=>({})); throw new Error(e?.error || `GroupMe post failed (${r.status})`); }
 }
 
-const ff = "'Helvetica Neue',Arial,sans-serif";
+const ff = "var(--app-font)";
 const RED = "#cc0000";
+const FONT_OPTIONS = [
+  { label: "Helvetica (Default)", value: "'Helvetica Neue', Arial, sans-serif" },
+  { label: "Inter", value: "'Inter', sans-serif" },
+  { label: "Oswald", value: "'Oswald', sans-serif" },
+  { label: "Georgia", value: "Georgia, 'Times New Roman', serif" },
+  { label: "Verdana", value: "Verdana, Geneva, sans-serif" },
+  { label: "Courier New", value: "'Courier New', Courier, monospace" },
+];
+const FONT_STORAGE_KEY = "app_font";
 // Canonical public domain for share links — deliberately not window.location.origin, since the
 // app is also reachable at the bare workers.dev URL and shared links should always point at the
 // real domain regardless of which host the sharer happened to be browsing from.
@@ -748,6 +757,29 @@ function Card({children,style={},...rest}) {
 function CardHead({children,bg="#111"}) {
   return <div style={{background:bg,padding:"8px 14px"}}><div style={{fontSize:11,fontWeight:800,color:"#fff",letterSpacing:1,textTransform:"uppercase"}}>{children}</div></div>;
 }
+// Lets visitors pick a site-wide font (persisted to localStorage, applied via the --app-font CSS var).
+function FontPicker({value,onChange,dark,full}) {
+  return (
+    <select
+      value={value}
+      onChange={e=>onChange(e.target.value)}
+      aria-label="Site font"
+      style={{
+        width:full?"100%":"auto",
+        background:dark?"#181818":"#fff",
+        color:dark?"#ccc":"#333",
+        border:`1px solid ${dark?"#333":"#ddd"}`,
+        borderRadius:2,
+        padding:"6px 8px",
+        fontSize:12,
+        fontFamily:ff,
+        cursor:"pointer",
+      }}
+    >
+      {FONT_OPTIONS.map(o=><option key={o.value} value={o.value}>{o.label}</option>)}
+    </select>
+  );
+}
 
 // Mobile-first standings row — rank, logo, team, record, points, nothing else. Used in place of
 // the desktop <table> on narrow screens (shared by the Home summary and the Standings tab) so
@@ -957,7 +989,7 @@ function MatchupResult({archivedGame, logoFor}) {
           <div style={{fontSize:24,fontWeight:900,color:wOpp?"#fff":"#888",lineHeight:1.1}}>{opp.score}</div>
         </div>
       </div>
-      <button onClick={()=>setShowStats(s=>!s)} style={{width:"100%",background:"transparent",border:"none",borderTop:"1px solid #333",padding:"8px 14px",cursor:"pointer",fontSize:10,fontWeight:800,color:"#888",textTransform:"uppercase",letterSpacing:1,fontFamily:"'Helvetica Neue',Arial,sans-serif",display:"flex",alignItems:"center",justifyContent:"center",gap:6}}>
+      <button onClick={()=>setShowStats(s=>!s)} style={{width:"100%",background:"transparent",border:"none",borderTop:"1px solid #333",padding:"8px 14px",cursor:"pointer",fontSize:10,fontWeight:800,color:"#888",textTransform:"uppercase",letterSpacing:1,fontFamily:"var(--app-font)",display:"flex",alignItems:"center",justifyContent:"center",gap:6}}>
         {showStats?"Hide Box Score":"Show Box Score"} {showStats?"▲":"▼"}
       </button>
       {showStats&&<div style={{padding:12,fontSize:11}}>
@@ -1131,8 +1163,8 @@ function WeekMatchupsCard({schedule,week,sorted,leagueName,season,setActiveArtic
               </div>
             </div>
             {existingGOTW
-              ? <button onClick={()=>setActiveArticle(existingGOTW)} style={{background:"rgba(0,0,0,0.2)",border:"1px solid rgba(255,255,255,0.4)",color:"#fff",borderRadius:2,padding:"5px 12px",cursor:"pointer",fontSize:11,fontWeight:700,fontFamily:"'Helvetica Neue',Arial,sans-serif",textTransform:"uppercase"}}>Read Preview →</button>
-              : commUnlocked?<button onClick={generateGOTWPreview} disabled={generating} style={{background:generating?"rgba(0,0,0,0.1)":"rgba(0,0,0,0.2)",border:"1px solid rgba(255,255,255,0.5)",color:"#fff",borderRadius:2,padding:"5px 12px",cursor:generating?"not-allowed":"pointer",fontSize:11,fontWeight:700,fontFamily:"'Helvetica Neue',Arial,sans-serif",textTransform:"uppercase"}}>{generating?"Writing...":"Generate Preview"}</button>:null
+              ? <button onClick={()=>setActiveArticle(existingGOTW)} style={{background:"rgba(0,0,0,0.2)",border:"1px solid rgba(255,255,255,0.4)",color:"#fff",borderRadius:2,padding:"5px 12px",cursor:"pointer",fontSize:11,fontWeight:700,fontFamily:"var(--app-font)",textTransform:"uppercase"}}>Read Preview →</button>
+              : commUnlocked?<button onClick={generateGOTWPreview} disabled={generating} style={{background:generating?"rgba(0,0,0,0.1)":"rgba(0,0,0,0.2)",border:"1px solid rgba(255,255,255,0.5)",color:"#fff",borderRadius:2,padding:"5px 12px",cursor:generating?"not-allowed":"pointer",fontSize:11,fontWeight:700,fontFamily:"var(--app-font)",textTransform:"uppercase"}}>{generating?"Writing...":"Generate Preview"}</button>:null
             }
           </div>
           <div style={{padding:isMobile?"14px 16px":"26px 32px"}}>
@@ -1167,7 +1199,7 @@ function WeekMatchupsCard({schedule,week,sorted,leagueName,season,setActiveArtic
                   </div>
                 ))}
               </div>
-              {setTab&&<button onClick={()=>setTab("Redzone")} style={{marginTop:isMobile?12:20,width:"100%",background:"#111",color:"#fff",border:"none",borderRadius:2,padding:isMobile?"10px 14px":"13px 14px",cursor:"pointer",fontFamily:"'Helvetica Neue',Arial,sans-serif",fontSize:isMobile?12:13,fontWeight:800,textTransform:"uppercase",letterSpacing:0.5,display:"flex",alignItems:"center",justifyContent:"center",gap:8}}>📺 Watch on RedZone</button>}
+              {setTab&&<button onClick={()=>setTab("Redzone")} style={{marginTop:isMobile?12:20,width:"100%",background:"#111",color:"#fff",border:"none",borderRadius:2,padding:isMobile?"10px 14px":"13px 14px",cursor:"pointer",fontFamily:"var(--app-font)",fontSize:isMobile?12:13,fontWeight:800,textTransform:"uppercase",letterSpacing:0.5,display:"flex",alignItems:"center",justifyContent:"center",gap:8}}>📺 Watch on RedZone</button>}
             </>)}
             {existingGOTW&&<div style={{marginTop:isMobile?12:20,padding:"10px 14px",background:"#f7f7f7",borderRadius:2,border:"1px solid #eee",cursor:"pointer",display:"flex",justifyContent:"space-between",alignItems:"center",gap:10}} onClick={()=>setActiveArticle(existingGOTW)}>
               <span style={{fontSize:13,fontWeight:700,color:"#111"}}>{articleHeadline(existingGOTW.text)}</span>
@@ -3367,7 +3399,7 @@ function sumStats(a, b) {
   };
 }
 function StatRow({label, val, sub}) {
-  const ff="'Helvetica Neue',Arial,sans-serif";
+  const ff="var(--app-font)";
   return (
     <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",padding:"8px 0",borderBottom:"1px solid #f0f0f0"}}>
       <div style={{fontSize:13,color:"#555",fontFamily:ff}}>{label}</div>
@@ -3760,7 +3792,7 @@ function DynastyRedzone({setup,entries,setTab,autoLiveStatuses,autoEmbedUrls,sch
             {checking?"Detecting live streams from configured channels…":"Dynasty RedZone goes live when league members are streaming. Check back when games are in progress."}
           </div>
           {checking&&<div style={{fontSize:12,color:"#cc0000",fontWeight:800,letterSpacing:1,textTransform:"uppercase",animation:"pulse 1.5s ease-in-out infinite"}}>● Checking Streams…</div>}
-          <button onClick={shareRedzone} style={{background:"transparent",border:"1px solid rgba(255,255,255,0.3)",color:"rgba(255,255,255,0.8)",borderRadius:2,padding:"6px 14px",cursor:"pointer",fontSize:11,fontWeight:700,fontFamily:"'Helvetica Neue',Arial,sans-serif",textTransform:"uppercase",letterSpacing:0.5}}>{shareCopied?"✓ Link Copied":"⤴ Share RedZone"}</button>
+          <button onClick={shareRedzone} style={{background:"transparent",border:"1px solid rgba(255,255,255,0.3)",color:"rgba(255,255,255,0.8)",borderRadius:2,padding:"6px 14px",cursor:"pointer",fontSize:11,fontWeight:700,fontFamily:"var(--app-font)",textTransform:"uppercase",letterSpacing:0.5}}>{shareCopied?"✓ Link Copied":"⤴ Share RedZone"}</button>
         </div>
         <RedzoneVoice/>
         <RedzoneChat setupRows={setup?.rows}/>
@@ -3774,7 +3806,7 @@ function DynastyRedzone({setup,entries,setTab,autoLiveStatuses,autoEmbedUrls,sch
       <div style={{background:"linear-gradient(135deg,#1a0000,#0a0a0a)",padding:"8px 16px",display:"flex",alignItems:"center",gap:12,borderBottom:"2px solid #cc0000"}}>
         <img src="/redzone-tv.png" alt="Dynasty RedZone TV" style={{height:isMobile?40:52,width:"auto",objectFit:"contain",flexShrink:0}}/>
         <div style={{flex:1}}/>
-        <button onClick={shareRedzone} style={{background:"transparent",border:"1px solid rgba(255,255,255,0.3)",color:"rgba(255,255,255,0.8)",borderRadius:2,padding:"6px 12px",cursor:"pointer",fontSize:11,fontWeight:700,fontFamily:"'Helvetica Neue',Arial,sans-serif",textTransform:"uppercase",letterSpacing:0.5,flexShrink:0}}>{shareCopied?"✓ Copied":"⤴ Share"}</button>
+        <button onClick={shareRedzone} style={{background:"transparent",border:"1px solid rgba(255,255,255,0.3)",color:"rgba(255,255,255,0.8)",borderRadius:2,padding:"6px 12px",cursor:"pointer",fontSize:11,fontWeight:700,fontFamily:"var(--app-font)",textTransform:"uppercase",letterSpacing:0.5,flexShrink:0}}>{shareCopied?"✓ Copied":"⤴ Share"}</button>
         <div style={{display:"flex",flexDirection:"column",alignItems:"flex-end",gap:3}}>
           <div style={{background:"#cc0000",borderRadius:3,padding:"2px 8px",fontSize:10,fontWeight:900,color:"#fff",letterSpacing:1.5}}>● LIVE</div>
           <div style={{fontSize:11,color:"rgba(255,255,255,0.6)"}}>{liveStreams.length} game{liveStreams.length>1?"s":""} live</div>
@@ -3829,7 +3861,7 @@ function DynastyRedzone({setup,entries,setTab,autoLiveStatuses,autoEmbedUrls,sch
 
 // ── RedZone Voice ─────────────────────────────────────────────────────────
 function RedzoneVoice() {
-  const ff = "'Helvetica Neue',Arial,sans-serif";
+  const ff = "var(--app-font)";
   return (
     <div style={{background:"#0a0a0a",borderTop:"2px solid #1a1a1a",padding:"12px 14px",display:"flex",alignItems:"center",gap:12}}>
       <div style={{flex:1,minWidth:0}}>
@@ -3858,7 +3890,7 @@ async function chatPost(userName, message) {
 
 function RedzoneChat({setupRows}) {
   const isMobile = useIsMobile();
-  const ff = "'Helvetica Neue',Arial,sans-serif";
+  const ff = "var(--app-font)";
   const RED = "#cc0000";
   const [messages, setMessages] = useState([]);
   const [text, setText] = useState("");
@@ -4005,7 +4037,7 @@ function RedzoneChat({setupRows}) {
 // ── Discord Tab ───────────────────────────────────────────────────────────
 function DiscordTab() {
   const isMobile = useIsMobile();
-  const ff = "'Helvetica Neue',Arial,sans-serif";
+  const ff = "var(--app-font)";
   const DISCORD = "#5865F2";
   const DISCORD_URL = "https://discord.com/channels/1400879892614217728/1400879894396801088";
 
@@ -4816,7 +4848,7 @@ function HistoricalImportPanel({setupRows, history, onImport}) {
   );
   const TeamSel = ({value, onChange, placeholder="-- None --"}) => (
     <select value={value} onChange={e=>onChange(e.target.value)}
-      style={{padding:"6px 8px",border:"1px solid #ccc",borderRadius:2,fontSize:13,fontFamily:"'Helvetica Neue',Arial,sans-serif",background:"#fff",color:"#111",minWidth:120}}>
+      style={{padding:"6px 8px",border:"1px solid #ccc",borderRadius:2,fontSize:13,fontFamily:"var(--app-font)",background:"#fff",color:"#111",minWidth:120}}>
       <option value="">{placeholder}</option>
       {teamRows.map(r=><option key={r.teamName} value={r.teamName}>{r.teamName} ({r.userName})</option>)}
     </select>
@@ -4832,7 +4864,7 @@ function HistoricalImportPanel({setupRows, history, onImport}) {
         <div style={{display:"flex",alignItems:"center",gap:12,marginBottom:18,flexWrap:"wrap"}}>
           <div>
             <div style={{fontSize:10,fontWeight:700,color:"#888",textTransform:"uppercase",letterSpacing:1,marginBottom:5}}>Season Year</div>
-            <select value={year} onChange={e=>{setYear(Number(e.target.value));setSaved(false);}} style={{fontSize:15,fontWeight:700,padding:"7px 10px",border:`2px solid ${alreadyImported(year)?"#cc7700":"#cc0000"}`,borderRadius:2,background:"#fff",fontFamily:"'Helvetica Neue',Arial,sans-serif",cursor:"pointer"}}>
+            <select value={year} onChange={e=>{setYear(Number(e.target.value));setSaved(false);}} style={{fontSize:15,fontWeight:700,padding:"7px 10px",border:`2px solid ${alreadyImported(year)?"#cc7700":"#cc0000"}`,borderRadius:2,background:"#fff",fontFamily:"var(--app-font)",cursor:"pointer"}}>
               {YEARS.map(y=><option key={y} value={y}>{y}{alreadyImported(y)?" (imported)":""}</option>)}
             </select>
           </div>
@@ -4854,7 +4886,7 @@ function HistoricalImportPanel({setupRows, history, onImport}) {
                 {inp(pts[r.teamName]||"", val=>setPts(p=>({...p,[r.teamName]:val})), 80)}
                 <div style={{fontSize:11,color:"#888",width:24,flexShrink:0}}>pts</div>
                 <button onClick={()=>setExpanded(p=>({...p,[r.teamName]:!p[r.teamName]}))}
-                  style={{padding:"4px 10px",borderRadius:2,border:"1px solid #ddd",background:expanded[r.teamName]?"#f0f0f0":"#fff",color:"#555",cursor:"pointer",fontSize:11,fontFamily:"'Helvetica Neue',Arial,sans-serif",fontWeight:700,flexShrink:0}}>
+                  style={{padding:"4px 10px",borderRadius:2,border:"1px solid #ddd",background:expanded[r.teamName]?"#f0f0f0":"#fff",color:"#555",cursor:"pointer",fontSize:11,fontFamily:"var(--app-font)",fontWeight:700,flexShrink:0}}>
                   {expanded[r.teamName]?"▲ Less":"▼ Details"}
                 </button>
               </div>
@@ -4951,7 +4983,7 @@ function HistoricalImportPanel({setupRows, history, onImport}) {
                 <div style={{display:"flex",flexWrap:"wrap",gap:6}}>
                   {teamRows.map(r=>{const on=selected.includes(r.teamName);return(
                     <button key={r.teamName} onClick={()=>onToggle(r.teamName)}
-                      style={{padding:"4px 10px",borderRadius:2,border:`1px solid ${on?"#cc0000":"#ddd"}`,background:on?"#cc0000":"#fff",color:on?"#fff":"#555",cursor:"pointer",fontSize:12,fontFamily:"'Helvetica Neue',Arial,sans-serif",fontWeight:700}}>
+                      style={{padding:"4px 10px",borderRadius:2,border:`1px solid ${on?"#cc0000":"#ddd"}`,background:on?"#cc0000":"#fff",color:on?"#fff":"#555",cursor:"pointer",fontSize:12,fontFamily:"var(--app-font)",fontWeight:700}}>
                       {r.teamName}
                     </button>
                   );})}
@@ -4974,7 +5006,7 @@ function HistoricalImportPanel({setupRows, history, onImport}) {
           })()}
         </div>
 
-        <button onClick={handleSave} style={{background:saved?"#007a00":"#cc0000",color:"#fff",border:"none",borderRadius:2,padding:"12px 28px",cursor:"pointer",fontFamily:"'Helvetica Neue',Arial,sans-serif",fontSize:14,fontWeight:800,textTransform:"uppercase"}}>
+        <button onClick={handleSave} style={{background:saved?"#007a00":"#cc0000",color:"#fff",border:"none",borderRadius:2,padding:"12px 28px",cursor:"pointer",fontFamily:"var(--app-font)",fontSize:14,fontWeight:800,textTransform:"uppercase"}}>
           {saved?"✓ Season Saved!":"Save Season →"}
         </button>
       </div>
@@ -5421,7 +5453,7 @@ function EnterResultsPanel({entries,weekResults,setWeekResults,week,setWeek,appl
       </>}
       {entryWeek>=14&&postSeasonInputs&&(()=>{
         const psi=postSeasonInputs;
-        const ff2="'Helvetica Neue',Arial,sans-serif";
+        const ff2="var(--app-font)";
         const addGame=(field)=>setPSI(prev=>({...prev,[field]:[...(prev[field]||[]),{id:Date.now(),teamA:"",teamB:"",winner:""}]}));
         const removeGame=(field,id)=>setPSI(prev=>({...prev,[field]:(prev[field]||[]).filter(g=>g.id!==id)}));
         const setGame=(field,id,key,val)=>setPSI(prev=>({...prev,[field]:(prev[field]||[]).map(g=>g.id===id?{...g,[key]:val}:g)}));
@@ -6130,7 +6162,7 @@ function ContentHub({sorted,entries,week,season,year,leagueName,history,leader,a
 // Right Rail Component
 function RightRail({sorted,articles,entries,week,season,leader,setActiveArticle,setupRows}) {
   const RED = "#cc0000";
-  const ff  = "'Helvetica Neue',Arial,sans-serif";
+  const ff  = "var(--app-font)";
   const calcT = (t) => (t.gamePts||0)+(t.rankedBonusPts||0)+(t.confStandPts||0)+(t.confChampPts||0)+(t.bowlPts||0)+(t.recruitingPts||0)+(t.prestigePts||0)+(t.heismanPts||0);
   return (
     <div style={{display:"flex",flexDirection:"column",gap:12}}>
@@ -6476,6 +6508,14 @@ export default function App() {
   const [clicks,setClicks] = useState(0);
   const [commTab,setCommTab] = useState("Enter Results");
   const [schedule,setSchedule] = useState({}); // {week: {teamName: opponent}}
+  const [fontChoice,setFontChoice] = useState(()=>{
+    try { return localStorage.getItem(FONT_STORAGE_KEY) || FONT_OPTIONS[0].value; }
+    catch(e) { return FONT_OPTIONS[0].value; }
+  });
+  useEffect(()=>{
+    document.documentElement.style.setProperty("--app-font", fontChoice);
+    try { localStorage.setItem(FONT_STORAGE_KEY, fontChoice); } catch(e) {}
+  },[fontChoice]);
   const isMobile = useIsMobile();
   // The 3-column sidebar grid needs more room than the 768px mobile breakpoint alone — between
   // 768-1023px (tablet) there isn't space for 260px+320px fixed sidebars next to real content,
@@ -7101,6 +7141,9 @@ export default function App() {
                   <div style={{fontSize:19,fontWeight:900,color:"#fff",lineHeight:1.3}}>{v}</div>
                 </div>
               ))}
+              <div style={{paddingLeft:18,borderLeft:"1px solid #262626"}}>
+                <FontPicker value={fontChoice} onChange={setFontChoice} dark/>
+              </div>
             </div>
           </div>
         )}
@@ -7122,6 +7165,10 @@ export default function App() {
           {NAV_TABS.map(([label,val])=>(
             <button key={val} onClick={()=>{setTab(val);setNavOpen(false);}} style={{display:"flex",alignItems:"center",width:"100%",minHeight:48,padding:"0 18px",background:tab===val?"rgba(204,0,0,0.15)":"transparent",border:"none",borderBottom:"1px solid #262626",borderLeft:tab===val?`3px solid ${RED}`:"3px solid transparent",color:tab===val?"#fff":"#ccc",cursor:"pointer",fontSize:14,fontWeight:tab===val?800:600,fontFamily:ff,textTransform:"uppercase",letterSpacing:0.4,textAlign:"left",boxSizing:"border-box"}}>{label}</button>
           ))}
+          <div style={{padding:"12px 18px"}}>
+            <div style={{fontSize:10,color:"#666",fontWeight:700,textTransform:"uppercase",letterSpacing:1,marginBottom:6}}>Site Font</div>
+            <FontPicker value={fontChoice} onChange={setFontChoice} dark full/>
+          </div>
         </div>
       </>)}
 

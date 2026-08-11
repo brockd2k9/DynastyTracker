@@ -19,6 +19,25 @@
     <meta property="og:title" content="Jacked Up Dynasty League" />
     <meta property="og:image" content="/jackedupdynastywhite.png" />
     <meta property="og:type" content="website" />
+
+    <!-- Fonts available via the site's font picker -->
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link
+      href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600;700;800;900&family=Oswald:wght@400;600;700&display=swap"
+      rel="stylesheet"
+    />
+
+    <style>
+      :root { --app-font: 'Helvetica Neue', Arial, sans-serif; }
+    </style>
+    <script>
+      // Apply the visitor's saved font choice before first paint to avoid a flash of the default font.
+      try {
+        var savedFont = localStorage.getItem("app_font");
+        if (savedFont) document.documentElement.style.setProperty("--app-font", savedFont);
+      } catch (e) {}
+    </script>
   </head>
   <body>
     <div id="root"></div>
