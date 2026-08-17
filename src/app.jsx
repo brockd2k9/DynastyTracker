@@ -5505,7 +5505,7 @@ function EnterResultsPanel({entries,weekResults,setWeekResults,week,setWeek,appl
           {submitMsg&&<div style={{padding:"8px 14px",background:"#f0f8f0",color:"#007a00",fontWeight:800,fontSize:12,borderRadius:2,fontFamily:ff,textTransform:"uppercase",letterSpacing:0.5}}>{submitMsg}</div>}
           <div style={{display:"flex",gap:10,flexWrap:"wrap",marginTop:4}}>
             {navBtn("← Back",()=>saveBracketWeek(entryWeek-1),false)}
-            {showNext&&navBtn(`Save ${weekLabel(entryWeek)} & Next →`,()=>saveBracketWeek(entryWeek+1),true)}
+            {showNext&&navBtn(entryWeek>=week?`Save ${weekLabel(entryWeek)} & Advance to ${weekLabel(entryWeek+1)} →`:`Save ${weekLabel(entryWeek)} →`,()=>saveBracketWeek(entryWeek+1),true)}
           </div>
         </>;
 
