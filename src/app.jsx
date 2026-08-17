@@ -4994,6 +4994,8 @@ function EnterResultsPanel({entries,weekResults,setWeekResults,week,setWeek,appl
   const [gmStatus,setGmStatus] = useState({});
   const [gmResendStatus,setGmResendStatus] = useState(null);
   const fileRefs = useRef({});
+  const WEEK_LABELS = {14:"Conf. Champ.",15:"Bowl Games",16:"Playoffs — R1",17:"Playoffs — R2",18:"Playoffs — R3",19:"Natl. Championship",20:"Offseason Awards"};
+  const weekLabel = (w)=>WEEK_LABELS[w]||`Week ${w}`;
 
   // Manual fallback for the auto GroupMe post that's supposed to fire on week advance — resends
   // the just-completed week's recap/standings, then (after the same stagger gap used
@@ -5101,7 +5103,10 @@ function EnterResultsPanel({entries,weekResults,setWeekResults,week,setWeek,appl
       const e1=entries.find(e=>e.teamName===t1Name); const e2=entries.find(e=>e.teamName===t2Name);
       json.team1.name=t1Name; json.team1.userId=e1?.userId||"";
       json.team2.name=t2Name; json.team2.userId=t2IsCPU?"":(e2?.userId||"");
-      onScored?.(json.team1.score>json.team2.score);
+      // onScored may also update state that lives outside `setup` (the postseason bracket's
+      // Winner pick). Anything it returns is merged into the save below, because saveToDb reads
+      // the rest of its payload from the last render's state — which won't have that update yet.
+      const extraSave=onScored?.(json.team1.score>json.team2.score)||{};
       // Save to game archive
       if(setup&&setSetup){
         const newGame={id:genId(),year:Number(year),week:Number(entryWeek),season:Number(season),team1:json.team1,team2:json.team2};
@@ -5111,8 +5116,8 @@ function EnterResultsPanel({entries,weekResults,setWeekResults,week,setWeek,appl
         const newArchive=[...filtered,newGame];
         const newPlayerStats=recomputePlayerStatsFromArchive(newArchive,setup?.playerStats||{},year);
         const updatedSetup={...setup,gameArchive:newArchive,playerStats:newPlayerStats};
-        setSetup(updatedSetup); saveToDb({setup:updatedSetup});
-      }
+        setSetup(updatedSetup); saveToDb({setup:updatedSetup,...extraSave});
+      } else if(Object.keys(extraSave).length) saveToDb(extraSave);
     } catch(err){setScanErrors(p=>({...p,[key]:"Scan failed: "+err.message}));}
     finally{setScanning(null); if(fileRefs.current[key])fileRefs.current[key].value="";}
   }
@@ -5203,7 +5208,7 @@ function EnterResultsPanel({entries,weekResults,setWeekResults,week,setWeek,appl
           <div style={{display:"flex",alignItems:"center",gap:8}}>
             <button onClick={()=>setEntryWeek(w=>Math.max(0,w-1))} disabled={entryWeek<=0} style={{padding:"8px 14px",background:"#f0f0f0",border:"1px solid #ddd",borderRadius:2,cursor:entryWeek<=0?"not-allowed":"pointer",fontSize:13,fontWeight:700,color:entryWeek<=0?"#ccc":"#333",fontFamily:ff}}>← Prev</button>
             <div style={{textAlign:"center",minWidth:80}}>
-              <div style={{fontSize:18,fontWeight:900,color:"#111"}}>{({14:"Conf. Champ.",15:"Bowl Games",16:"Playoffs — R1",17:"Playoffs — R2",18:"Playoffs — R3",19:"Natl. Championship",20:"Offseason Awards"})[entryWeek]||`Week ${entryWeek}`}</div>
+              <div style={{fontSize:18,fontWeight:900,color:"#111"}}>{weekLabel(entryWeek)}</div>
               {entryWeek===week&&<div style={{fontSize:9,color:"#007a00",fontWeight:700,textTransform:"uppercase",letterSpacing:1}}>Current</div>}
               {entryWeek!==week&&<button onClick={()=>{setWeek(entryWeek);saveToDb({week:entryWeek});}} style={{fontSize:9,color:"#1a3a6b",fontWeight:700,textTransform:"uppercase",background:"none",border:"none",cursor:"pointer",fontFamily:ff,letterSpacing:1}}>Set Current</button>}
             </div>
@@ -5417,6 +5422,11 @@ function EnterResultsPanel({entries,weekResults,setWeekResults,week,setWeek,appl
         const removeGame=(field,id)=>setPSI(prev=>({...prev,[field]:(prev[field]||[]).filter(g=>g.id!==id)}));
         const setGame=(field,id,key,val)=>setPSI(prev=>({...prev,[field]:(prev[field]||[]).map(g=>g.id===id?{...g,[key]:val}:g)}));
         const setTopGame=(field,key,val)=>setPSI(prev=>({...prev,[field]:{...prev[field],[key]:val}}));
+        // Winner setters used by the box score scan. They return the new inputs object so the
+        // scan's own DB write can carry it — setPSI hasn't re-rendered yet at that point, and
+        // saveToDb otherwise reads the pre-scan bracket back out of the last render's state.
+        const setGameWinner=(field,id,winner)=>{const next={...psi,[field]:(psi[field]||[]).map(g=>g.id===id?{...g,winner}:g)};setPSI(next);return next;};
+        const setTopGameWinner=(field,winner)=>{const next={...psi,[field]:{...(psi[field]||{}),winner}};setPSI(next);return next;};
         const TeamSel=({value,onChange,exclude})=><select value={value} onChange={e=>onChange(e.target.value)} style={{background:"#fff",color:"#111",border:"1px solid #ccc",borderRadius:2,padding:"5px 8px",fontFamily:ff2,fontSize:12,maxWidth:140}}><option value="">-- Team --</option>{teamNames.filter(t=>t!==exclude).map(t=><option key={t} value={t}>{t}</option>)}</select>;
         const WinBtns=({teamA,teamB,winner,onWin})=><div style={{display:"flex",gap:6,flexWrap:"wrap"}}>{[teamA,teamB].filter(Boolean).map(t=><button key={t} onClick={()=>onWin(winner===t?"":t)} style={{padding:"4px 10px",borderRadius:2,border:"1px solid",borderColor:winner===t?"#007a00":"#ddd",background:winner===t?"#f0f8f0":"#fff",color:winner===t?"#007a00":"#888",cursor:"pointer",fontSize:11,fontFamily:ff2,fontWeight:700}}>{winner===t?"✓ ":""}{t}</button>)}</div>;
         // Box score upload for a postseason game (conf championship, bowls, playoff rounds, natty).
@@ -5439,7 +5449,10 @@ function EnterResultsPanel({entries,weekResults,setWeekResults,week,setWeek,appl
                 <input type="file" accept="image/*" multiple style={{display:"none"}} ref={el=>fileRefs.current[key]=el} disabled={!!scanning} onChange={ev=>{
                   const files=Array.from(ev.target.files||[]).slice(0,2); if(!files.length) return;
                   if(!window.confirm(`Scan box score for ${teamA} vs ${teamB}?\nThis will use the Claude Vision API.`)){if(fileRefs.current[key])fileRefs.current[key].value="";return;}
-                  scanAndArchiveGame({key,files,t1Name:teamA,t2Name:teamB,onScored:t1wins=>onWinner?.(t1wins?teamA:teamB)});
+                  scanAndArchiveGame({key,files,t1Name:teamA,t2Name:teamB,onScored:t1wins=>{
+                    const newPSI=onWinner?.(t1wins?teamA:teamB);
+                    return newPSI?{post_season_inputs:newPSI}:undefined;
+                  }});
                 }}/>
               </label>
               {archivedGame&&<div style={{fontSize:14,fontWeight:900,color:"#111"}}>{teamA} <span style={{color:a.score>b.score?"#007a00":"#555"}}>{a.score}</span> — <span style={{color:b.score>a.score?"#007a00":"#555"}}>{b.score}</span> {teamB}</div>}
@@ -5465,14 +5478,28 @@ function EnterResultsPanel({entries,weekResults,setWeekResults,week,setWeek,appl
         };
         const GameRow=({game,field,onRemove})=><div style={{padding:"8px 0",borderBottom:"1px solid #f5f5f5"}}>
           <div style={{display:"flex",alignItems:"center",gap:8,flexWrap:"wrap"}}><TeamSel value={game.teamA} onChange={v=>setGame(field,game.id,"teamA",v)} exclude={game.teamB}/><span style={{fontSize:11,color:"#aaa",fontWeight:700}}>VS</span><TeamSel value={game.teamB} onChange={v=>setGame(field,game.id,"teamB",v)} exclude={game.teamA}/>{(game.teamA||game.teamB)&&<><span style={{fontSize:11,color:"#555",marginLeft:4}}>Winner:</span><WinBtns teamA={game.teamA} teamB={game.teamB} winner={game.winner} onWin={v=>setGame(field,game.id,"winner",v)}/></>}{onRemove&&<button onClick={onRemove} style={{marginLeft:"auto",background:"none",border:"none",color:"#bbb",cursor:"pointer",fontSize:16,lineHeight:1}}>×</button>}</div>
-          {psBoxScore(game.teamA,game.teamB,w=>setGame(field,game.id,"winner",w))}
+          {psBoxScore(game.teamA,game.teamB,w=>setGameWinner(field,game.id,w))}
         </div>;
         const SL2=({children})=><div style={{fontSize:15,fontWeight:900,color:"#111",textTransform:"uppercase",letterSpacing:1,marginBottom:14,borderBottom:"2px solid #eee",paddingBottom:8}}>{children}</div>;
         const navBtn=(label,onClick,primary)=><button onClick={onClick} style={{padding:"12px 20px",background:primary?RED:"#f0f0f0",color:primary?"#fff":"#555",border:primary?"none":"1px solid #ddd",borderRadius:2,cursor:"pointer",fontFamily:ff,fontSize:13,fontWeight:800,textTransform:"uppercase",...(primary?{flex:1}:{})}}>{label}</button>;
-        const NavBtns=({showNext=true})=><div style={{display:"flex",gap:10,flexWrap:"wrap",marginTop:4}}>
-          {navBtn("← Back",()=>{saveToDb({});setEntryWeek(w=>w-1);},false)}
-          {showNext&&navBtn("Save & Next →",()=>{saveToDb({});setEntryWeek(w=>w+1);},true)}
-        </div>;
+        // Saving a bracket week works like submitting a regular week: it pays out that round's
+        // points (applyPostSeason is idempotent, so re-saving a week just corrects the totals)
+        // and pushes the league's current week forward, which is what the public site reads.
+        const saveBracketWeek=(target)=>{
+          const advance=target>week;
+          if(advance)setWeek(target);
+          applyPostSeason(entryWeek,advance?{week:target}:undefined);
+          setEntryWeek(target);
+          setSubmitMsg(`✓ ${weekLabel(entryWeek)} results saved`);
+          setTimeout(()=>setSubmitMsg(""),3000);
+        };
+        const NavBtns=({showNext=true})=><>
+          {submitMsg&&<div style={{padding:"8px 14px",background:"#f0f8f0",color:"#007a00",fontWeight:800,fontSize:12,borderRadius:2,fontFamily:ff,textTransform:"uppercase",letterSpacing:0.5}}>{submitMsg}</div>}
+          <div style={{display:"flex",gap:10,flexWrap:"wrap",marginTop:4}}>
+            {navBtn("← Back",()=>saveBracketWeek(entryWeek-1),false)}
+            {showNext&&navBtn(`Save ${weekLabel(entryWeek)} & Next →`,()=>saveBracketWeek(entryWeek+1),true)}
+          </div>
+        </>;
 
         if(entryWeek===14) return(<>
           <Card style={{borderTop:`3px solid ${RED}`}}><div style={{padding:16}}>
@@ -5480,7 +5507,7 @@ function EnterResultsPanel({entries,weekResults,setWeekResults,week,setWeek,appl
             <div style={{fontSize:11,color:"#007a00",fontWeight:700,marginBottom:10}}>Appear +{pc.confChampApp} · Win +{pc.confChampWin}</div>
             <div style={{display:"flex",alignItems:"center",gap:8,flexWrap:"wrap",marginBottom:8}}><TeamSel value={psi.confChampGame?.teamA||""} onChange={v=>setTopGame("confChampGame","teamA",v)} exclude={psi.confChampGame?.teamB}/><span style={{fontSize:11,color:"#aaa",fontWeight:700}}>VS</span><TeamSel value={psi.confChampGame?.teamB||""} onChange={v=>setTopGame("confChampGame","teamB",v)} exclude={psi.confChampGame?.teamA}/></div>
             {(psi.confChampGame?.teamA||psi.confChampGame?.teamB)&&<div style={{display:"flex",alignItems:"center",gap:8}}><span style={{fontSize:11,color:"#555"}}>Winner:</span><WinBtns teamA={psi.confChampGame?.teamA} teamB={psi.confChampGame?.teamB} winner={psi.confChampGame?.winner||""} onWin={v=>setTopGame("confChampGame","winner",v)}/></div>}
-            {psBoxScore(psi.confChampGame?.teamA,psi.confChampGame?.teamB,w=>setTopGame("confChampGame","winner",w))}
+            {psBoxScore(psi.confChampGame?.teamA,psi.confChampGame?.teamB,w=>setTopGameWinner("confChampGame",w))}
           </div></Card>
           <NavBtns/>
         </>);
@@ -5531,7 +5558,7 @@ function EnterResultsPanel({entries,weekResults,setWeekResults,week,setWeek,appl
             <div style={{fontSize:11,color:"#007a00",fontWeight:700,marginBottom:10}}>Win +{pc.nattyWin}</div>
             <div style={{display:"flex",alignItems:"center",gap:8,flexWrap:"wrap",marginBottom:8}}><TeamSel value={psi.nattyGame?.teamA||""} onChange={v=>setTopGame("nattyGame","teamA",v)} exclude={psi.nattyGame?.teamB}/><span style={{fontSize:11,color:"#aaa",fontWeight:700}}>VS</span><TeamSel value={psi.nattyGame?.teamB||""} onChange={v=>setTopGame("nattyGame","teamB",v)} exclude={psi.nattyGame?.teamA}/></div>
             {(psi.nattyGame?.teamA||psi.nattyGame?.teamB)&&<div style={{display:"flex",alignItems:"center",gap:8}}><span style={{fontSize:11,color:"#555"}}>Winner:</span><WinBtns teamA={psi.nattyGame?.teamA} teamB={psi.nattyGame?.teamB} winner={psi.nattyGame?.winner||""} onWin={v=>setTopGame("nattyGame","winner",v)}/></div>}
-            {psBoxScore(psi.nattyGame?.teamA,psi.nattyGame?.teamB,w=>setTopGame("nattyGame","winner",w))}
+            {psBoxScore(psi.nattyGame?.teamA,psi.nattyGame?.teamB,w=>setTopGameWinner("nattyGame",w))}
           </div></Card>
           <NavBtns/>
         </>);
@@ -5551,7 +5578,7 @@ function EnterResultsPanel({entries,weekResults,setWeekResults,week,setWeek,appl
             <div style={{marginBottom:18}}><div style={{fontSize:13,color:"#333",marginBottom:6,fontWeight:700}}>Gained Prestige Star (+{pc.prestigeGain})</div><div style={{display:"flex",flexWrap:"wrap",gap:6}}>{teamNames.map(t=><button key={t} onClick={()=>setPSI(prev=>({...prev,prestigeGains:prev.prestigeGains.includes(t)?prev.prestigeGains.filter(x=>x!==t):[...prev.prestigeGains,t]}))} style={{padding:"4px 10px",borderRadius:2,border:"1px solid",borderColor:psi.prestigeGains.includes(t)?"#007a00":"#ddd",background:psi.prestigeGains.includes(t)?"#f0f8f0":"#fff",color:psi.prestigeGains.includes(t)?"#007a00":"#888",cursor:"pointer",fontSize:12,fontFamily:ff2,fontWeight:600}}>{t}</button>)}</div></div>
             <div style={{display:"flex",gap:10,flexWrap:"wrap"}}>
               <button onClick={()=>setEntryWeek(w=>w-1)} style={{padding:"12px 20px",background:"#f0f0f0",border:"1px solid #ddd",borderRadius:2,cursor:"pointer",fontFamily:ff,fontSize:13,fontWeight:800,color:"#555",textTransform:"uppercase"}}>← Back</button>
-              <button onClick={applyPostSeason} style={{background:RED,color:"#fff",border:"none",borderRadius:2,padding:"11px 20px",cursor:"pointer",fontFamily:ff2,fontSize:13,fontWeight:800,textTransform:"uppercase"}}>Apply All Post-Season Points</button>
+              <button onClick={()=>{applyPostSeason(20);setSubmitMsg("✓ Post-season points applied");setTimeout(()=>setSubmitMsg(""),3000);}} title="Recalculates every post-season category from the entries above and corrects the standings — safe to press again after fixing a winner or re-sorting a ranking." style={{background:RED,color:"#fff",border:"none",borderRadius:2,padding:"11px 20px",cursor:"pointer",fontFamily:ff2,fontSize:13,fontWeight:800,textTransform:"uppercase"}}>Apply All Post-Season Points</button>
               <button onClick={finalizeSeason} style={{background:"#fff",color:"#007a00",border:"2px solid #007a00",borderRadius:2,padding:"11px 20px",cursor:"pointer",fontFamily:ff2,fontSize:13,fontWeight:800,textTransform:"uppercase"}}>Finalize & Start Season {season+1} →</button>
             </div>
           </div></Card>
@@ -7010,45 +7037,78 @@ export default function App() {
     else{setTimeout(()=>saveToDb({entries:nextEntries,...(frozenSetup?{setup:frozenSetup}:{})}),100);}
   }
 
-  function applyPostSeason() {
-    if(!postSeasonInputs)return;
-    const psi=postSeasonInputs;
-    setEntries(prev=>prev.map(entry=>{
-      const t=entry.teamName;
-      // Conference standings
-      const si=psi.confStandings.findIndex(s=>s.teamName===t);
-      const sp=si>=0?((pc.confStand||CONF_STAND_PTS)[si]||0):0;
-      // Conf championship game
-      let cc=0;
+  // Every post-season point a team has earned from the current inputs, as of `throughWeek`.
+  // The bracket is entered one week at a time (14 Conf. Champ → 19 Natty, 20 Offseason Awards),
+  // so each category only counts once its own entry screen has been saved — otherwise advancing
+  // past week 14 would already be paying out recruiting and final-standings points off the
+  // untouched default ordering FRESH_PSI seeds.
+  function postSeasonPtsFor(psi,teamName,throughWeek){
+    const t=teamName;
+    // Conf championship game (week 14)
+    let cc=0;
+    if(throughWeek>=14){
       if(psi.confChampGame){
         if(psi.confChampGame.teamA===t||psi.confChampGame.teamB===t){cc+=pc.confChampApp;if(psi.confChampGame.winner===t)cc+=pc.confChampWin;}
       } else if(psi.confChamp){
         if(psi.confChamp.made?.includes(t))cc+=pc.confChampApp;if(psi.confChamp.winner===t)cc+=pc.confChampWin;
       }
-      // Bowl & playoff points
-      let bp=0;
-      if(psi.bowlGames){
-        (psi.bowlGames||[]).forEach(g=>{if(g.teamA===t||g.teamB===t){bp+=pc.bowlApp;if(g.winner===t)bp+=pc.bowlWin;}});
-        (psi.playoffR1||[]).forEach(g=>{if(g.teamA===t||g.teamB===t){bp+=pc.playoffApp;if(g.winner===t)bp+=pc.playoffWin;}});
-        (psi.playoffR2||[]).forEach(g=>{if(g.winner===t)bp+=pc.playoffSemiWin;});
-        (psi.playoffR3||[]).forEach(g=>{if(g.winner===t)bp+=pc.playoffR3Win;});
-        if(psi.nattyGame&&psi.nattyGame.winner===t)bp+=pc.nattyWin;
-      } else if(psi.bowls){
-        const be=psi.bowls.find(b=>b.teamName===t);
-        if(be?.bowl==="made")bp=pc.bowlApp;if(be?.bowl==="won")bp=pc.bowlApp+pc.bowlWin;if(be?.bowl==="cfp")bp=pc.playoffApp;if(be?.bowl==="cfpwon")bp=pc.playoffApp+pc.nattyWin;
-      }
-      // Recruiting
-      const ri=psi.recruiting.findIndex(r=>r.teamName===t);
-      const rp=ri>=0?((pc.recruiting||RECRUITING_PTS)[ri]||0):0;
-      // Prestige & Heisman
-      let pp=0;if(psi.prestigeGains.includes(t))pp+=pc.prestigeGain;if(psi.maxPrestige?.includes(t))pp+=pc.prestigeMax;
-      // Dynasty Top 5
-      const di=(psi.dynastyTop5||[]).findIndex(r=>r.teamName===t);
-      const dp=di>=0&&di<5?((pc.dynastyTop5||[15,10,7,5,3])[di]||0):0;
-      const hp=(psi.heisman===t?pc.heisman:0)+dp;
-      return{...entry,confStandPts:entry.confStandPts+sp,confChampPts:entry.confChampPts+cc,bowlPts:entry.bowlPts+bp,recruitingPts:entry.recruitingPts+rp,prestigePts:entry.prestigePts+pp,heismanPts:entry.heismanPts+hp};
-    }));
-    setTimeout(()=>saveToDb(),200);
+    }
+    // Bowl (15), playoff rounds (16-18) & natty (19) all land in the same bucket
+    let bp=0;
+    if(psi.bowlGames){
+      if(throughWeek>=15)(psi.bowlGames||[]).forEach(g=>{if(g.teamA===t||g.teamB===t){bp+=pc.bowlApp;if(g.winner===t)bp+=pc.bowlWin;}});
+      if(throughWeek>=16)(psi.playoffR1||[]).forEach(g=>{if(g.teamA===t||g.teamB===t){bp+=pc.playoffApp;if(g.winner===t)bp+=pc.playoffWin;}});
+      if(throughWeek>=17)(psi.playoffR2||[]).forEach(g=>{if(g.winner===t)bp+=pc.playoffSemiWin;});
+      if(throughWeek>=18)(psi.playoffR3||[]).forEach(g=>{if(g.winner===t)bp+=pc.playoffR3Win;});
+      if(throughWeek>=19&&psi.nattyGame&&psi.nattyGame.winner===t)bp+=pc.nattyWin;
+    } else if(psi.bowls&&throughWeek>=15){
+      const be=psi.bowls.find(b=>b.teamName===t);
+      if(be?.bowl==="made")bp=pc.bowlApp;if(be?.bowl==="won")bp=pc.bowlApp+pc.bowlWin;if(be?.bowl==="cfp")bp=pc.playoffApp;if(be?.bowl==="cfpwon")bp=pc.playoffApp+pc.nattyWin;
+    }
+    // Offseason awards (week 20) — standings, recruiting, prestige, Heisman, dynasty top 5
+    const awards=throughWeek>=20;
+    const si=awards?(psi.confStandings||[]).findIndex(s=>s.teamName===t):-1;
+    const sp=si>=0?((pc.confStand||CONF_STAND_PTS)[si]||0):0;
+    const ri=awards?(psi.recruiting||[]).findIndex(r=>r.teamName===t):-1;
+    const rp=ri>=0?((pc.recruiting||RECRUITING_PTS)[ri]||0):0;
+    let pp=0;
+    if(awards){if((psi.prestigeGains||[]).includes(t))pp+=pc.prestigeGain;if(psi.maxPrestige?.includes(t))pp+=pc.prestigeMax;}
+    const di=awards?(psi.dynastyTop5||[]).findIndex(r=>r.teamName===t):-1;
+    const dp=di>=0&&di<5?((pc.dynastyTop5||[15,10,7,5,3])[di]||0):0;
+    const hp=(awards&&psi.heisman===t?pc.heisman:0)+dp;
+    return{confStandPts:sp,confChampPts:cc,bowlPts:bp,recruitingPts:rp,prestigePts:pp,heismanPts:hp};
+  }
+
+  // Push post-season points into the standings. Idempotent: psi.appliedPts remembers what this
+  // season has already paid out per team, so each run applies only the difference. That's what
+  // lets the bracket weeks apply points as the commissioner advances through them (and lets a
+  // corrected winner or a re-sorted ranking be fixed by re-applying) without double-counting.
+  // `extraSave` rides along in the same DB write. saveToDb fills the rest of its payload from the
+  // last render's state, so a second save issued alongside this one would write back a stale copy
+  // of whatever this one changed (and vice versa) — one write, one payload.
+  function applyPostSeason(throughWeek=20,extraSave){
+    if(!postSeasonInputs)return;
+    const psi=postSeasonInputs;
+    const prevApplied=psi.appliedPts||{};
+    const nextApplied={};
+    // Never regress how far the bracket has been paid out: going back to fix week 19 after the
+    // offseason awards were applied should re-check the natty, not strip the award points.
+    const through=Math.max(throughWeek,psi.appliedThrough||0);
+    const nextEntries=entries.map(entry=>{
+      const earned=postSeasonPtsFor(psi,entry.teamName,through);
+      const prev=prevApplied[entry.teamName]||{};
+      nextApplied[entry.teamName]=earned;
+      const adj={};
+      Object.keys(earned).forEach(k=>{adj[k]=(entry[k]||0)-(prev[k]||0)+earned[k];});
+      return{...entry,...adj};
+    });
+    // Teams that left the league mid-season keep whatever they were already paid — carry their
+    // applied totals forward so a later re-apply doesn't try to claw points back off a stale row.
+    Object.keys(prevApplied).forEach(t=>{if(!(t in nextApplied))nextApplied[t]=prevApplied[t];});
+    const newPSI={...psi,appliedPts:nextApplied,appliedThrough:through};
+    setEntries(nextEntries);
+    setPSI(newPSI);
+    setTimeout(()=>saveToDb({entries:nextEntries,post_season_inputs:newPSI,...extraSave}),100);
   }
 
   function finalizeSeason() {
