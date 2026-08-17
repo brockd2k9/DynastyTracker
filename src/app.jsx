@@ -227,6 +227,12 @@ function calcTotal(t) {
   return (t.gamePts||0)+(t.rankedBonusPts||0)+(t.confStandPts||0)+(t.confChampPts||0)+(t.bowlPts||0)+(t.recruitingPts||0)+(t.prestigePts||0)+(t.heismanPts||0);
 }
 
+// Weeks 14-19 are post-season rounds, not weeks 14-19 of a 13-week schedule — game logs and
+// standings label them by round so a bracket game doesn't read as "Wk 19" of a season that ended
+// at 13. Kept short here because it shares narrow table cells with real week numbers.
+const POSTSEASON_WEEK_LABELS = {14:"Conf Champ",15:"Bowl",16:"Playoff R1",17:"Playoff R2",18:"Playoff R3",19:"Natty"};
+const gameWeekLabel = (w) => POSTSEASON_WEEK_LABELS[w] || `Wk ${w}`;
+
 // Numeric input that allows free backspace/delete without React fighting the cursor
 function NumField({value, onChange, width=52, style={}, fontSize=12, bold=true}) {
   const [str, setStr] = useState(String(value??0));
@@ -1590,7 +1596,7 @@ function ClassicGamesCard({classicGames, gameArchive, setupRows}) {
                   <span>{g.teamB}</span>
                   {score&&<span style={{marginLeft:8,color:"#555",fontWeight:700}}>{score}</span>}
                 </div>
-                <div style={{fontSize:11,color:"#888",flexShrink:0}}>Wk {g.week} · {g.year}</div>
+                <div style={{fontSize:11,color:"#888",flexShrink:0}}>{gameWeekLabel(g.week)} · {g.year}</div>
                 {archivedGame&&<span style={{color:"#ccc",fontSize:11,flexShrink:0}}>{isOpen?"▲":"▼"}</span>}
               </div>
               {isOpen&&archivedGame&&<div style={{padding:"10px 14px",background:"#fff"}}><BoxScoreDetail team1={archivedGame.team1} team2={archivedGame.team2}/></div>}
@@ -2952,8 +2958,10 @@ function ProfileTab({history,setupRows,currentEntries,season,year,permanentUsers
     const totalLosses=seasons.reduce((a,s)=>a+s.losses,0)+(cur?.losses||0);
     const totalPts=seasons.reduce((a,s)=>a+s.total,0)+(cur?calcTotal(cur):0);
     const championships=seasons.filter(s=>s.champion).length;
-    const confTitles=seasons.reduce((a,s)=>a+(s.confChampWins>0?s.confChampWins:s.confChamp?1:0),0);
-    const nattyWins=seasons.reduce((a,s)=>a+(s.nattyWins>0?s.nattyWins:s.nattyWin?1:0),0);
+    // The in-progress season counts too — its bracket results are on the live entry, and a title
+    // won this year shouldn't wait for the season to be finalized before showing on the profile.
+    const confTitles=seasons.reduce((a,s)=>a+(s.confChampWins>0?s.confChampWins:s.confChamp?1:0),0)+(cur?.confChampWins||0);
+    const nattyWins=seasons.reduce((a,s)=>a+(s.nattyWins>0?s.nattyWins:s.nattyWin?1:0),0)+(cur?.nattyWins||0);
     const heismans=seasons.filter(s=>s.heisman).length;
     const bestFinish=seasons.length?Math.min(...seasons.map(s=>s.rank)):null;
     const allResults=[...seasons.flatMap(s=>(s.weekLog||[]).map(w=>w.result)),(cur?.weekLog||[]).map(w=>w.result)].flat().filter(r=>r==="win"||r==="loss");
@@ -2966,10 +2974,10 @@ function ProfileTab({history,setupRows,currentEntries,season,year,permanentUsers
     const top10Wins=allWeekLogs.filter(w=>w.result==="win"&&w.ranked10).length;
     const winPct=totalWins+totalLosses>0?((totalWins/(totalWins+totalLosses))*100).toFixed(1):0;
     // Career bowl/playoff/ranked records (from historical + weekLog-derived)
-    const careerPlayoffWins=seasons.reduce((a,s)=>a+(s.playoffWins||0),0);
-    const careerPlayoffLosses=seasons.reduce((a,s)=>a+(s.playoffLosses||0),0);
-    const bowlWins=seasons.reduce((a,s)=>a+(s.bowlWins!=null?s.bowlWins:(s.bowlResult==="win"?1:0)),0);
-    const bowlLosses=seasons.reduce((a,s)=>a+(s.bowlLosses!=null?s.bowlLosses:(s.bowlResult==="loss"?1:0)),0);
+    const careerPlayoffWins=seasons.reduce((a,s)=>a+(s.playoffWins||0),0)+(cur?.playoffWins||0);
+    const careerPlayoffLosses=seasons.reduce((a,s)=>a+(s.playoffLosses||0),0)+(cur?.playoffLosses||0);
+    const bowlWins=seasons.reduce((a,s)=>a+(s.bowlWins!=null?s.bowlWins:(s.bowlResult==="win"?1:0)),0)+(cur?.bowlWins||0);
+    const bowlLosses=seasons.reduce((a,s)=>a+(s.bowlLosses!=null?s.bowlLosses:(s.bowlResult==="loss"?1:0)),0)+(cur?.bowlLosses||0);
     const bowlAppearances=bowlWins+bowlLosses;
     const careerTop25Wins=seasons.reduce((a,s)=>a+(s.top25Wins||0),0)+allWeekLogs.filter(w=>w.result==="win"&&w.ranked25&&!w.ranked10).length;
     const careerTop10Wins=seasons.reduce((a,s)=>a+(s.top10Wins||0),0)+allWeekLogs.filter(w=>w.result==="win"&&w.ranked10).length;
@@ -3120,7 +3128,7 @@ function ProfileTab({history,setupRows,currentEntries,season,year,permanentUsers
                     return (
                       <div key={gameKey} style={{borderTop:"1px solid #eee"}}>
                         <div onClick={archivedGame?()=>setExpandedH2HGame(p=>({...p,[gameKey]:!p[gameKey]})):undefined} style={{display:"flex",alignItems:"center",gap:10,padding:"8px 14px",cursor:archivedGame?"pointer":"default"}}>
-                          <span style={{fontSize:11,color:"#888",width:80,flexShrink:0}}>Wk {g.week} · {g.year}</span>
+                          <span style={{fontSize:11,color:"#888",width:80,flexShrink:0}}>{gameWeekLabel(g.week)} · {g.year}</span>
                           <span style={{fontSize:11,fontWeight:800,color:g.result==="win"?"#007a00":RED,textTransform:"uppercase",width:50,flexShrink:0}}>{g.result}{g.forfeit?" (F)":""}</span>
                           <span style={{fontSize:12,fontWeight:700,color:"#555",flex:1}}>{archivedGame?`${mine.score}-${oppGame.score}`:"-"}</span>
                           {archivedGame&&<span style={{fontSize:10,color:"#ccc"}}>{isOpen?"▲":"▼"}</span>}
@@ -3214,7 +3222,7 @@ function ProfileTab({history,setupRows,currentEntries,season,year,permanentUsers
                             const opp=archivedGame&&(archivedGame.team1.name===s.teamName?archivedGame.team2:archivedGame.team1);
                             return(<Fragment key={i}>
                               <tr onClick={archivedGame?()=>setExpandedGames(prev=>({...prev,[gameKey]:!prev[gameKey]})):undefined} style={{borderBottom:"1px solid #f0f0f0",background:w.result==="win"?"#f0f8f0":"#fff8f8",cursor:archivedGame?"pointer":"default"}}>
-                                <td style={{padding:"7px 12px",textAlign:"center",color:"#888"}}>Wk {w.week}</td>
+                                <td style={{padding:"7px 12px",textAlign:"center",color:"#888"}}>{gameWeekLabel(w.week)}</td>
                                 <td style={{padding:"7px 12px",textAlign:"center",color:"#555"}}>{w.opponent&&w.opponent!=="Unknown"?formatOpp(w.opponent):"—"}</td>
                                 <td style={{padding:"7px 12px",textAlign:"center",fontWeight:800,color:w.result==="win"?"#007a00":RED,textTransform:"uppercase"}}>{w.result}{w.forfeit&&" (F)"}</td>
                                 <td style={{padding:"7px 12px",textAlign:"center",color:"#555",fontWeight:700}}>{archivedGame?`${mine.score}-${opp.score}`:"-"}</td>
@@ -3290,7 +3298,7 @@ function ProfileTab({history,setupRows,currentEntries,season,year,permanentUsers
                   );})}
                 </div>
               </div>
-              {profile.cur?.weekLog?.length>0&&<div><SL>Current Season Game Log</SL><table style={{width:"100%",borderCollapse:"collapse",fontSize:13}}><thead><tr style={{borderBottom:`2px solid ${RED}`,background:"#f7f7f7"}}>{["Week","Result","Opponent","Opp Rank","Pts"].map(h=><th key={h} style={{padding:"7px 8px",textAlign:"center",color:"#555",fontSize:9,letterSpacing:1,textTransform:"uppercase",fontWeight:700}}>{h}</th>)}</tr></thead><tbody>{profile.cur.weekLog.map((w,i)=><tr key={i} style={{borderBottom:"1px solid #eee",background:w.result==="win"?"#f0f8f0":"#fff8f8"}}><td style={{padding:"7px 8px",textAlign:"center",color:"#888"}}>Wk {w.week}</td><td style={{padding:"7px 8px",textAlign:"center",fontWeight:800,color:w.result==="win"?"#007a00":RED,textTransform:"uppercase"}}>{w.result}{w.forfeit&&" (F)"}</td><td style={{padding:"7px 8px",textAlign:"center",color:"#555",fontSize:11}}>{w.opponent||"—"}</td><td style={{padding:"7px 8px",textAlign:"center",color:w.ranked10?RED:w.ranked25?"#cc7700":"#ccc"}}>{w.ranked10?"Top 10":w.ranked25?"Top 25":"Unranked"}</td><td style={{padding:"7px 8px",textAlign:"center",color:RED,fontWeight:700}}>+{w.pts}</td></tr>)}</tbody></table></div>}
+              {profile.cur?.weekLog?.length>0&&<div><SL>Current Season Game Log</SL><table style={{width:"100%",borderCollapse:"collapse",fontSize:13}}><thead><tr style={{borderBottom:`2px solid ${RED}`,background:"#f7f7f7"}}>{["Week","Result","Opponent","Opp Rank","Pts"].map(h=><th key={h} style={{padding:"7px 8px",textAlign:"center",color:"#555",fontSize:9,letterSpacing:1,textTransform:"uppercase",fontWeight:700}}>{h}</th>)}</tr></thead><tbody>{profile.cur.weekLog.map((w,i)=><tr key={i} style={{borderBottom:"1px solid #eee",background:w.result==="win"?"#f0f8f0":"#fff8f8"}}><td style={{padding:"7px 8px",textAlign:"center",color:"#888"}}>{gameWeekLabel(w.week)}</td><td style={{padding:"7px 8px",textAlign:"center",fontWeight:800,color:w.result==="win"?"#007a00":RED,textTransform:"uppercase"}}>{w.result}{w.forfeit&&" (F)"}</td><td style={{padding:"7px 8px",textAlign:"center",color:"#555",fontSize:11}}>{w.opponent||"—"}</td><td style={{padding:"7px 8px",textAlign:"center",color:w.ranked10?RED:w.ranked25?"#cc7700":"#ccc"}}>{w.ranked10?"Top 10":w.ranked25?"Top 25":"Unranked"}</td><td style={{padding:"7px 8px",textAlign:"center",color:RED,fontWeight:700}}>+{w.pts}</td></tr>)}</tbody></table></div>}
             </div>);
           })()}
 
@@ -7037,6 +7045,70 @@ export default function App() {
     else{setTimeout(()=>saveToDb({entries:nextEntries,...(frozenSetup?{setup:frozenSetup}:{})}),100);}
   }
 
+  // Bracket games a team actually played, as week-log rows in the same shape the regular season
+  // writes. Only a round that has been reached AND filled in (both teams picked, winner decided)
+  // produces a row, so an empty or in-progress bracket logs nothing. The postseason:true marker is
+  // how the next apply finds these rows again to rebuild them.
+  function postSeasonLogsFor(psi,teamName,through){
+    const t=teamName;
+    const rounds=[
+      {week:14,games:psi.confChampGame?[psi.confChampGame]:[],app:pc.confChampApp,win:pc.confChampWin},
+      {week:15,games:psi.bowlGames||[],app:pc.bowlApp,win:pc.bowlWin},
+      {week:16,games:psi.playoffR1||[],app:pc.playoffApp,win:pc.playoffWin},
+      {week:17,games:psi.playoffR2||[],app:0,win:pc.playoffSemiWin},
+      {week:18,games:psi.playoffR3||[],app:0,win:pc.playoffR3Win},
+      {week:19,games:psi.nattyGame?[psi.nattyGame]:[],app:0,win:pc.nattyWin},
+    ];
+    const logs=[];
+    rounds.forEach(r=>{
+      if(through<r.week)return;
+      (r.games||[]).forEach(g=>{
+        if(!g||!g.teamA||!g.teamB||!g.winner)return;
+        if(g.teamA!==t&&g.teamB!==t)return;
+        const won=g.winner===t;
+        logs.push({week:r.week,result:won?"win":"loss",opponent:g.teamA===t?g.teamB:g.teamA,ranked25:false,ranked10:false,forfeit:false,pts:(r.app||0)+(won?r.win:0),postseason:true});
+      });
+    });
+    return logs;
+  }
+
+  // Fold the bracket into a team's record so post-season games count on profiles the same way
+  // regular-season games do — career W-L, streaks, head-to-head and the game log all read off
+  // wins/losses/h2h/weekLog. Rebuilt from scratch each apply: the previous postseason rows are
+  // backed out first, so correcting a winner moves the W and the L instead of adding a second
+  // pair of games. Conference record is deliberately left alone — a title game or a bowl isn't
+  // a conference-schedule game, and confWins/confLosses is what seeds the final standings sort.
+  function postSeasonRecordFor(entry,psi,through){
+    let wins=entry.wins||0, losses=entry.losses||0;
+    const h2h={...(entry.h2h||{})};
+    const bumpH2H=(opp,result,dir)=>{
+      if(!opp)return;
+      const rec={wins:0,losses:0,...(h2h[opp]||{})};
+      if(result==="win")rec.wins=Math.max(0,rec.wins+dir); else rec.losses=Math.max(0,rec.losses+dir);
+      h2h[opp]=rec;
+    };
+    (entry.weekLog||[]).filter(l=>l.postseason).forEach(l=>{
+      if(l.result==="win")wins=Math.max(0,wins-1); else if(l.result==="loss")losses=Math.max(0,losses-1);
+      bumpH2H(l.opponent,l.result,-1);
+    });
+    const logs=postSeasonLogsFor(psi,entry.teamName,through);
+    logs.forEach(l=>{
+      if(l.result==="win")wins++; else losses++;
+      bumpH2H(l.opponent,l.result,1);
+    });
+    // Round-by-round records that profiles already read for career bowl/playoff/title lines —
+    // until now only ever filled in by the historical importer.
+    const tally=(weeks,result)=>logs.filter(l=>weeks.includes(l.week)&&l.result===result).length;
+    return{
+      wins,losses,h2h,
+      weekLog:[...(entry.weekLog||[]).filter(l=>!l.postseason),...logs].sort((a,b)=>(a.week||0)-(b.week||0)),
+      confChampWins:tally([14],"win"),confChampLosses:tally([14],"loss"),
+      bowlWins:tally([15],"win"),bowlLosses:tally([15],"loss"),
+      playoffWins:tally([16,17,18],"win"),playoffLosses:tally([16,17,18],"loss"),
+      nattyWins:tally([19],"win"),nattyLosses:tally([19],"loss"),
+    };
+  }
+
   // Every post-season point a team has earned from the current inputs, as of `throughWeek`.
   // The bracket is entered one week at a time (14 Conf. Champ → 19 Natty, 20 Offseason Awards),
   // so each category only counts once its own entry screen has been saved — otherwise advancing
@@ -7100,7 +7172,7 @@ export default function App() {
       nextApplied[entry.teamName]=earned;
       const adj={};
       Object.keys(earned).forEach(k=>{adj[k]=(entry[k]||0)-(prev[k]||0)+earned[k];});
-      return{...entry,...adj};
+      return{...entry,...adj,...postSeasonRecordFor(entry,psi,through)};
     });
     // Teams that left the league mid-season keep whatever they were already paid — carry their
     // applied totals forward so a later re-apply doesn't try to claw points back off a stale row.
