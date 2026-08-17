@@ -227,6 +227,12 @@ function calcTotal(t) {
   return (t.gamePts||0)+(t.rankedBonusPts||0)+(t.confStandPts||0)+(t.confChampPts||0)+(t.bowlPts||0)+(t.recruitingPts||0)+(t.prestigePts||0)+(t.heismanPts||0);
 }
 
+// Week logs are appended in the order weeks get submitted, so fixing week 8 after week 12 — or a
+// post-season round applied before an earlier week was corrected — leaves the array out of order.
+// Everything that reads a week log wants it in week order: game logs read top to bottom, and
+// streak runs walk the array, so an out-of-order row silently breaks the streak maths too.
+const byWeek = (log) => [...(log||[])].sort((a,b)=>(a.week||0)-(b.week||0));
+
 // Weeks 14-19 are post-season rounds, not weeks 14-19 of a 13-week schedule — game logs and
 // standings label them by round so a bracket game doesn't read as "Wk 19" of a season that ended
 // at 13. Kept short here because it shares narrow table cells with real week numbers.
@@ -2329,9 +2335,10 @@ function LeagueRecordBook({history,currentEntries,season,year,permanentUsers,set
       const userName=entry.userName;
       const nattyWin=(entry.nattyWinner||((entry.nattyWins||0)>0))||(s.nattyWinners?.includes(entry.teamName))||(s.nattyWinner&&s.nattyWinner.split(", ").includes(entry.teamName));
       const confChamp=(entry.confChampion||((entry.confChampWins||0)>0))||(s.confWinners?.includes(entry.teamName))||(s.confChampion&&s.confChampion.split(", ").includes(entry.teamName))||s.confChampion===entry.teamName||s.confChampion===userName;
-      return{year:s.year,seasonNum:s.seasonNum,total:calcTotal(entry),wins:entry.wins,losses:entry.losses,teamName:entry.teamName,userName,champion:s.champion===userName,confChamp,confChampWins:entry.confChampWins||0,confChampLosses:entry.confChampLosses||0,nattyWin,nattyWins:entry.nattyWins||0,nattyLosses:entry.nattyLosses||0,weekLog:entry.weekLog||[],gamePts:entry.gamePts||0,h2h:entry.h2h||{},playoffWins:entry.playoffWins||0,playoffLosses:entry.playoffLosses||0,bowlResult:entry.bowlResult||"none",bowlWins:entry.bowlWins,bowlLosses:entry.bowlLosses,top25Wins:entry.top25Wins||0,top10Wins:entry.top10Wins||0,isHistorical:s.isHistorical||false,confChampPts:entry.confChampPts||0};
+      return{year:s.year,seasonNum:s.seasonNum,total:calcTotal(entry),wins:entry.wins,losses:entry.losses,teamName:entry.teamName,userName,champion:s.champion===userName,confChamp,confChampWins:entry.confChampWins||0,confChampLosses:entry.confChampLosses||0,nattyWin,nattyWins:entry.nattyWins||0,nattyLosses:entry.nattyLosses||0,weekLog:byWeek(entry.weekLog),gamePts:entry.gamePts||0,h2h:entry.h2h||{},playoffWins:entry.playoffWins||0,playoffLosses:entry.playoffLosses||0,bowlResult:entry.bowlResult||"none",bowlWins:entry.bowlWins,bowlLosses:entry.bowlLosses,top25Wins:entry.top25Wins||0,top10Wins:entry.top10Wins||0,isHistorical:s.isHistorical||false,confChampPts:entry.confChampPts||0};
     }).filter(Boolean);
-    const cur=currentEntries.find(e=>(userId&&e.userId===userId)||(e.userName===fallbackUserName));
+    const curRaw=currentEntries.find(e=>(userId&&e.userId===userId)||(e.userName===fallbackUserName));
+    const cur=curRaw?{...curRaw,weekLog:byWeek(curRaw.weekLog)}:curRaw;
     return{seasons,cur};
   }
 
@@ -2951,9 +2958,10 @@ function ProfileTab({history,setupRows,currentEntries,season,year,permanentUsers
       const userName=entry.userName;
       const nattyWin=(entry.nattyWinner||((entry.nattyWins||0)>0))||(s.nattyWinners?.includes(entry.teamName))||(s.nattyWinner&&s.nattyWinner.split(", ").includes(entry.teamName));
       const confChamp=(entry.confChampion||((entry.confChampWins||0)>0))||(s.confWinners?.includes(entry.teamName))||(s.confChampion&&s.confChampion.split(", ").includes(entry.teamName))||s.confChampion===entry.teamName||s.confChampion===userName;
-      return{year:s.year,seasonNum:s.seasonNum,rank,total:calcTotal(entry),wins:entry.wins,losses:entry.losses,teamName:entry.teamName,userName,champion:s.champion===userName,confChamp,confChampWins:entry.confChampWins||0,confChampLosses:entry.confChampLosses||0,nattyWin,nattyWins:entry.nattyWins||0,nattyLosses:entry.nattyLosses||0,heisman:s.heisman===entry.teamName||s.heisman===userName,weekLog:entry.weekLog||[],gamePts:entry.gamePts||0,rankedBonusPts:entry.rankedBonusPts||0,confStandPts:entry.confStandPts||0,confChampPts:entry.confChampPts||0,bowlPts:entry.bowlPts||0,recruitingPts:entry.recruitingPts||0,prestigePts:entry.prestigePts||0,heismanPts:entry.heismanPts||0,h2h:entry.h2h||{},playoffWins:entry.playoffWins||0,playoffLosses:entry.playoffLosses||0,bowlResult:entry.bowlResult||"none",bowlOpponent:entry.bowlOpponent||"",top25Wins:entry.top25Wins||0,top25Losses:entry.top25Losses||0,top10Wins:entry.top10Wins||0,top10Losses:entry.top10Losses||0,isHistorical:s.isHistorical||false};
+      return{year:s.year,seasonNum:s.seasonNum,rank,total:calcTotal(entry),wins:entry.wins,losses:entry.losses,teamName:entry.teamName,userName,champion:s.champion===userName,confChamp,confChampWins:entry.confChampWins||0,confChampLosses:entry.confChampLosses||0,nattyWin,nattyWins:entry.nattyWins||0,nattyLosses:entry.nattyLosses||0,heisman:s.heisman===entry.teamName||s.heisman===userName,weekLog:byWeek(entry.weekLog),gamePts:entry.gamePts||0,rankedBonusPts:entry.rankedBonusPts||0,confStandPts:entry.confStandPts||0,confChampPts:entry.confChampPts||0,bowlPts:entry.bowlPts||0,recruitingPts:entry.recruitingPts||0,prestigePts:entry.prestigePts||0,heismanPts:entry.heismanPts||0,h2h:entry.h2h||{},playoffWins:entry.playoffWins||0,playoffLosses:entry.playoffLosses||0,bowlResult:entry.bowlResult||"none",bowlOpponent:entry.bowlOpponent||"",top25Wins:entry.top25Wins||0,top25Losses:entry.top25Losses||0,top10Wins:entry.top10Wins||0,top10Losses:entry.top10Losses||0,isHistorical:s.isHistorical||false};
     }).filter(Boolean);
-    const cur=currentEntries.find(e=>(userId&&e.userId===userId)||(e.userName===fallbackUserName));
+    const curRaw=currentEntries.find(e=>(userId&&e.userId===userId)||(e.userName===fallbackUserName));
+    const cur=curRaw?{...curRaw,weekLog:byWeek(curRaw.weekLog)}:curRaw;
     const totalWins=seasons.reduce((a,s)=>a+s.wins,0)+(cur?.wins||0);
     const totalLosses=seasons.reduce((a,s)=>a+s.losses,0)+(cur?.losses||0);
     const totalPts=seasons.reduce((a,s)=>a+s.total,0)+(cur?calcTotal(cur):0);
@@ -5041,6 +5049,14 @@ function EnterResultsPanel({entries,weekResults,setWeekResults,week,setWeek,appl
   const getWR=(teamName)=>weekResults.find(r=>r.teamName===teamName)||{result:"none",ranked25:false,ranked10:false,forfeit:false};
   const thisWeekSchedule = schedule?.[entryWeek]||{};
 
+  // Pending picks belong to the week they were made on. weekResults is a single shared list, so
+  // without this, picks entered on one week followed the commissioner to the next one and got
+  // submitted against it. Clearing on every week change runs before the archive re-derive below,
+  // which then refills this week's picks from its own box scores.
+  useEffect(()=>{
+    setWeekResults(prev=>prev.some(r=>r.result!=="none")?prev.map(r=>({...r,result:"none",ranked25:false,ranked10:false,forfeit:false})):prev);
+  },[entryWeek,setWeekResults]);
+
   // weekResults (pending, un-submitted win/loss picks) isn't persisted to the DB —
   // it resets to "none" on every page load. If a box score was already scanned and
   // archived for this week but never submitted, re-derive the win/loss from the
@@ -7016,6 +7032,7 @@ export default function App() {
     const thisWeekSchedule = effectiveSchedule[targetWeek] || {};
     const frozenSetup = freezeWeekOdds(targetWeek);
     if (frozenSetup) setSetup(frozenSetup);
+    const weekHasSchedule = Object.keys(thisWeekSchedule).length > 0;
     // Build a map of results entered this week
     const resultsMap = {};
     weekResults.forEach(r=>{ if(r.result!=="none") resultsMap[r.teamName]=r; });
@@ -7035,6 +7052,12 @@ export default function App() {
         effectiveForfeit = resultsMap[opp].forfeit||false;
       }
       if(!effectiveResult)return entry;
+      // A bye is not a game. weekResults holds pending, un-submitted picks and isn't week-scoped,
+      // so a pick made on one week could previously follow the commissioner to another week and be
+      // logged there — landing a win on a team that never played, with no opponent to name it
+      // against. If the week has a schedule at all, a team that's marked BYE or simply isn't in it
+      // sat the week out. Weeks with no schedule entered still trust whatever was entered by hand.
+      if(weekHasSchedule&&(!opp||opp==="BYE"))return entry;
 
       // If this team already has a logged result for this week (e.g. re-submitting after fixing a
       // game or replacing a box score scan), undo everything that week previously contributed
