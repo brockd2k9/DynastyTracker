@@ -5085,12 +5085,14 @@ function EnterResultsPanel({entries,weekResults,setWeekResults,week,setWeek,appl
   entries.filter(e=>!scheduledNames.has(e.teamName)).forEach(e=>byeTeams.push(e.teamName));
   const unscheduled=[];
 
-  async function handleBoxScoreUpload(t1Name,t2Name,e){
-    const files=Array.from(e.target.files||[]).slice(0,2); if(!files.length) return;
-    const key=[t1Name,t2Name].sort().join("|");
-    if(!window.confirm(`Scan box score for ${t1Name} vs ${t2Name}?\nThis will use the Claude Vision API.`)){
-      if(fileRefs.current[key])fileRefs.current[key].value=""; return;
-    }
+  // Shared scan → archive path behind every "📷 Box Score" button — conference matchups, CPU
+  // games and postseason bracket games all funnel through here. Downscales the screenshots, runs
+  // the two-sided vision scan, pins each side's real name/userId, then replaces whatever was
+  // already archived for the same year/week/matchup. `sameGame` decides what counts as "the same
+  // matchup" on a re-scan (CPU games match on the dynasty team alone, since the CPU opponent's
+  // name can come back different), and `onScored` lets each caller record the winner the way its
+  // own week does — win/loss picks during the regular season, the bracket's Winner in the postseason.
+  async function scanAndArchiveGame({key,files,t1Name,t2Name,t2IsCPU,sameGame,onScored}){
     setScanning(key); setScanErrors(p=>({...p,[key]:null}));
     try {
       const images=await Promise.all(files.map(file=>downscaleImage(file)));
@@ -5098,20 +5100,14 @@ function EnterResultsPanel({entries,weekResults,setWeekResults,week,setWeek,appl
       const json={...parsed, ...reconcileBoxScoreTeams(parsed,t1Name,t2Name)};
       const e1=entries.find(e=>e.teamName===t1Name); const e2=entries.find(e=>e.teamName===t2Name);
       json.team1.name=t1Name; json.team1.userId=e1?.userId||"";
-      json.team2.name=t2Name; json.team2.userId=e2?.userId||"";
-      // Set week results from score
-      const t1wins=json.team1.score>json.team2.score;
-      setWeekResults(prev=>prev.map(r=>{
-        if(r.teamName===t1Name) return{...r,result:t1wins?"win":"loss"};
-        if(r.teamName===t2Name) return{...r,result:t1wins?"loss":"win"};
-        return r;
-      }));
+      json.team2.name=t2Name; json.team2.userId=t2IsCPU?"":(e2?.userId||"");
+      onScored?.(json.team1.score>json.team2.score);
       // Save to game archive
       if(setup&&setSetup){
         const newGame={id:genId(),year:Number(year),week:Number(entryWeek),season:Number(season),team1:json.team1,team2:json.team2};
         const archive=setup?.gameArchive||[];
-        const filtered=archive.filter(g=>!(g.year===Number(year)&&g.week===Number(entryWeek)&&
-          ((g.team1.name===t1Name&&g.team2.name===t2Name)||(g.team1.name===t2Name&&g.team2.name===t1Name))));
+        const matches=sameGame||(g=>(g.team1.name===t1Name&&g.team2.name===t2Name)||(g.team1.name===t2Name&&g.team2.name===t1Name));
+        const filtered=archive.filter(g=>!(g.year===Number(year)&&g.week===Number(entryWeek)&&matches(g)));
         const newArchive=[...filtered,newGame];
         const newPlayerStats=recomputePlayerStatsFromArchive(newArchive,setup?.playerStats||{},year);
         const updatedSetup={...setup,gameArchive:newArchive,playerStats:newPlayerStats};
@@ -5119,6 +5115,19 @@ function EnterResultsPanel({entries,weekResults,setWeekResults,week,setWeek,appl
       }
     } catch(err){setScanErrors(p=>({...p,[key]:"Scan failed: "+err.message}));}
     finally{setScanning(null); if(fileRefs.current[key])fileRefs.current[key].value="";}
+  }
+
+  async function handleBoxScoreUpload(t1Name,t2Name,e){
+    const files=Array.from(e.target.files||[]).slice(0,2); if(!files.length) return;
+    const key=[t1Name,t2Name].sort().join("|");
+    if(!window.confirm(`Scan box score for ${t1Name} vs ${t2Name}?\nThis will use the Claude Vision API.`)){
+      if(fileRefs.current[key])fileRefs.current[key].value=""; return;
+    }
+    await scanAndArchiveGame({key,files,t1Name,t2Name,onScored:t1wins=>setWeekResults(prev=>prev.map(r=>{
+      if(r.teamName===t1Name) return{...r,result:t1wins?"win":"loss"};
+      if(r.teamName===t2Name) return{...r,result:t1wins?"loss":"win"};
+      return r;
+    }))});
   }
 
   // The vision scan occasionally reads both teams' stat columns correctly but attaches the
@@ -5325,29 +5334,11 @@ function EnterResultsPanel({entries,weekResults,setWeekResults,week,setWeek,appl
                       <input type="file" accept="image/*" multiple style={{display:"none"}} ref={el=>fileRefs.current[key]=el} onChange={ev=>{
                         const files=Array.from(ev.target.files||[]).slice(0,2); if(!files.length) return;
                         if(!window.confirm(`Scan box score for ${teamName} vs ${displayCPU}?\nThis will use the Claude Vision API.`)){if(fileRefs.current[key])fileRefs.current[key].value="";return;}
-                        setScanning(key); setScanErrors(p=>({...p,[key]:null}));
-                        (async()=>{
-                          try{
-                            const images=await Promise.all(files.map(file=>downscaleImage(file)));
-                            const parsed=await scanBoxScoreBothSides(images);
-                            const json={...parsed, ...reconcileBoxScoreTeams(parsed,teamName,displayCPU)};
-                            const e1=entries.find(e=>e.teamName===teamName);
-                            json.team1.name=teamName; json.team1.userId=e1?.userId||"";
-                            json.team2.name=displayCPU; json.team2.userId="";
-                            const t1wins=json.team1.score>json.team2.score;
-                            setWeekResults(prev=>prev.map(r=>r.teamName===teamName?{...r,result:t1wins?"win":"loss"}:r));
-                            if(setup&&setSetup){
-                              const newGame={id:genId(),year:Number(year),week:Number(entryWeek),season:Number(season),team1:json.team1,team2:json.team2};
-                              const archive=setup?.gameArchive||[];
-                              const filtered=archive.filter(g=>!(g.year===Number(year)&&g.week===Number(entryWeek)&&(g.team1.name===teamName||g.team2.name===teamName)));
-                              const newArchive=[...filtered,newGame];
-                              const newPlayerStats=recomputePlayerStatsFromArchive(newArchive,setup?.playerStats||{},year);
-                              const updatedSetup={...setup,gameArchive:newArchive,playerStats:newPlayerStats};
-                              setSetup(updatedSetup); saveToDb({setup:updatedSetup});
-                            }
-                          }catch(err){setScanErrors(p=>({...p,[key]:"Scan failed: "+err.message}));}
-                          finally{setScanning(null);if(fileRefs.current[key])fileRefs.current[key].value="";}
-                        })();
+                        scanAndArchiveGame({
+                          key,files,t1Name:teamName,t2Name:displayCPU,t2IsCPU:true,
+                          sameGame:g=>g.team1.name===teamName||g.team2.name===teamName,
+                          onScored:t1wins=>setWeekResults(prev=>prev.map(r=>r.teamName===teamName?{...r,result:t1wins?"win":"loss"}:r)),
+                        });
                       }} disabled={!!scanning}/>
                     </label>
                   </div>
@@ -5428,7 +5419,54 @@ function EnterResultsPanel({entries,weekResults,setWeekResults,week,setWeek,appl
         const setTopGame=(field,key,val)=>setPSI(prev=>({...prev,[field]:{...prev[field],[key]:val}}));
         const TeamSel=({value,onChange,exclude})=><select value={value} onChange={e=>onChange(e.target.value)} style={{background:"#fff",color:"#111",border:"1px solid #ccc",borderRadius:2,padding:"5px 8px",fontFamily:ff2,fontSize:12,maxWidth:140}}><option value="">-- Team --</option>{teamNames.filter(t=>t!==exclude).map(t=><option key={t} value={t}>{t}</option>)}</select>;
         const WinBtns=({teamA,teamB,winner,onWin})=><div style={{display:"flex",gap:6,flexWrap:"wrap"}}>{[teamA,teamB].filter(Boolean).map(t=><button key={t} onClick={()=>onWin(winner===t?"":t)} style={{padding:"4px 10px",borderRadius:2,border:"1px solid",borderColor:winner===t?"#007a00":"#ddd",background:winner===t?"#f0f8f0":"#fff",color:winner===t?"#007a00":"#888",cursor:"pointer",fontSize:11,fontFamily:ff2,fontWeight:700}}>{winner===t?"✓ ":""}{t}</button>)}</div>;
-        const GameRow=({game,field,onRemove})=><div style={{display:"flex",alignItems:"center",gap:8,flexWrap:"wrap",padding:"8px 0",borderBottom:"1px solid #f5f5f5"}}><TeamSel value={game.teamA} onChange={v=>setGame(field,game.id,"teamA",v)} exclude={game.teamB}/><span style={{fontSize:11,color:"#aaa",fontWeight:700}}>VS</span><TeamSel value={game.teamB} onChange={v=>setGame(field,game.id,"teamB",v)} exclude={game.teamA}/>{(game.teamA||game.teamB)&&<><span style={{fontSize:11,color:"#555",marginLeft:4}}>Winner:</span><WinBtns teamA={game.teamA} teamB={game.teamB} winner={game.winner} onWin={v=>setGame(field,game.id,"winner",v)}/></>}{onRemove&&<button onClick={onRemove} style={{marginLeft:"auto",background:"none",border:"none",color:"#bbb",cursor:"pointer",fontSize:16,lineHeight:1}}>×</button>}</div>;
+        // Box score upload for a postseason game (conf championship, bowls, playoff rounds, natty).
+        // Same scan/archive pipeline the regular-season weeks use — these games are archived under
+        // their own week number (14-19), so their stats feed player stats and the record book just
+        // like a week 1-13 game. A successful scan also fills in the bracket's Winner pick, which is
+        // what the post-season points actually key off of.
+        const psBoxScore=(teamA,teamB,onWinner)=>{
+          if(!teamA||!teamB) return <div style={{fontSize:10,color:"#bbb",fontStyle:"italic",marginTop:6}}>Pick both teams to upload a box score.</div>;
+          const key=`ps${entryWeek}-${[teamA,teamB].sort().join("|")}`;
+          const isScanning=scanning===key;
+          const archivedGame=(setup?.gameArchive||[]).find(g=>g.year===Number(year)&&g.week===Number(entryWeek)&&((g.team1.name===teamA&&g.team2.name===teamB)||(g.team1.name===teamB&&g.team2.name===teamA)));
+          const a=archivedGame&&(archivedGame.team1.name===teamA?archivedGame.team1:archivedGame.team2);
+          const b=archivedGame&&(archivedGame.team1.name===teamA?archivedGame.team2:archivedGame.team1);
+          const line=t=>`${t.passing?.comp??0}/${t.passing?.att??0} ${t.passing?.yds??0}py ${t.passing?.tds??0}TD | ${t.rushing?.yds??0}ry ${t.rushing?.tds??0}TD | Def ${t.defense?.totalYdsAllowed??0}yds`;
+          return(<div style={{marginTop:8}}>
+            <div style={{display:"flex",alignItems:"center",gap:12,flexWrap:"wrap"}}>
+              <label title="Select both screenshots at once (Ctrl/Cmd-click, or shift-select) if the box score is split across two images" style={{background:archivedGame?"#1a3a6b":RED,color:"#fff",fontSize:11,fontWeight:700,padding:"7px 12px",borderRadius:2,cursor:isScanning?"wait":"pointer",opacity:isScanning?0.6:1,fontFamily:ff,textTransform:"uppercase",letterSpacing:0.5,flexShrink:0,whiteSpace:"nowrap"}}>
+                {isScanning?"Scanning...":(archivedGame?"Replace":"📷 Box Score")}
+                <input type="file" accept="image/*" multiple style={{display:"none"}} ref={el=>fileRefs.current[key]=el} disabled={!!scanning} onChange={ev=>{
+                  const files=Array.from(ev.target.files||[]).slice(0,2); if(!files.length) return;
+                  if(!window.confirm(`Scan box score for ${teamA} vs ${teamB}?\nThis will use the Claude Vision API.`)){if(fileRefs.current[key])fileRefs.current[key].value="";return;}
+                  scanAndArchiveGame({key,files,t1Name:teamA,t2Name:teamB,onScored:t1wins=>onWinner?.(t1wins?teamA:teamB)});
+                }}/>
+              </label>
+              {archivedGame&&<div style={{fontSize:14,fontWeight:900,color:"#111"}}>{teamA} <span style={{color:a.score>b.score?"#007a00":"#555"}}>{a.score}</span> — <span style={{color:b.score>a.score?"#007a00":"#555"}}>{b.score}</span> {teamB}</div>}
+            </div>
+            {scanErrors[key]&&<div style={{marginTop:6,padding:"6px 8px",fontSize:11,color:RED,background:"#fff0f0",borderRadius:2}}>{scanErrors[key]}</div>}
+            {archivedGame&&<div style={{marginTop:6,padding:"6px 10px",background:"#f0f8f0",fontSize:10,color:"#555",borderRadius:2}}>
+              <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:4}}>
+                {[a,b].map(t=>(
+                  <div key={t.name}>
+                    <div><strong>{t.name}:</strong> {line(t)}</div>
+                    {t.misc&&<div style={{color:"#888",marginTop:1}}>{t.misc.firstDowns} 1st downs | {t.misc.turnovers} TO | 3rd: {t.misc.thirdDownConv}/{t.misc.thirdDownAtt} | TOP {t.misc.timeOfPossession||"-"}</div>}
+                  </div>
+                ))}
+              </div>
+              <div style={{display:"flex",alignItems:"center",gap:14,marginTop:6,flexWrap:"wrap"}}>
+                <button onClick={()=>setExpandedBox(p=>({...p,[key]:!p[key]}))} style={{background:"none",border:"none",color:"#1a3a6b",fontWeight:700,fontSize:10,textTransform:"uppercase",letterSpacing:0.5,cursor:"pointer",padding:0,fontFamily:ff}}>{expandedBox[key]?"▲ Hide full box score":"▼ Full box score"}</button>
+                <button onClick={()=>submitScoreToGroupMe(key,a,b)} disabled={gmStatus[key]==="sending"} style={{background:gmStatus[key]==="sent"?"#f0f8f0":"none",border:"1px solid #1a3a6b",color:gmStatus[key]==="sent"?"#007a00":"#1a3a6b",fontWeight:700,fontSize:10,textTransform:"uppercase",letterSpacing:0.5,cursor:gmStatus[key]==="sending"?"wait":"pointer",padding:"3px 8px",borderRadius:2,fontFamily:ff}}>{gmStatus[key]==="sending"?"Posting...":gmStatus[key]==="sent"?"✓ Posted to GroupMe":"📢 Submit Score to GroupMe"}</button>
+                <button onClick={()=>swapBoxScoreSides(archivedGame)} title="Use this if the scan attached the wrong team's stats to each side" style={{background:"none",border:"none",color:"#b8860b",fontWeight:700,fontSize:10,textTransform:"uppercase",letterSpacing:0.5,cursor:"pointer",padding:0,fontFamily:ff}}>🔄 Swap Sides</button>
+              </div>
+              {expandedBox[key]&&<div style={{marginTop:8}}><BoxScoreDetail team1={a} team2={b}/></div>}
+            </div>}
+          </div>);
+        };
+        const GameRow=({game,field,onRemove})=><div style={{padding:"8px 0",borderBottom:"1px solid #f5f5f5"}}>
+          <div style={{display:"flex",alignItems:"center",gap:8,flexWrap:"wrap"}}><TeamSel value={game.teamA} onChange={v=>setGame(field,game.id,"teamA",v)} exclude={game.teamB}/><span style={{fontSize:11,color:"#aaa",fontWeight:700}}>VS</span><TeamSel value={game.teamB} onChange={v=>setGame(field,game.id,"teamB",v)} exclude={game.teamA}/>{(game.teamA||game.teamB)&&<><span style={{fontSize:11,color:"#555",marginLeft:4}}>Winner:</span><WinBtns teamA={game.teamA} teamB={game.teamB} winner={game.winner} onWin={v=>setGame(field,game.id,"winner",v)}/></>}{onRemove&&<button onClick={onRemove} style={{marginLeft:"auto",background:"none",border:"none",color:"#bbb",cursor:"pointer",fontSize:16,lineHeight:1}}>×</button>}</div>
+          {psBoxScore(game.teamA,game.teamB,w=>setGame(field,game.id,"winner",w))}
+        </div>;
         const SL2=({children})=><div style={{fontSize:15,fontWeight:900,color:"#111",textTransform:"uppercase",letterSpacing:1,marginBottom:14,borderBottom:"2px solid #eee",paddingBottom:8}}>{children}</div>;
         const navBtn=(label,onClick,primary)=><button onClick={onClick} style={{padding:"12px 20px",background:primary?RED:"#f0f0f0",color:primary?"#fff":"#555",border:primary?"none":"1px solid #ddd",borderRadius:2,cursor:"pointer",fontFamily:ff,fontSize:13,fontWeight:800,textTransform:"uppercase",...(primary?{flex:1}:{})}}>{label}</button>;
         const NavBtns=({showNext=true})=><div style={{display:"flex",gap:10,flexWrap:"wrap",marginTop:4}}>
@@ -5442,6 +5480,7 @@ function EnterResultsPanel({entries,weekResults,setWeekResults,week,setWeek,appl
             <div style={{fontSize:11,color:"#007a00",fontWeight:700,marginBottom:10}}>Appear +{pc.confChampApp} · Win +{pc.confChampWin}</div>
             <div style={{display:"flex",alignItems:"center",gap:8,flexWrap:"wrap",marginBottom:8}}><TeamSel value={psi.confChampGame?.teamA||""} onChange={v=>setTopGame("confChampGame","teamA",v)} exclude={psi.confChampGame?.teamB}/><span style={{fontSize:11,color:"#aaa",fontWeight:700}}>VS</span><TeamSel value={psi.confChampGame?.teamB||""} onChange={v=>setTopGame("confChampGame","teamB",v)} exclude={psi.confChampGame?.teamA}/></div>
             {(psi.confChampGame?.teamA||psi.confChampGame?.teamB)&&<div style={{display:"flex",alignItems:"center",gap:8}}><span style={{fontSize:11,color:"#555"}}>Winner:</span><WinBtns teamA={psi.confChampGame?.teamA} teamB={psi.confChampGame?.teamB} winner={psi.confChampGame?.winner||""} onWin={v=>setTopGame("confChampGame","winner",v)}/></div>}
+            {psBoxScore(psi.confChampGame?.teamA,psi.confChampGame?.teamB,w=>setTopGame("confChampGame","winner",w))}
           </div></Card>
           <NavBtns/>
         </>);
@@ -5492,6 +5531,7 @@ function EnterResultsPanel({entries,weekResults,setWeekResults,week,setWeek,appl
             <div style={{fontSize:11,color:"#007a00",fontWeight:700,marginBottom:10}}>Win +{pc.nattyWin}</div>
             <div style={{display:"flex",alignItems:"center",gap:8,flexWrap:"wrap",marginBottom:8}}><TeamSel value={psi.nattyGame?.teamA||""} onChange={v=>setTopGame("nattyGame","teamA",v)} exclude={psi.nattyGame?.teamB}/><span style={{fontSize:11,color:"#aaa",fontWeight:700}}>VS</span><TeamSel value={psi.nattyGame?.teamB||""} onChange={v=>setTopGame("nattyGame","teamB",v)} exclude={psi.nattyGame?.teamA}/></div>
             {(psi.nattyGame?.teamA||psi.nattyGame?.teamB)&&<div style={{display:"flex",alignItems:"center",gap:8}}><span style={{fontSize:11,color:"#555"}}>Winner:</span><WinBtns teamA={psi.nattyGame?.teamA} teamB={psi.nattyGame?.teamB} winner={psi.nattyGame?.winner||""} onWin={v=>setTopGame("nattyGame","winner",v)}/></div>}
+            {psBoxScore(psi.nattyGame?.teamA,psi.nattyGame?.teamB,w=>setTopGame("nattyGame","winner",w))}
           </div></Card>
           <NavBtns/>
         </>);
