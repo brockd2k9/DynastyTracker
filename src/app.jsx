@@ -4999,7 +4999,7 @@ function HistoricalImportPanel({setupRows, history, onImport}) {
 }
 
 // ── EnterResultsPanel ─────────────────────────────────────────────────────
-function EnterResultsPanel({entries,weekResults,setWeekResults,week,setWeek,applyBulkResults,applyWeekResults,reverseWeekResults,postSeasonInputs,setPSI,applyPostSeason,finalizeSeason,season,setSeason,year,setYear,teamNames,schedule,history,onImportHistory,setupRows,saveToDb,setup,setSetup,postWeekRecapToGroupMe,postGameOfWeekPreview}) {
+function EnterResultsPanel({entries,weekResults,setWeekResults,week,setWeek,applyBulkResults,applyWeekResults,reverseWeekResults,findResultMismatches,repairResultMismatches,postSeasonInputs,setPSI,applyPostSeason,finalizeSeason,season,setSeason,year,setYear,teamNames,schedule,history,onImportHistory,setupRows,saveToDb,setup,setSetup,postWeekRecapToGroupMe,postGameOfWeekPreview}) {
   const pc = {...DEFAULT_PTS_CONFIG,...(setup?.pointsConfig||{})}; // live points config, for accurate in-progress point hints below
   const [entryWeek,setEntryWeek] = useState(week);
   const [resultsTab,setResultsTab] = useState("weekly");
@@ -5450,6 +5450,19 @@ function EnterResultsPanel({entries,weekResults,setWeekResults,week,setWeek,appl
             setTimeout(()=>setSubmitMsg(""),6000);
           }} title={`Removes Week ${entryWeek}'s wins, losses and points from every team. Uploaded box scores are kept, so you can fix the week and submit it again.`} style={{background:"none",border:"1px solid #b8860b",color:"#b8860b",fontWeight:700,fontSize:11,textTransform:"uppercase",letterSpacing:0.5,cursor:"pointer",padding:"7px 14px",borderRadius:2,fontFamily:ff}}>
             ↩ Reverse Week {entryWeek} Results
+          </button>
+          {/* Finds every logged result that contradicts its uploaded box score in one pass, rather
+              than leaving the commissioner to spot them one game log at a time. */}
+          <button onClick={()=>{
+            const list=findResultMismatches();
+            if(!list.length){window.alert(`Every logged result for ${year} matches its uploaded box score.`);return;}
+            const lines=list.map(m=>`• ${gameWeekLabel(m.week)} — ${m.teamName}: logged ${m.logged.toUpperCase()}, box score says ${m.expected.toUpperCase()} (${m.score} vs ${m.opponent})`).join("\n");
+            if(!window.confirm(`${list.length} logged result${list.length===1?"":"s"} disagree with the uploaded box score:\n\n${lines}\n\nCorrect them to match the box scores? Wins, losses, points and head-to-head are all updated.`))return;
+            repairResultMismatches(list);
+            setSubmitMsg(`✓ Corrected ${list.length} result${list.length===1?"":"s"} to match the box scores`);
+            setTimeout(()=>setSubmitMsg(""),6000);
+          }} title={`Checks every ${year} result against its uploaded box score and offers to fix any that disagree.`} style={{background:"none",border:"1px solid #1a3a6b",color:"#1a3a6b",fontWeight:700,fontSize:11,textTransform:"uppercase",letterSpacing:0.5,cursor:"pointer",padding:"7px 14px",borderRadius:2,fontFamily:ff}}>
+            🔍 Check Results vs Box Scores
           </button>
         </div>
       </>}
@@ -7008,6 +7021,77 @@ export default function App() {
     };
   }
 
+  // Add one result row to an entry, updating record, conference record, points and head-to-head.
+  // The inverse of entryWithoutWeek — pair them to rewrite a week (strip, then add) so a
+  // correction can't leave a half-applied result behind.
+  function entryWithWeek(entry,log){
+    const bonus=log.result==="win"?(log.ranked10?pc.top10Bonus:log.ranked25?pc.top25Bonus:0):0;
+    const pts=log.result==="win"?pc.win:0;
+    const realOpp=log.opponent&&!isCPUOpp(log.opponent)&&log.opponent!=="BYE"&&log.opponent!=="Unknown";
+    const isConf=realOpp&&teamNames.includes(log.opponent);
+    const h2h={...(entry.h2h||{})};
+    if(realOpp){
+      const rec={wins:0,losses:0,...(h2h[log.opponent]||{})};
+      if(log.result==="win")rec.wins++; else if(log.result==="loss")rec.losses++;
+      h2h[log.opponent]=rec;
+    }
+    return{...entry,
+      wins:log.result==="win"?(entry.wins||0)+1:(entry.wins||0),
+      losses:log.result==="loss"?(entry.losses||0)+1:(entry.losses||0),
+      confWins:isConf&&log.result==="win"?(entry.confWins||0)+1:(entry.confWins||0),
+      confLosses:isConf&&log.result==="loss"?(entry.confLosses||0)+1:(entry.confLosses||0),
+      gamePts:(entry.gamePts||0)+pts,
+      rankedBonusPts:(entry.rankedBonusPts||0)+bonus,
+      weekLog:byWeek([...(entry.weekLog||[]),{...log,pts:pts+bonus}]),
+      h2h};
+  }
+
+  // Cross-check every logged regular-season result for this year against the uploaded box score
+  // for that game. The two can disagree: a pending win/loss pick used to survive navigating
+  // between weeks, so a stale pick could be submitted over a week whose box score said the
+  // opposite — and the archive re-derive won't overwrite a pick that isn't "none", so the stale
+  // pick won. Fixed at the source, but rows written before that stay wrong until rewritten.
+  // Post-season rounds are excluded: there the bracket's Winner pick is the source of truth and
+  // applyPostSeason rebuilds those rows, so re-saving the round is what corrects them.
+  function findResultMismatches(){
+    const out=[];
+    (setup?.gameArchive||[]).forEach(g=>{
+      if(g.year!==Number(year)||g.week>=14)return;
+      if(!g.team1||!g.team2||g.team1.score===g.team2.score)return; // a tie decides nothing
+      [[g.team1,g.team2],[g.team2,g.team1]].forEach(([mine,opp])=>{
+        const entry=entries.find(e=>e.teamName===mine.name);
+        if(!entry)return;
+        const log=(entry.weekLog||[]).find(l=>l.week===g.week);
+        if(!log||!log.result||log.result==="none")return;
+        if(log.forfeit)return; // a forfeit deliberately overrides whatever the box score says
+        const expected=mine.score>opp.score?"win":"loss";
+        if(log.result===expected)return;
+        out.push({teamName:mine.name,week:g.week,logged:log.result,expected,score:`${mine.score}-${opp.score}`,opponent:opp.name});
+      });
+    });
+    return out.sort((a,b)=>a.week-b.week||a.teamName.localeCompare(b.teamName));
+  }
+
+  // Rewrite each mismatched week to match its box score, keeping the row's opponent and ranked
+  // flags. Strip-then-add, so record, points and head-to-head all move together.
+  function repairResultMismatches(list){
+    const byTeam={};
+    list.forEach(m=>{(byTeam[m.teamName]=byTeam[m.teamName]||[]).push(m);});
+    const nextEntries=entries.map(e=>{
+      const fixes=byTeam[e.teamName];
+      if(!fixes)return e;
+      let cur=e;
+      fixes.forEach(f=>{
+        const old=(cur.weekLog||[]).find(l=>l.week===f.week)||{};
+        cur=entryWithoutWeek(cur,f.week).entry;
+        cur=entryWithWeek(cur,{week:f.week,result:f.expected,opponent:old.opponent||f.opponent,ranked25:old.ranked25||false,ranked10:old.ranked10||false,forfeit:false});
+      });
+      return cur;
+    });
+    setEntries(nextEntries);
+    setTimeout(()=>saveToDb({entries:nextEntries}),100);
+  }
+
   // Un-submit a week: take it back off every team's record as if it had never been entered.
   // Uploaded box scores stay in the archive, so the week can be re-entered and submitted again.
   // Returns false if the commissioner cancelled or there was nothing logged to reverse.
@@ -7917,7 +8001,7 @@ export default function App() {
         </div>
         <div style={{maxWidth:800,margin:"0 auto",padding:"20px 14px"}}>
           {commTab==="Season History"&&<HistoryTab history={history} setHistory={setHistory} saveToDb={saveToDb} commUnlocked={true} entries={entries} setEntries={setEntries} season={season} week={week} setWeek={setWeek} yearRosters={setup?.yearRosters} permanentUsers={setup?.permanentUsers} currentEntries={entries} year={year} setupRows={setup?.rows||[]} gameArchive={setup?.gameArchive} classicGames={setup?.classicGames} playerStats={setup?.playerStats}/>}
-          {commTab==="Enter Results"&&<EnterResultsPanel entries={activeEntries} weekResults={weekResults} setWeekResults={setWeekResults} week={week} setWeek={setWeek} applyBulkResults={applyBulkResults} applyWeekResults={applyWeekResults} reverseWeekResults={reverseWeekResults} postSeasonInputs={postSeasonInputs} setPSI={setPSI} applyPostSeason={applyPostSeason} finalizeSeason={finalizeSeason} season={season} setSeason={setSeason} year={year} setYear={setYear} teamNames={teamNames} schedule={effectiveSchedule} history={history} onImportHistory={importHistoricalSeason} setupRows={setup?.rows||[]} saveToDb={saveToDb} setup={setup} setSetup={setSetup} postWeekRecapToGroupMe={postWeekRecapToGroupMe} postGameOfWeekPreview={postGameOfWeekPreview}/>}
+          {commTab==="Enter Results"&&<EnterResultsPanel entries={activeEntries} weekResults={weekResults} setWeekResults={setWeekResults} week={week} setWeek={setWeek} applyBulkResults={applyBulkResults} applyWeekResults={applyWeekResults} reverseWeekResults={reverseWeekResults} findResultMismatches={findResultMismatches} repairResultMismatches={repairResultMismatches} postSeasonInputs={postSeasonInputs} setPSI={setPSI} applyPostSeason={applyPostSeason} finalizeSeason={finalizeSeason} season={season} setSeason={setSeason} year={year} setYear={setYear} teamNames={teamNames} schedule={effectiveSchedule} history={history} onImportHistory={importHistoricalSeason} setupRows={setup?.rows||[]} saveToDb={saveToDb} setup={setup} setSetup={setSetup} postWeekRecapToGroupMe={postWeekRecapToGroupMe} postGameOfWeekPreview={postGameOfWeekPreview}/>}
           {commTab==="Schedule"&&<SchedulePanel entries={activeEntries} schedule={schedule} setSchedule={setSchedule}/>}
 {commTab==="Content"&&<ContentHub sorted={sorted} entries={activeEntries} week={week} season={season} year={year} leagueName={leagueName} history={history} leader={leader} articles={articles} setArticles={setArticles} setActiveArticle={setActiveArticle} schedule={effectiveSchedule} setup={setup} setSetup={setSetup} saveToDb={saveToDb}/>}
           {commTab==="Player Stats"&&<PlayerStatsAdmin setup={setup} setSetup={setSetup} saveToDb={saveToDb} permanentUsers={setup?.permanentUsers||[]} year={year} ff={ff} RED={RED}/>}
