@@ -5185,6 +5185,19 @@ function EnterResultsPanel({entries,weekResults,setWeekResults,week,setWeek,appl
     }));
   }
 
+  // Cheap enough to recompute each render (games × teams, both small) and always current, which
+  // matters more here — the banner has to disappear the moment the mismatches are fixed.
+  const resultMismatches = findResultMismatches?findResultMismatches():[];
+  function runResultAudit(){
+    const list=findResultMismatches();
+    if(!list.length){window.alert(`Every logged result for ${year} matches its uploaded box score.`);return;}
+    const lines=list.map(m=>`• ${gameWeekLabel(m.week)} — ${m.teamName}: logged ${m.logged.toUpperCase()}, box score says ${m.expected.toUpperCase()} (${m.score} vs ${m.opponent})`).join("\n");
+    if(!window.confirm(`${list.length} logged result${list.length===1?"":"s"} disagree with the uploaded box score:\n\n${lines}\n\nCorrect them to match the box scores? Wins, losses, points and head-to-head are all updated.`))return;
+    repairResultMismatches(list);
+    setSubmitMsg(`✓ Corrected ${list.length} result${list.length===1?"":"s"} to match the box scores`);
+    setTimeout(()=>setSubmitMsg(""),6000);
+  }
+
   const btnStyle=(active,color="#007a00")=>({padding:"5px 12px",borderRadius:2,border:"1px solid",borderColor:active?color:"#ddd",background:active?`${color}18`:"#fff",color:active?color:"#888",cursor:"pointer",fontSize:11,fontFamily:ff,fontWeight:800,textTransform:"uppercase"});
 
   function submitAndFlash(targetWeek,goBack){
@@ -5212,6 +5225,23 @@ function EnterResultsPanel({entries,weekResults,setWeekResults,week,setWeek,appl
 
       {resultsTab==="historical"&&<HistoricalImportPanel setupRows={setupRows} history={history||[]} onImport={onImportHistory}/>}
       {resultsTab==="weekly"&&<>
+
+      {/* A result that contradicts its own box score is invisible from the entry screens — it only
+          shows up on a profile game log, one team at a time. Surfaced here on every week (the check
+          covers the whole year, not the week being edited) so it can't be missed. */}
+      {resultMismatches.length>0&&<Card style={{overflow:"hidden",borderLeft:`4px solid ${RED}`}}>
+        <div style={{padding:"12px 16px",display:"flex",gap:12,alignItems:"center",flexWrap:"wrap"}}>
+          <div style={{flex:1,minWidth:240}}>
+            <div style={{fontSize:12,fontWeight:900,color:RED,textTransform:"uppercase",letterSpacing:0.5}}>⚠ {resultMismatches.length} logged result{resultMismatches.length===1?"":"s"} disagree{resultMismatches.length===1?"s":""} with the box score</div>
+            <div style={{fontSize:11,color:"#666",marginTop:4,lineHeight:1.5}}>
+              {resultMismatches.slice(0,3).map(m=><div key={`${m.teamName}-${m.week}`}>{gameWeekLabel(m.week)} — <strong>{m.teamName}</strong>: logged {m.logged.toUpperCase()}, box score says {m.expected.toUpperCase()} ({m.score} vs {m.opponent})</div>)}
+              {resultMismatches.length>3&&<div style={{color:"#999"}}>+{resultMismatches.length-3} more…</div>}
+            </div>
+          </div>
+          <button onClick={runResultAudit} style={{background:RED,color:"#fff",border:"none",borderRadius:2,padding:"9px 16px",cursor:"pointer",fontFamily:ff,fontSize:12,fontWeight:800,textTransform:"uppercase",letterSpacing:0.5,flexShrink:0}}>Review &amp; Fix</button>
+        </div>
+      </Card>}
+
 
       {/* Week navigation */}
       <Card>
@@ -5453,15 +5483,7 @@ function EnterResultsPanel({entries,weekResults,setWeekResults,week,setWeek,appl
           </button>
           {/* Finds every logged result that contradicts its uploaded box score in one pass, rather
               than leaving the commissioner to spot them one game log at a time. */}
-          <button onClick={()=>{
-            const list=findResultMismatches();
-            if(!list.length){window.alert(`Every logged result for ${year} matches its uploaded box score.`);return;}
-            const lines=list.map(m=>`• ${gameWeekLabel(m.week)} — ${m.teamName}: logged ${m.logged.toUpperCase()}, box score says ${m.expected.toUpperCase()} (${m.score} vs ${m.opponent})`).join("\n");
-            if(!window.confirm(`${list.length} logged result${list.length===1?"":"s"} disagree with the uploaded box score:\n\n${lines}\n\nCorrect them to match the box scores? Wins, losses, points and head-to-head are all updated.`))return;
-            repairResultMismatches(list);
-            setSubmitMsg(`✓ Corrected ${list.length} result${list.length===1?"":"s"} to match the box scores`);
-            setTimeout(()=>setSubmitMsg(""),6000);
-          }} title={`Checks every ${year} result against its uploaded box score and offers to fix any that disagree.`} style={{background:"none",border:"1px solid #1a3a6b",color:"#1a3a6b",fontWeight:700,fontSize:11,textTransform:"uppercase",letterSpacing:0.5,cursor:"pointer",padding:"7px 14px",borderRadius:2,fontFamily:ff}}>
+          <button onClick={runResultAudit} title={`Checks every ${year} result against its uploaded box score and offers to fix any that disagree.`} style={{background:"none",border:"1px solid #1a3a6b",color:"#1a3a6b",fontWeight:700,fontSize:11,textTransform:"uppercase",letterSpacing:0.5,cursor:"pointer",padding:"7px 14px",borderRadius:2,fontFamily:ff}}>
             🔍 Check Results vs Box Scores
           </button>
         </div>
