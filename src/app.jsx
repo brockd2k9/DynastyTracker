@@ -4991,7 +4991,7 @@ function HistoricalImportPanel({setupRows, history, onImport}) {
 }
 
 // ── EnterResultsPanel ─────────────────────────────────────────────────────
-function EnterResultsPanel({entries,weekResults,setWeekResults,week,setWeek,applyBulkResults,applyWeekResults,postSeasonInputs,setPSI,applyPostSeason,finalizeSeason,season,setSeason,year,setYear,teamNames,schedule,history,onImportHistory,setupRows,saveToDb,setup,setSetup,postWeekRecapToGroupMe,postGameOfWeekPreview}) {
+function EnterResultsPanel({entries,weekResults,setWeekResults,week,setWeek,applyBulkResults,applyWeekResults,reverseWeekResults,postSeasonInputs,setPSI,applyPostSeason,finalizeSeason,season,setSeason,year,setYear,teamNames,schedule,history,onImportHistory,setupRows,saveToDb,setup,setSetup,postWeekRecapToGroupMe,postGameOfWeekPreview}) {
   const pc = {...DEFAULT_PTS_CONFIG,...(setup?.pointsConfig||{})}; // live points config, for accurate in-progress point hints below
   const [entryWeek,setEntryWeek] = useState(week);
   const [resultsTab,setResultsTab] = useState("weekly");
@@ -5046,7 +5046,7 @@ function EnterResultsPanel({entries,weekResults,setWeekResults,week,setWeek,appl
   // archived for this week but never submitted, re-derive the win/loss from the
   // archived score so the Override buttons (and the Submit button) reflect it
   // instead of silently treating the game as if nothing had been entered.
-  useEffect(()=>{
+  const deriveWeekResultsFromArchive=useCallback(()=>{
     const archive=(setup?.gameArchive||[]).filter(g=>g.year===Number(year)&&g.week===Number(entryWeek));
     if(!archive.length) return;
     setWeekResults(prev=>{
@@ -5063,7 +5063,8 @@ function EnterResultsPanel({entries,weekResults,setWeekResults,week,setWeek,appl
       });
       return changed?next:prev;
     });
-  },[setup?.gameArchive,entryWeek,year]);
+  },[setup?.gameArchive,entryWeek,year,setWeekResults]);
+  useEffect(()=>{deriveWeekResultsFromArchive();},[deriveWeekResultsFromArchive]);
 
   // Instant Classic — a lightweight tag on a specific game (year/week/team pair), independent
   // of gameArchive so it can be set whether or not a box score has been scanned for the game.
@@ -5419,9 +5420,22 @@ function EnterResultsPanel({entries,weekResults,setWeekResults,week,setWeek,appl
             {entryWeek>=week?`Submit Week ${entryWeek} & Advance to Week ${entryWeek+1} →`:`Submit Week ${entryWeek} →`}
           </button>
         </div>
-        {week>0&&<button onClick={resendGroupMeUpdate} disabled={gmResendStatus==="sending"} style={{marginTop:10,background:"none",border:"1px solid #1a3a6b",color:"#1a3a6b",fontWeight:700,fontSize:11,textTransform:"uppercase",letterSpacing:0.5,cursor:gmResendStatus==="sending"?"wait":"pointer",padding:"7px 14px",borderRadius:2,fontFamily:ff}}>
-          {gmResendStatus==="sending"?"Sending to GroupMe...":`📤 Resend Week ${week-1} GroupMe Update`}
-        </button>}
+        <div style={{display:"flex",gap:10,flexWrap:"wrap",alignItems:"center",marginTop:10}}>
+          {week>0&&<button onClick={resendGroupMeUpdate} disabled={gmResendStatus==="sending"} style={{background:"none",border:"1px solid #1a3a6b",color:"#1a3a6b",fontWeight:700,fontSize:11,textTransform:"uppercase",letterSpacing:0.5,cursor:gmResendStatus==="sending"?"wait":"pointer",padding:"7px 14px",borderRadius:2,fontFamily:ff}}>
+            {gmResendStatus==="sending"?"Sending to GroupMe...":`📤 Resend Week ${week-1} GroupMe Update`}
+          </button>}
+          {/* Escape hatch for a week that went in wrong — takes the whole week back off the
+              standings so it can be re-entered from scratch, instead of leaving the commissioner
+              to unpick points by hand in the standings editor. */}
+          <button onClick={()=>{
+            if(!reverseWeekResults(entryWeek))return;
+            deriveWeekResultsFromArchive();
+            setSubmitMsg(`↩ Week ${entryWeek} reversed — re-enter the results, then submit again`);
+            setTimeout(()=>setSubmitMsg(""),6000);
+          }} title={`Removes Week ${entryWeek}'s wins, losses and points from every team. Uploaded box scores are kept, so you can fix the week and submit it again.`} style={{background:"none",border:"1px solid #b8860b",color:"#b8860b",fontWeight:700,fontSize:11,textTransform:"uppercase",letterSpacing:0.5,cursor:"pointer",padding:"7px 14px",borderRadius:2,fontFamily:ff}}>
+            ↩ Reverse Week {entryWeek} Results
+          </button>
+        </div>
       </>}
       {entryWeek>=14&&postSeasonInputs&&(()=>{
         const psi=postSeasonInputs;
@@ -6950,6 +6964,54 @@ export default function App() {
     }
   }
 
+  // Back every result logged for `targetWeek` out of one entry — record, conference record, points
+  // and head-to-head — and drop those rows from the week log. Deliberately `filter`, not `find`:
+  // a week that got submitted more than once can carry duplicate rows for the same week, and
+  // undoing only the first is exactly what leaves a week's points counted twice. Returns the
+  // cleaned entry plus the rows it removed, so callers can report what they backed out.
+  function entryWithoutWeek(entry,targetWeek){
+    const priors=(entry.weekLog||[]).filter(l=>l.week===targetWeek);
+    let wins=entry.wins||0,losses=entry.losses||0,confWins=entry.confWins||0,confLosses=entry.confLosses||0;
+    let gamePts=entry.gamePts||0,rankedBonusPts=entry.rankedBonusPts||0;
+    const h2h={...(entry.h2h||{})};
+    priors.forEach(l=>{
+      const bonus=l.result==="win"?(l.ranked10?pc.top10Bonus:l.ranked25?pc.top25Bonus:0):0;
+      const isConf=l.opponent&&!isCPUOpp(l.opponent)&&l.opponent!=="BYE"&&l.opponent!=="Unknown"&&teamNames.includes(l.opponent);
+      if(l.result==="win"){wins=Math.max(0,wins-1);if(isConf)confWins=Math.max(0,confWins-1);}
+      else if(l.result==="loss"){losses=Math.max(0,losses-1);if(isConf)confLosses=Math.max(0,confLosses-1);}
+      gamePts-=((l.pts||0)-bonus);
+      rankedBonusPts-=bonus;
+      if(l.opponent&&h2h[l.opponent]){
+        if(l.result==="win")h2h[l.opponent]={...h2h[l.opponent],wins:Math.max(0,h2h[l.opponent].wins-1)};
+        else if(l.result==="loss")h2h[l.opponent]={...h2h[l.opponent],losses:Math.max(0,h2h[l.opponent].losses-1)};
+      }
+    });
+    return{
+      entry:{...entry,wins,losses,confWins,confLosses,gamePts:Math.max(0,gamePts),rankedBonusPts:Math.max(0,rankedBonusPts),h2h,weekLog:(entry.weekLog||[]).filter(l=>l.week!==targetWeek)},
+      removed:priors,
+    };
+  }
+
+  // Un-submit a week: take it back off every team's record as if it had never been entered.
+  // Uploaded box scores stay in the archive, so the week can be re-entered and submitted again.
+  // Returns false if the commissioner cancelled or there was nothing logged to reverse.
+  function reverseWeekResults(targetWeek){
+    const removedAll=[];
+    const nextEntries=entries.map(e=>{
+      const {entry,removed}=entryWithoutWeek(e,targetWeek);
+      removedAll.push(...removed);
+      return entry;
+    });
+    if(!removedAll.length){window.alert(`Nothing to reverse — no team has a logged result for Week ${targetWeek}.`);return false;}
+    const w=removedAll.filter(r=>r.result==="win").length;
+    const l=removedAll.filter(r=>r.result==="loss").length;
+    const pts=removedAll.reduce((a,r)=>a+(r.pts||0),0);
+    if(!window.confirm(`Reverse Week ${targetWeek}?\n\nThis takes ${removedAll.length} logged result${removedAll.length===1?"":"s"} (${w}W-${l}L) and ${pts} dynasty points back off the standings.\n\nUploaded box scores are kept, so you can fix the week and submit it again.`))return false;
+    setEntries(nextEntries);
+    setTimeout(()=>saveToDb({entries:nextEntries}),100);
+    return true;
+  }
+
   function applyWeekResults(targetWeek=week) {
     const thisWeekSchedule = effectiveSchedule[targetWeek] || {};
     const frozenSetup = freezeWeekOdds(targetWeek);
@@ -6974,25 +7036,13 @@ export default function App() {
       }
       if(!effectiveResult)return entry;
 
-      // If this team already has a logged result for this week (e.g. re-submitting
-      // after replacing a box score scan), undo its prior contribution first so
-      // wins/losses/points/H2H aren't double-counted.
-      const priorLog=(entry.weekLog||[]).find(l=>l.week===targetWeek);
-      let wins=entry.wins,losses=entry.losses,confWins=entry.confWins||0,confLosses=entry.confLosses||0;
-      let gamePts=entry.gamePts,rankedBonusPts=entry.rankedBonusPts;
-      const h2h={...entry.h2h||{}};
-      if(priorLog){
-        const priorBonus=priorLog.result==="win"?(priorLog.ranked10?pc.top10Bonus:priorLog.ranked25?pc.top25Bonus:0):0;
-        const priorIsConf=priorLog.opponent&&!isCPUOpp(priorLog.opponent)&&priorLog.opponent!=="BYE"&&priorLog.opponent!=="Unknown"&&teamNames.includes(priorLog.opponent);
-        if(priorLog.result==="win"){wins--;if(priorIsConf)confWins--;}
-        else if(priorLog.result==="loss"){losses--;if(priorIsConf)confLosses--;}
-        gamePts-=((priorLog.pts||0)-priorBonus);
-        rankedBonusPts-=priorBonus;
-        if(priorLog.opponent&&h2h[priorLog.opponent]){
-          if(priorLog.result==="win")h2h[priorLog.opponent]={...h2h[priorLog.opponent],wins:Math.max(0,h2h[priorLog.opponent].wins-1)};
-          else if(priorLog.result==="loss")h2h[priorLog.opponent]={...h2h[priorLog.opponent],losses:Math.max(0,h2h[priorLog.opponent].losses-1)};
-        }
-      }
+      // If this team already has a logged result for this week (e.g. re-submitting after fixing a
+      // game or replacing a box score scan), undo everything that week previously contributed
+      // before re-applying, so nothing is counted twice.
+      const base=entryWithoutWeek(entry,targetWeek).entry;
+      let wins=base.wins,losses=base.losses,confWins=base.confWins,confLosses=base.confLosses;
+      let gamePts=base.gamePts,rankedBonusPts=base.rankedBonusPts;
+      const h2h={...base.h2h};
 
       let pts=0,bonus=0;
       if(effectiveResult==="win"){pts=pc.win;bonus=effectiveR10?pc.top10Bonus:effectiveR25?pc.top25Bonus:0;}
@@ -7004,7 +7054,9 @@ export default function App() {
         else if(effectiveResult==="loss")h2h[opp]={...h2h[opp],losses:h2h[opp].losses+1};
       }
       const isConfGame=opp&&!isCPUOpp(opp)&&opp!=="BYE"&&opp!=="Unknown"&&teamNames.includes(opp);
-      const newWeekLog=priorLog?(entry.weekLog||[]).map(l=>l.week===targetWeek?log:l):[...(entry.weekLog||[]),log];
+      // base.weekLog already has this week stripped out, so this writes exactly one row for it
+      // no matter how many were there before.
+      const newWeekLog=[...base.weekLog,log].sort((a,b)=>(a.week||0)-(b.week||0));
       return{...entry,wins:effectiveResult==="win"?wins+1:wins,losses:effectiveResult==="loss"?losses+1:losses,confWins:isConfGame&&effectiveResult==="win"?confWins+1:confWins,confLosses:isConfGame&&effectiveResult==="loss"?confLosses+1:confLosses,gamePts:gamePts+pts,rankedBonusPts:rankedBonusPts+bonus,weekLog:newWeekLog,h2h};
     });
     setEntries(nextEntries);
@@ -7842,7 +7894,7 @@ export default function App() {
         </div>
         <div style={{maxWidth:800,margin:"0 auto",padding:"20px 14px"}}>
           {commTab==="Season History"&&<HistoryTab history={history} setHistory={setHistory} saveToDb={saveToDb} commUnlocked={true} entries={entries} setEntries={setEntries} season={season} week={week} setWeek={setWeek} yearRosters={setup?.yearRosters} permanentUsers={setup?.permanentUsers} currentEntries={entries} year={year} setupRows={setup?.rows||[]} gameArchive={setup?.gameArchive} classicGames={setup?.classicGames} playerStats={setup?.playerStats}/>}
-          {commTab==="Enter Results"&&<EnterResultsPanel entries={activeEntries} weekResults={weekResults} setWeekResults={setWeekResults} week={week} setWeek={setWeek} applyBulkResults={applyBulkResults} applyWeekResults={applyWeekResults} postSeasonInputs={postSeasonInputs} setPSI={setPSI} applyPostSeason={applyPostSeason} finalizeSeason={finalizeSeason} season={season} setSeason={setSeason} year={year} setYear={setYear} teamNames={teamNames} schedule={effectiveSchedule} history={history} onImportHistory={importHistoricalSeason} setupRows={setup?.rows||[]} saveToDb={saveToDb} setup={setup} setSetup={setSetup} postWeekRecapToGroupMe={postWeekRecapToGroupMe} postGameOfWeekPreview={postGameOfWeekPreview}/>}
+          {commTab==="Enter Results"&&<EnterResultsPanel entries={activeEntries} weekResults={weekResults} setWeekResults={setWeekResults} week={week} setWeek={setWeek} applyBulkResults={applyBulkResults} applyWeekResults={applyWeekResults} reverseWeekResults={reverseWeekResults} postSeasonInputs={postSeasonInputs} setPSI={setPSI} applyPostSeason={applyPostSeason} finalizeSeason={finalizeSeason} season={season} setSeason={setSeason} year={year} setYear={setYear} teamNames={teamNames} schedule={effectiveSchedule} history={history} onImportHistory={importHistoricalSeason} setupRows={setup?.rows||[]} saveToDb={saveToDb} setup={setup} setSetup={setSetup} postWeekRecapToGroupMe={postWeekRecapToGroupMe} postGameOfWeekPreview={postGameOfWeekPreview}/>}
           {commTab==="Schedule"&&<SchedulePanel entries={activeEntries} schedule={schedule} setSchedule={setSchedule}/>}
 {commTab==="Content"&&<ContentHub sorted={sorted} entries={activeEntries} week={week} season={season} year={year} leagueName={leagueName} history={history} leader={leader} articles={articles} setArticles={setArticles} setActiveArticle={setActiveArticle} schedule={effectiveSchedule} setup={setup} setSetup={setSetup} saveToDb={saveToDb}/>}
           {commTab==="Player Stats"&&<PlayerStatsAdmin setup={setup} setSetup={setSetup} saveToDb={saveToDb} permanentUsers={setup?.permanentUsers||[]} year={year} ff={ff} RED={RED}/>}
