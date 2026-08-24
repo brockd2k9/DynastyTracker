@@ -5188,13 +5188,18 @@ function EnterResultsPanel({entries,weekResults,setWeekResults,week,setWeek,appl
   // Cheap enough to recompute each render (games × teams, both small) and always current, which
   // matters more here — the banner has to disappear the moment the mismatches are fixed.
   const resultMismatches = findResultMismatches?findResultMismatches():[];
+  const describeProblem=(m)=>m.kind==="phantom"
+    ? `${gameWeekLabel(m.week)} — ${m.teamName}: logged ${m.logged.toUpperCase()} on a bye week, no game was scheduled`
+    : `${gameWeekLabel(m.week)} — ${m.teamName}: logged ${m.logged.toUpperCase()}, box score says ${m.expected.toUpperCase()} (${m.score} vs ${m.opponent})`;
   function runResultAudit(){
     const list=findResultMismatches();
-    if(!list.length){window.alert(`Every logged result for ${year} matches its uploaded box score.`);return;}
-    const lines=list.map(m=>`• ${gameWeekLabel(m.week)} — ${m.teamName}: logged ${m.logged.toUpperCase()}, box score says ${m.expected.toUpperCase()} (${m.score} vs ${m.opponent})`).join("\n");
-    if(!window.confirm(`${list.length} logged result${list.length===1?"":"s"} disagree with the uploaded box score:\n\n${lines}\n\nCorrect them to match the box scores? Wins, losses, points and head-to-head are all updated.`))return;
+    if(!list.length){window.alert(`Every logged result for ${year} checks out against the schedule and the uploaded box scores.`);return;}
+    const phantoms=list.filter(m=>m.kind==="phantom").length;
+    const lines=list.map(m=>`• ${describeProblem(m)}`).join("\n");
+    const actions=[phantoms<list.length?"results that disagree with a box score are corrected":"",phantoms?"results logged on a bye week are removed":""].filter(Boolean).join(", ");
+    if(!window.confirm(`${list.length} logged result${list.length===1?"":"s"} look wrong:\n\n${lines}\n\nFix them? Wins, losses, points and head-to-head are all updated — ${actions}.`))return;
     repairResultMismatches(list);
-    setSubmitMsg(`✓ Corrected ${list.length} result${list.length===1?"":"s"} to match the box scores`);
+    setSubmitMsg(`✓ Fixed ${list.length} result${list.length===1?"":"s"}`);
     setTimeout(()=>setSubmitMsg(""),6000);
   }
 
@@ -5232,9 +5237,9 @@ function EnterResultsPanel({entries,weekResults,setWeekResults,week,setWeek,appl
       {resultMismatches.length>0&&<Card style={{overflow:"hidden",borderLeft:`4px solid ${RED}`}}>
         <div style={{padding:"12px 16px",display:"flex",gap:12,alignItems:"center",flexWrap:"wrap"}}>
           <div style={{flex:1,minWidth:240}}>
-            <div style={{fontSize:12,fontWeight:900,color:RED,textTransform:"uppercase",letterSpacing:0.5}}>⚠ {resultMismatches.length} logged result{resultMismatches.length===1?"":"s"} disagree{resultMismatches.length===1?"s":""} with the box score</div>
+            <div style={{fontSize:12,fontWeight:900,color:RED,textTransform:"uppercase",letterSpacing:0.5}}>⚠ {resultMismatches.length} logged result{resultMismatches.length===1?"":"s"} look{resultMismatches.length===1?"s":""} wrong</div>
             <div style={{fontSize:11,color:"#666",marginTop:4,lineHeight:1.5}}>
-              {resultMismatches.slice(0,3).map(m=><div key={`${m.teamName}-${m.week}`}>{gameWeekLabel(m.week)} — <strong>{m.teamName}</strong>: logged {m.logged.toUpperCase()}, box score says {m.expected.toUpperCase()} ({m.score} vs {m.opponent})</div>)}
+              {resultMismatches.slice(0,3).map(m=><div key={`${m.kind}-${m.teamName}-${m.week}`}>{describeProblem(m)}</div>)}
               {resultMismatches.length>3&&<div style={{color:"#999"}}>+{resultMismatches.length-3} more…</div>}
             </div>
           </div>
@@ -5483,8 +5488,8 @@ function EnterResultsPanel({entries,weekResults,setWeekResults,week,setWeek,appl
           </button>
           {/* Finds every logged result that contradicts its uploaded box score in one pass, rather
               than leaving the commissioner to spot them one game log at a time. */}
-          <button onClick={runResultAudit} title={`Checks every ${year} result against its uploaded box score and offers to fix any that disagree.`} style={{background:"none",border:"1px solid #1a3a6b",color:"#1a3a6b",fontWeight:700,fontSize:11,textTransform:"uppercase",letterSpacing:0.5,cursor:"pointer",padding:"7px 14px",borderRadius:2,fontFamily:ff}}>
-            🔍 Check Results vs Box Scores
+          <button onClick={runResultAudit} title={`Checks every ${year} result against the schedule and its uploaded box score, and offers to fix any that look wrong.`} style={{background:"none",border:"1px solid #1a3a6b",color:"#1a3a6b",fontWeight:700,fontSize:11,textTransform:"uppercase",letterSpacing:0.5,cursor:"pointer",padding:"7px 14px",borderRadius:2,fontFamily:ff}}>
+            🔍 Check Results
           </button>
         </div>
       </>}
@@ -5555,6 +5560,56 @@ function EnterResultsPanel({entries,weekResults,setWeekResults,week,setWeek,appl
         </div>;
         const SL2=({children})=><div style={{fontSize:15,fontWeight:900,color:"#111",textTransform:"uppercase",letterSpacing:1,marginBottom:14,borderBottom:"2px solid #eee",paddingBottom:8}}>{children}</div>;
         const navBtn=(label,onClick,primary)=><button onClick={onClick} style={{padding:"12px 20px",background:primary?RED:"#f0f0f0",color:primary?"#fff":"#555",border:primary?"none":"1px solid #ddd",borderRadius:2,cursor:"pointer",fontFamily:ff,fontSize:13,fontWeight:800,textTransform:"uppercase",...(primary?{flex:1}:{})}}>{label}</button>;
+        // The Schedule tab can set matchups for the post-season weeks the same way it does for weeks
+        // 0-13, but the bracket is built from postSeasonInputs and never looked at them — so games
+        // scheduled for bowls or a playoff round simply didn't appear here and had to be picked
+        // again by hand. Offer them instead of silently ignoring them. Only matchups not already in
+        // the bracket are offered, so this never duplicates a game or disturbs a winner already set.
+        const roundField={14:"confChampGame",15:"bowlGames",16:"playoffR1",17:"playoffR2",18:"playoffR3",19:"nattyGame"}[entryWeek];
+        const isSingleGameRound=entryWeek===14||entryWeek===19;
+        const pairKey=(a,b)=>[a,b].sort().join("|");
+        let cpuScheduled=0;
+        const scheduledPairs=(()=>{
+          const wk=schedule?.[entryWeek]||{}, seen=new Set(), out=[];
+          for(const [team,opp] of Object.entries(wk)){
+            if(!opp||opp==="BYE")continue;
+            // The bracket's team pickers only offer dynasty teams, so a scheduled CPU opponent
+            // can't be represented as a bracket game — counted and reported rather than dropped.
+            if(isCPUOpp(opp)){cpuScheduled++;continue;}
+            const k=pairKey(team,opp);
+            if(seen.has(k))continue;
+            seen.add(k);
+            out.push([team,opp]);
+          }
+          return out;
+        })();
+        const bracketPairs=new Set();
+        if(roundField){
+          if(isSingleGameRound){const g=psi[roundField];if(g?.teamA&&g?.teamB)bracketPairs.add(pairKey(g.teamA,g.teamB));}
+          else (psi[roundField]||[]).forEach(g=>{if(g.teamA&&g.teamB)bracketPairs.add(pairKey(g.teamA,g.teamB));});
+        }
+        const unloadedPairs=roundField?scheduledPairs.filter(([a,b])=>!bracketPairs.has(pairKey(a,b))):[];
+        const loadScheduledGames=()=>{
+          if(!roundField||!unloadedPairs.length)return;
+          const next=isSingleGameRound
+            ?{...psi,[roundField]:{...(psi[roundField]||{}),teamA:unloadedPairs[0][0],teamB:unloadedPairs[0][1],winner:psi[roundField]?.winner||""}}
+            :{...psi,[roundField]:[...(psi[roundField]||[]),...unloadedPairs.map(([a,b],i)=>({id:Date.now()+i,teamA:a,teamB:b,winner:""}))]};
+          setPSI(next);
+          saveToDb({post_season_inputs:next});
+        };
+        const scheduledBanner=(unloadedPairs.length>0||cpuScheduled>0)&&<Card style={{overflow:"hidden",borderLeft:"4px solid #1a3a6b"}}>
+          <div style={{padding:"12px 16px",display:"flex",gap:12,alignItems:"center",flexWrap:"wrap"}}>
+            <div style={{flex:1,minWidth:240}}>
+              {unloadedPairs.length>0&&<>
+                <div style={{fontSize:12,fontWeight:900,color:"#1a3a6b",textTransform:"uppercase",letterSpacing:0.5}}>{unloadedPairs.length} matchup{unloadedPairs.length===1?"":"s"} scheduled for {weekLabel(entryWeek)}</div>
+                <div style={{fontSize:11,color:"#666",marginTop:4,lineHeight:1.5}}>{unloadedPairs.map(([a,b])=><div key={pairKey(a,b)}>{a} vs {b}</div>)}</div>
+              </>}
+              {cpuScheduled>0&&<div style={{fontSize:11,color:"#b8860b",marginTop:unloadedPairs.length?6:0,fontStyle:"italic"}}>{cpuScheduled} scheduled game{cpuScheduled===1?"":"s"} against a CPU opponent can't be added — post-season games track dynasty teams only.</div>}
+            </div>
+            {unloadedPairs.length>0&&<button onClick={loadScheduledGames} style={{background:"#1a3a6b",color:"#fff",border:"none",borderRadius:2,padding:"9px 16px",cursor:"pointer",fontFamily:ff,fontSize:12,fontWeight:800,textTransform:"uppercase",letterSpacing:0.5,flexShrink:0}}>Add to bracket</button>}
+          </div>
+        </Card>;
+
         // Saving a bracket week works like submitting a regular week: it pays out that round's
         // points (applyPostSeason is idempotent, so re-saving a week just corrects the totals)
         // and pushes the league's current week forward, which is what the public site reads.
@@ -5575,6 +5630,7 @@ function EnterResultsPanel({entries,weekResults,setWeekResults,week,setWeek,appl
         </>;
 
         if(entryWeek===14) return(<>
+          {scheduledBanner}
           <Card style={{borderTop:`3px solid ${RED}`}}><div style={{padding:16}}>
             <SL2>Conference Championship — {year}</SL2>
             <div style={{fontSize:11,color:"#007a00",fontWeight:700,marginBottom:10}}>Appear +{pc.confChampApp} · Win +{pc.confChampWin}</div>
@@ -5586,6 +5642,7 @@ function EnterResultsPanel({entries,weekResults,setWeekResults,week,setWeek,appl
         </>);
 
         if(entryWeek===15) return(<>
+          {scheduledBanner}
           <Card style={{borderTop:`3px solid ${RED}`}}><div style={{padding:16}}>
             <SL2>Bowl Games — {year}</SL2>
             <div style={{fontSize:11,color:"#007a00",fontWeight:700,marginBottom:10}}>Appear +{pc.bowlApp} · Win +{pc.bowlWin}</div>
@@ -5596,6 +5653,7 @@ function EnterResultsPanel({entries,weekResults,setWeekResults,week,setWeek,appl
         </>);
 
         if(entryWeek===16) return(<>
+          {scheduledBanner}
           <Card style={{borderTop:`3px solid ${RED}`}}><div style={{padding:16}}>
             <SL2>Playoffs — Round 1 — {year}</SL2>
             <div style={{fontSize:11,color:"#007a00",fontWeight:700,marginBottom:10}}>Appear +{pc.playoffApp} · Win +{pc.playoffWin}</div>
@@ -5606,6 +5664,7 @@ function EnterResultsPanel({entries,weekResults,setWeekResults,week,setWeek,appl
         </>);
 
         if(entryWeek===17) return(<>
+          {scheduledBanner}
           <Card style={{borderTop:`3px solid ${RED}`}}><div style={{padding:16}}>
             <SL2>Playoffs — Round 2 — {year}</SL2>
             <div style={{fontSize:11,color:"#007a00",fontWeight:700,marginBottom:10}}>Win +{pc.playoffSemiWin}</div>
@@ -5616,6 +5675,7 @@ function EnterResultsPanel({entries,weekResults,setWeekResults,week,setWeek,appl
         </>);
 
         if(entryWeek===18) return(<>
+          {scheduledBanner}
           <Card style={{borderTop:`3px solid ${RED}`}}><div style={{padding:16}}>
             <SL2>Playoffs — Round 3 — {year}</SL2>
             <div style={{fontSize:11,color:"#007a00",fontWeight:700,marginBottom:10}}>Win +{pc.playoffR3Win}</div>
@@ -5626,6 +5686,7 @@ function EnterResultsPanel({entries,weekResults,setWeekResults,week,setWeek,appl
         </>);
 
         if(entryWeek===19) return(<>
+          {scheduledBanner}
           <Card style={{borderTop:`3px solid #b8860b`}}><div style={{padding:16}}>
             <SL2>National Championship — {year}</SL2>
             <div style={{fontSize:11,color:"#007a00",fontWeight:700,marginBottom:10}}>Win +{pc.nattyWin}</div>
@@ -7077,6 +7138,22 @@ export default function App() {
   // applyPostSeason rebuilds those rows, so re-saving the round is what corrects them.
   function findResultMismatches(){
     const out=[];
+    // Results logged for a week the team sat out. weekResults wasn't week-scoped, so a pending
+    // pick could be submitted against a week the team never played — leaving a win or a loss with
+    // no opponent to name it against. An archived box score overrules the schedule here: if one
+    // exists the game happened, whatever the schedule says.
+    entries.forEach(entry=>{
+      (entry.weekLog||[]).forEach(l=>{
+        if(l.postseason||l.week>=14)return; // bracket rows are rebuilt from the bracket itself
+        if(!l.result||l.result==="none")return;
+        const sched=effectiveSchedule[l.week]||{};
+        if(!Object.keys(sched).length)return; // no schedule for the week — nothing to check against
+        const opp=sched[entry.teamName];
+        if(opp&&opp!=="BYE")return;
+        if((setup?.gameArchive||[]).some(g=>g.year===Number(year)&&g.week===l.week&&(g.team1?.name===entry.teamName||g.team2?.name===entry.teamName)))return;
+        out.push({kind:"phantom",teamName:entry.teamName,week:l.week,logged:l.result});
+      });
+    });
     (setup?.gameArchive||[]).forEach(g=>{
       if(g.year!==Number(year)||g.week>=14)return;
       if(!g.team1||!g.team2||g.team1.score===g.team2.score)return; // a tie decides nothing
@@ -7088,7 +7165,7 @@ export default function App() {
         if(log.forfeit)return; // a forfeit deliberately overrides whatever the box score says
         const expected=mine.score>opp.score?"win":"loss";
         if(log.result===expected)return;
-        out.push({teamName:mine.name,week:g.week,logged:log.result,expected,score:`${mine.score}-${opp.score}`,opponent:opp.name});
+        out.push({kind:"mismatch",teamName:mine.name,week:g.week,logged:log.result,expected,score:`${mine.score}-${opp.score}`,opponent:opp.name});
       });
     });
     return out.sort((a,b)=>a.week-b.week||a.teamName.localeCompare(b.teamName));
@@ -7106,7 +7183,8 @@ export default function App() {
       fixes.forEach(f=>{
         const old=(cur.weekLog||[]).find(l=>l.week===f.week)||{};
         cur=entryWithoutWeek(cur,f.week).entry;
-        cur=entryWithWeek(cur,{week:f.week,result:f.expected,opponent:old.opponent||f.opponent,ranked25:old.ranked25||false,ranked10:old.ranked10||false,forfeit:false});
+        // A phantom is simply removed — there was no game, so nothing goes back in its place.
+        if(f.kind!=="phantom")cur=entryWithWeek(cur,{week:f.week,result:f.expected,opponent:old.opponent||f.opponent,ranked25:old.ranked25||false,ranked10:old.ranked10||false,forfeit:false});
       });
       return cur;
     });
