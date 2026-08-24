@@ -5505,8 +5505,31 @@ function EnterResultsPanel({entries,weekResults,setWeekResults,week,setWeek,appl
         // saveToDb otherwise reads the pre-scan bracket back out of the last render's state.
         const setGameWinner=(field,id,winner)=>{const next={...psi,[field]:(psi[field]||[]).map(g=>g.id===id?{...g,winner}:g)};setPSI(next);return next;};
         const setTopGameWinner=(field,winner)=>{const next={...psi,[field]:{...(psi[field]||{}),winner}};setPSI(next);return next;};
-        const TeamSel=({value,onChange,exclude})=><select value={value} onChange={e=>onChange(e.target.value)} style={{background:"#fff",color:"#111",border:"1px solid #ccc",borderRadius:2,padding:"5px 8px",fontFamily:ff2,fontSize:12,maxWidth:140}}><option value="">-- Team --</option>{teamNames.filter(t=>t!==exclude).map(t=><option key={t} value={t}>{t}</option>)}</select>;
-        const WinBtns=({teamA,teamB,winner,onWin})=><div style={{display:"flex",gap:6,flexWrap:"wrap"}}>{[teamA,teamB].filter(Boolean).map(t=><button key={t} onClick={()=>onWin(winner===t?"":t)} style={{padding:"4px 10px",borderRadius:2,border:"1px solid",borderColor:winner===t?"#007a00":"#ddd",background:winner===t?"#f0f8f0":"#fff",color:winner===t?"#007a00":"#888",cursor:"pointer",fontSize:11,fontFamily:ff2,fontWeight:700}}>{winner===t?"✓ ":""}{t}</button>)}</div>;
+        // Dynasty teams still play CPU opponents in bowls and the playoff, so a bracket slot has to
+        // hold one. Stored in the same "CPU:<name>" form the schedule uses, which is what keeps a
+        // CPU out of head-to-head, out of conference records and out of the points table — those all
+        // key off isCPUOpp. Named CPUs already scheduled this week are offered first; "Other CPU..."
+        // covers one that was never scheduled.
+        const scheduledCPUs=Array.from(new Set(Object.values(schedule?.[entryWeek]||{}).filter(isCPUOpp))).sort();
+        const TeamSel=({value,onChange,exclude})=>{
+          const known=[...teamNames.filter(t=>t!==exclude),...scheduledCPUs];
+          const extra=value&&!known.includes(value)?[value]:[]; // a CPU picked earlier but no longer scheduled
+          return <select value={value} onChange={e=>{
+            if(e.target.value==="__CPU_OTHER__"){
+              const name=(window.prompt("CPU opponent name:")||"").trim();
+              onChange(name?"CPU:"+name:"CPU");
+              return;
+            }
+            onChange(e.target.value);
+          }} style={{background:"#fff",color:"#111",border:"1px solid #ccc",borderRadius:2,padding:"5px 8px",fontFamily:ff2,fontSize:12,maxWidth:160}}>
+            <option value="">-- Team --</option>
+            {teamNames.filter(t=>t!==exclude).map(t=><option key={t} value={t}>{t}</option>)}
+            {[...scheduledCPUs,...extra].map(v=><option key={v} value={v}>{formatOpp(v)}</option>)}
+            <option value="CPU">CPU (unnamed)</option>
+            <option value="__CPU_OTHER__">Other CPU...</option>
+          </select>;
+        };
+        const WinBtns=({teamA,teamB,winner,onWin})=><div style={{display:"flex",gap:6,flexWrap:"wrap"}}>{[teamA,teamB].filter(Boolean).map(t=><button key={t} onClick={()=>onWin(winner===t?"":t)} style={{padding:"4px 10px",borderRadius:2,border:"1px solid",borderColor:winner===t?"#007a00":"#ddd",background:winner===t?"#f0f8f0":"#fff",color:winner===t?"#007a00":"#888",cursor:"pointer",fontSize:11,fontFamily:ff2,fontWeight:700}}>{winner===t?"✓ ":""}{formatOpp(t)}</button>)}</div>;
         // Box score upload for a postseason game (conf championship, bowls, playoff rounds, natty).
         // Same scan/archive pipeline the regular-season weeks use — these games are archived under
         // their own week number (14-19), so their stats feed player stats and the record book just
@@ -5514,11 +5537,20 @@ function EnterResultsPanel({entries,weekResults,setWeekResults,week,setWeek,appl
         // what the post-season points actually key off of.
         const psBoxScore=(teamA,teamB,onWinner)=>{
           if(!teamA||!teamB) return <div style={{fontSize:10,color:"#bbb",fontStyle:"italic",marginTop:6}}>Pick both teams to upload a box score.</div>;
+          // A CPU slot holds "CPU:<name>" — the archive and the vision scan want the plain name, the
+          // bracket keeps the raw value. When one side is CPU the archived game is matched on the
+          // dynasty team alone, since a re-scan can read the CPU's name back slightly differently.
+          const bIsCPU=isCPUOpp(teamB), aIsCPU=isCPUOpp(teamA);
+          const aName=aIsCPU?(cpuOppName(teamA)||"CPU"):teamA;
+          const bName=bIsCPU?(cpuOppName(teamB)||"CPU"):teamB;
           const key=`ps${entryWeek}-${[teamA,teamB].sort().join("|")}`;
           const isScanning=scanning===key;
-          const archivedGame=(setup?.gameArchive||[]).find(g=>g.year===Number(year)&&g.week===Number(entryWeek)&&((g.team1.name===teamA&&g.team2.name===teamB)||(g.team1.name===teamB&&g.team2.name===teamA)));
-          const a=archivedGame&&(archivedGame.team1.name===teamA?archivedGame.team1:archivedGame.team2);
-          const b=archivedGame&&(archivedGame.team1.name===teamA?archivedGame.team2:archivedGame.team1);
+          const anchor=bIsCPU?aName:(aIsCPU?bName:null);
+          const archivedGame=(setup?.gameArchive||[]).find(g=>g.year===Number(year)&&g.week===Number(entryWeek)&&(
+            anchor?(g.team1.name===anchor||g.team2.name===anchor)
+                  :((g.team1.name===aName&&g.team2.name===bName)||(g.team1.name===bName&&g.team2.name===aName))));
+          const a=archivedGame&&(archivedGame.team1.name===aName?archivedGame.team1:archivedGame.team2);
+          const b=archivedGame&&(archivedGame.team1.name===aName?archivedGame.team2:archivedGame.team1);
           const line=t=>`${t.passing?.comp??0}/${t.passing?.att??0} ${t.passing?.yds??0}py ${t.passing?.tds??0}TD | ${t.rushing?.yds??0}ry ${t.rushing?.tds??0}TD | Def ${t.defense?.totalYdsAllowed??0}yds`;
           return(<div style={{marginTop:8}}>
             <div style={{display:"flex",alignItems:"center",gap:12,flexWrap:"wrap"}}>
@@ -5526,14 +5558,16 @@ function EnterResultsPanel({entries,weekResults,setWeekResults,week,setWeek,appl
                 {isScanning?"Scanning...":(archivedGame?"Replace":"📷 Box Score")}
                 <input type="file" accept="image/*" multiple style={{display:"none"}} ref={el=>fileRefs.current[key]=el} disabled={!!scanning} onChange={ev=>{
                   const files=Array.from(ev.target.files||[]).slice(0,2); if(!files.length) return;
-                  if(!window.confirm(`Scan box score for ${teamA} vs ${teamB}?\nThis will use the Claude Vision API.`)){if(fileRefs.current[key])fileRefs.current[key].value="";return;}
-                  scanAndArchiveGame({key,files,t1Name:teamA,t2Name:teamB,onScored:t1wins=>{
-                    const newPSI=onWinner?.(t1wins?teamA:teamB);
-                    return newPSI?{post_season_inputs:newPSI}:undefined;
-                  }});
+                  if(!window.confirm(`Scan box score for ${aName} vs ${bName}?\nThis will use the Claude Vision API.`)){if(fileRefs.current[key])fileRefs.current[key].value="";return;}
+                  scanAndArchiveGame({key,files,t1Name:aName,t2Name:bName,t2IsCPU:bIsCPU,
+                    sameGame:anchor?(g=>g.team1.name===anchor||g.team2.name===anchor):undefined,
+                    onScored:t1wins=>{
+                      const newPSI=onWinner?.(t1wins?teamA:teamB); // the bracket keeps the raw value
+                      return newPSI?{post_season_inputs:newPSI}:undefined;
+                    }});
                 }}/>
               </label>
-              {archivedGame&&<div style={{fontSize:14,fontWeight:900,color:"#111"}}>{teamA} <span style={{color:a.score>b.score?"#007a00":"#555"}}>{a.score}</span> — <span style={{color:b.score>a.score?"#007a00":"#555"}}>{b.score}</span> {teamB}</div>}
+              {archivedGame&&<div style={{fontSize:14,fontWeight:900,color:"#111"}}>{formatOpp(teamA)} <span style={{color:a.score>b.score?"#007a00":"#555"}}>{a.score}</span> — <span style={{color:b.score>a.score?"#007a00":"#555"}}>{b.score}</span> {formatOpp(teamB)}</div>}
             </div>
             {scanErrors[key]&&<div style={{marginTop:6,padding:"6px 8px",fontSize:11,color:RED,background:"#fff0f0",borderRadius:2}}>{scanErrors[key]}</div>}
             {archivedGame&&<div style={{marginTop:6,padding:"6px 10px",background:"#f0f8f0",fontSize:10,color:"#555",borderRadius:2}}>
@@ -5568,14 +5602,12 @@ function EnterResultsPanel({entries,weekResults,setWeekResults,week,setWeek,appl
         const roundField={14:"confChampGame",15:"bowlGames",16:"playoffR1",17:"playoffR2",18:"playoffR3",19:"nattyGame"}[entryWeek];
         const isSingleGameRound=entryWeek===14||entryWeek===19;
         const pairKey=(a,b)=>[a,b].sort().join("|");
-        let cpuScheduled=0;
         const scheduledPairs=(()=>{
           const wk=schedule?.[entryWeek]||{}, seen=new Set(), out=[];
           for(const [team,opp] of Object.entries(wk)){
             if(!opp||opp==="BYE")continue;
-            // The bracket's team pickers only offer dynasty teams, so a scheduled CPU opponent
-            // can't be represented as a bracket game — counted and reported rather than dropped.
-            if(isCPUOpp(opp)){cpuScheduled++;continue;}
+            // The dynasty team is always listed first so it lands in the bracket's teamA slot —
+            // a CPU can't win appearance or title points, and only teamA is looked up as an entry.
             const k=pairKey(team,opp);
             if(seen.has(k))continue;
             seen.add(k);
@@ -5597,16 +5629,14 @@ function EnterResultsPanel({entries,weekResults,setWeekResults,week,setWeek,appl
           setPSI(next);
           saveToDb({post_season_inputs:next});
         };
-        const scheduledBanner=(unloadedPairs.length>0||cpuScheduled>0)&&<Card style={{overflow:"hidden",borderLeft:"4px solid #1a3a6b"}}>
+        const scheduledBanner=unloadedPairs.length>0&&<Card style={{overflow:"hidden",borderLeft:"4px solid #1a3a6b"}}>
           <div style={{padding:"12px 16px",display:"flex",gap:12,alignItems:"center",flexWrap:"wrap"}}>
             <div style={{flex:1,minWidth:240}}>
-              {unloadedPairs.length>0&&<>
-                <div style={{fontSize:12,fontWeight:900,color:"#1a3a6b",textTransform:"uppercase",letterSpacing:0.5}}>{unloadedPairs.length} matchup{unloadedPairs.length===1?"":"s"} scheduled for {weekLabel(entryWeek)}</div>
-                <div style={{fontSize:11,color:"#666",marginTop:4,lineHeight:1.5}}>{unloadedPairs.map(([a,b])=><div key={pairKey(a,b)}>{a} vs {b}</div>)}</div>
-              </>}
-              {cpuScheduled>0&&<div style={{fontSize:11,color:"#b8860b",marginTop:unloadedPairs.length?6:0,fontStyle:"italic"}}>{cpuScheduled} scheduled game{cpuScheduled===1?"":"s"} against a CPU opponent can't be added — post-season games track dynasty teams only.</div>}
+              <div style={{fontSize:12,fontWeight:900,color:"#1a3a6b",textTransform:"uppercase",letterSpacing:0.5}}>{unloadedPairs.length} matchup{unloadedPairs.length===1?"":"s"} scheduled for {weekLabel(entryWeek)}</div>
+                <div style={{fontSize:11,color:"#666",marginTop:4,lineHeight:1.5}}>{unloadedPairs.map(([a,b])=><div key={pairKey(a,b)}>{formatOpp(a)} vs {formatOpp(b)}</div>)}</div>
+
             </div>
-            {unloadedPairs.length>0&&<button onClick={loadScheduledGames} style={{background:"#1a3a6b",color:"#fff",border:"none",borderRadius:2,padding:"9px 16px",cursor:"pointer",fontFamily:ff,fontSize:12,fontWeight:800,textTransform:"uppercase",letterSpacing:0.5,flexShrink:0}}>Add to bracket</button>}
+            {<button onClick={loadScheduledGames} style={{background:"#1a3a6b",color:"#fff",border:"none",borderRadius:2,padding:"9px 16px",cursor:"pointer",fontFamily:ff,fontSize:12,fontWeight:800,textTransform:"uppercase",letterSpacing:0.5,flexShrink:0}}>Add to bracket</button>}
           </div>
         </Card>;
 
@@ -7340,8 +7370,10 @@ export default function App() {
   function postSeasonRecordFor(entry,psi,through){
     let wins=entry.wins||0, losses=entry.losses||0;
     const h2h={...(entry.h2h||{})};
+    // Head-to-head tracks dynasty teams only — a bowl against a CPU counts in the record but
+    // must not open an all-time series against a computer opponent.
     const bumpH2H=(opp,result,dir)=>{
-      if(!opp)return;
+      if(!opp||isCPUOpp(opp)||opp==="BYE"||opp==="Unknown")return;
       const rec={wins:0,losses:0,...(h2h[opp]||{})};
       if(result==="win")rec.wins=Math.max(0,rec.wins+dir); else rec.losses=Math.max(0,rec.losses+dir);
       h2h[opp]=rec;
@@ -7375,6 +7407,10 @@ export default function App() {
   // untouched default ordering FRESH_PSI seeds.
   function postSeasonPtsFor(psi,teamName,throughWeek){
     const t=teamName;
+    // A CPU fills a bracket slot but never scores: no appearance, win or title points. In practice
+    // only dynasty entries are ever passed here, but the slot now holds "CPU:<name>" values that
+    // would otherwise match a game's teamA/teamB and total up.
+    if(isCPUOpp(t))return{confStandPts:0,confChampPts:0,bowlPts:0,recruitingPts:0,prestigePts:0,heismanPts:0};
     // Conf championship game (week 14)
     let cc=0;
     if(throughWeek>=14){
