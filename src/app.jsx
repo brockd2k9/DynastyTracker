@@ -227,6 +227,13 @@ function calcTotal(t) {
   return (t.gamePts||0)+(t.rankedBonusPts||0)+(t.confStandPts||0)+(t.confChampPts||0)+(t.bowlPts||0)+(t.recruitingPts||0)+(t.prestigePts||0)+(t.heismanPts||0);
 }
 
+// A dynasty can run more than one season inside the same calendar year — season 1 and season 2 can
+// both be 2026 — so an archived game is identified by season as well as year and week. Matching on
+// year+week alone let a newer season's entry screen find, and on re-upload silently delete, an
+// older season's box score. Games archived before this carry no season: they belong to whichever
+// season was running at the time, so a missing season still matches rather than disappearing.
+const inSeason = (g, year, season) => g.year===Number(year) && (g.season==null || Number(g.season)===Number(season));
+
 // Week logs are appended in the order weeks get submitted, so fixing week 8 after week 12 — or a
 // post-season round applied before an earlier week was corrected — leaves the array out of order.
 // Everything that reads a week log wants it in week order: game logs read top to bottom, and
@@ -2449,7 +2456,7 @@ function LeagueRecordBook({history,currentEntries,season,year,permanentUsers,set
 
   // ── Win / stat streaks — bounded to whatever `buckets` currently groups by ────────────────
   const getUserGamesFor=(logs)=>logs.map(w=>{
-    const g=(gameArchive||[]).find(g=>g.year===w.year&&g.week===w.week&&(g.team1.name===w.teamName||g.team2.name===w.teamName));
+    const g=(gameArchive||[]).find(g=>inSeason(g,w.year,w.seasonNum)&&g.week===w.week&&(g.team1.name===w.teamName||g.team2.name===w.teamName));
     if(!g)return null;
     const isTeam1=g.team1.name===w.teamName;
     return{...w,stats:isTeam1?g.team1:g.team2,oppStats:isTeam1?g.team2:g.team1};
@@ -3115,10 +3122,10 @@ function ProfileTab({history,setupRows,currentEntries,season,year,permanentUsers
             const getH2HGames = (oppTeamName) => {
               const games=[];
               profile.seasons.filter(s=>!s.isHistorical).forEach(s=>{
-                (s.weekLog||[]).forEach(w=>{ if(w.opponent===oppTeamName) games.push({year:s.year,week:w.week,result:w.result,forfeit:w.forfeit,teamName:s.teamName}); });
+                (s.weekLog||[]).forEach(w=>{ if(w.opponent===oppTeamName) games.push({year:s.year,seasonNum:s.seasonNum,week:w.week,result:w.result,forfeit:w.forfeit,teamName:s.teamName}); });
               });
               if(profile.cur){
-                (profile.cur.weekLog||[]).forEach(w=>{ if(w.opponent===oppTeamName) games.push({year,week:w.week,result:w.result,forfeit:w.forfeit,teamName:profile.cur.teamName}); });
+                (profile.cur.weekLog||[]).forEach(w=>{ if(w.opponent===oppTeamName) games.push({year,seasonNum:season,week:w.week,result:w.result,forfeit:w.forfeit,teamName:profile.cur.teamName}); });
               }
               return games.sort((a,b)=>b.year!==a.year?b.year-a.year:b.week-a.week);
             };
@@ -3128,7 +3135,7 @@ function ProfileTab({history,setupRows,currentEntries,season,year,permanentUsers
               return (
                 <div style={{background:"#fafafa"}}>
                   {games.map((g,i)=>{
-                    const archivedGame=(gameArchive||[]).find(ga=>ga.year===g.year&&ga.week===g.week&&(ga.team1.name===g.teamName||ga.team2.name===g.teamName));
+                    const archivedGame=(gameArchive||[]).find(ga=>inSeason(ga,g.year,g.seasonNum)&&ga.week===g.week&&(ga.team1.name===g.teamName||ga.team2.name===g.teamName));
                     const gameKey=`${opp}-${g.year}-${g.week}-${i}`;
                     const isOpen=expandedH2HGame[gameKey];
                     const mine=archivedGame&&(archivedGame.team1.name===g.teamName?archivedGame.team1:archivedGame.team2);
@@ -3223,7 +3230,7 @@ function ProfileTab({history,setupRows,currentEntries,season,year,permanentUsers
                         <table style={{width:"100%",borderCollapse:"collapse",fontSize:12}}>
                           <thead><tr style={{borderBottom:"1px solid #e0e0e0"}}>{["Week","Opponent","Result","Score","Opponent Rank","Pts"].map(h=><th key={h} style={{padding:"6px 12px",textAlign:"center",color:"#aaa",fontSize:9,letterSpacing:1,textTransform:"uppercase",fontWeight:700}}>{h}</th>)}</tr></thead>
                           <tbody>{s.weekLog.map((w,i)=>{
-                            const archivedGame=(gameArchive||[]).find(g=>g.year===s.year&&g.week===w.week&&(g.team1.name===s.teamName||g.team2.name===s.teamName));
+                            const archivedGame=(gameArchive||[]).find(g=>inSeason(g,s.year,s.seasonNum)&&g.week===w.week&&(g.team1.name===s.teamName||g.team2.name===s.teamName));
                             const gameKey=`${key}-${w.week}-${i}`;
                             const isOpen=expandedGames[gameKey];
                             const mine=archivedGame&&(archivedGame.team1.name===s.teamName?archivedGame.team1:archivedGame.team2);
@@ -5010,6 +5017,12 @@ function EnterResultsPanel({entries,weekResults,setWeekResults,week,setWeek,appl
   const [gmStatus,setGmStatus] = useState({});
   const [gmResendStatus,setGmResendStatus] = useState(null);
   const fileRefs = useRef({});
+  // Finalize starts a new season and resets the league to its first week, but this panel keeps its
+  // own week cursor — so after finalizing it sat on Offseason Awards from the season just closed,
+  // looking like nothing had happened. Follow the reset when the season changes. Ordinary week
+  // navigation is untouched: the cursor is still free to sit on a week other than the current one.
+  useEffect(()=>{setEntryWeek(week);/* eslint-disable-next-line react-hooks/exhaustive-deps */},[season]);
+
   const WEEK_LABELS = {14:"Conf. Champ.",15:"Bowl Games",16:"Playoffs — R1",17:"Playoffs — R2",18:"Playoffs — R3",19:"Natl. Championship",20:"Offseason Awards"};
   const weekLabel = (w)=>WEEK_LABELS[w]||`Week ${w}`;
 
@@ -5063,7 +5076,7 @@ function EnterResultsPanel({entries,weekResults,setWeekResults,week,setWeek,appl
   // archived score so the Override buttons (and the Submit button) reflect it
   // instead of silently treating the game as if nothing had been entered.
   const deriveWeekResultsFromArchive=useCallback(()=>{
-    const archive=(setup?.gameArchive||[]).filter(g=>g.year===Number(year)&&g.week===Number(entryWeek));
+    const archive=(setup?.gameArchive||[]).filter(g=>inSeason(g,year,season)&&g.week===Number(entryWeek));
     if(!archive.length) return;
     setWeekResults(prev=>{
       let changed=false;
@@ -5137,7 +5150,7 @@ function EnterResultsPanel({entries,weekResults,setWeekResults,week,setWeek,appl
         const newGame={id:genId(),year:Number(year),week:Number(entryWeek),season:Number(season),team1:json.team1,team2:json.team2};
         const archive=setup?.gameArchive||[];
         const matches=sameGame||(g=>(g.team1.name===t1Name&&g.team2.name===t2Name)||(g.team1.name===t2Name&&g.team2.name===t1Name));
-        const filtered=archive.filter(g=>!(g.year===Number(year)&&g.week===Number(entryWeek)&&matches(g)));
+        const filtered=archive.filter(g=>!(inSeason(g,year,season)&&g.week===Number(entryWeek)&&matches(g)));
         const newArchive=[...filtered,newGame];
         const newPlayerStats=recomputePlayerStatsFromArchive(newArchive,setup?.playerStats||{},year);
         const updatedSetup={...setup,gameArchive:newArchive,playerStats:newPlayerStats};
@@ -5286,7 +5299,7 @@ function EnterResultsPanel({entries,weekResults,setWeekResults,week,setWeek,appl
               const key=[t1,t2].sort().join("|");
               const wr1=getWR(t1), wr2=getWR(t2);
               const isScanning=scanning===key;
-              const archivedGame=(setup?.gameArchive||[]).find(g=>g.year===Number(year)&&g.week===Number(entryWeek)&&((g.team1.name===t1&&g.team2.name===t2)||(g.team1.name===t2&&g.team2.name===t1)));
+              const archivedGame=(setup?.gameArchive||[]).find(g=>inSeason(g,year,season)&&g.week===Number(entryWeek)&&((g.team1.name===t1&&g.team2.name===t2)||(g.team1.name===t2&&g.team2.name===t1)));
               const winner=wr1.result==="win"?t1:wr2.result==="win"?t2:null;
               const e1=entries.find(e=>e.teamName===t1), e2=entries.find(e=>e.teamName===t2);
               return(
@@ -5372,7 +5385,7 @@ function EnterResultsPanel({entries,weekResults,setWeekResults,week,setWeek,appl
               const wr=getWR(teamName);
               const isScanning=scanning===key;
               const entry=entries.find(e=>e.teamName===teamName);
-              const archivedGame=(setup?.gameArchive||[]).find(g=>g.year===Number(year)&&g.week===Number(entryWeek)&&(g.team1.name===teamName||g.team2.name===teamName));
+              const archivedGame=(setup?.gameArchive||[]).find(g=>inSeason(g,year,season)&&g.week===Number(entryWeek)&&(g.team1.name===teamName||g.team2.name===teamName));
               const myTeamData=archivedGame?(archivedGame.team1.name===teamName?archivedGame.team1:archivedGame.team2):null;
               const cpuTeamData=archivedGame?(archivedGame.team1.name===teamName?archivedGame.team2:archivedGame.team1):null;
               const winner=wr.result==="win"?teamName:wr.result==="loss"?cpuName:null;
@@ -5546,7 +5559,7 @@ function EnterResultsPanel({entries,weekResults,setWeekResults,week,setWeek,appl
           const key=`ps${entryWeek}-${[teamA,teamB].sort().join("|")}`;
           const isScanning=scanning===key;
           const anchor=bIsCPU?aName:(aIsCPU?bName:null);
-          const archivedGame=(setup?.gameArchive||[]).find(g=>g.year===Number(year)&&g.week===Number(entryWeek)&&(
+          const archivedGame=(setup?.gameArchive||[]).find(g=>inSeason(g,year,season)&&g.week===Number(entryWeek)&&(
             anchor?(g.team1.name===anchor||g.team2.name===anchor)
                   :((g.team1.name===aName&&g.team2.name===bName)||(g.team1.name===bName&&g.team2.name===aName))));
           const a=archivedGame&&(archivedGame.team1.name===aName?archivedGame.team1:archivedGame.team2);
@@ -6010,7 +6023,7 @@ function ContentHub({sorted,entries,week,season,year,leagueName,history,leader,a
 
   // Season data for the sportsbook writer's lines — built from whatever's accumulated so far.
   const scoringTrendsText = (()=>{
-    const archive = (setup?.gameArchive||[]).filter(g=>g.year===Number(year));
+    const archive = (setup?.gameArchive||[]).filter(g=>inSeason(g,year,season));
     if(!archive.length) return "";
     const byTeam = {};
     archive.forEach(g=>{
@@ -6088,7 +6101,7 @@ function ContentHub({sorted,entries,week,season,year,leagueName,history,leader,a
   const [recapGenerating,setRecapGenerating] = useState(false);
   const [recapError,setRecapError] = useState(null);
   async function generateBoxScoreRecap() {
-    const weekGames=(setup?.gameArchive||[]).filter(g=>g.year===Number(year)&&g.week===Number(week));
+    const weekGames=(setup?.gameArchive||[]).filter(g=>inSeason(g,year,season)&&g.week===Number(week));
     if(!weekGames.length){setRecapError("No box scores uploaded for this week yet. Upload them in Enter Results first.");return;}
     const reporter=REPORTERS[selectedReporter];
     if(!window.confirm(`Generate Week ${week} Recap from ${weekGames.length} box score(s)?\nThis will use the Claude API.`)) return;
@@ -6103,7 +6116,7 @@ function ContentHub({sorted,entries,week,season,year,leagueName,history,leader,a
     } catch(e){setRecapError(e.message);}
     finally{setRecapGenerating(false);}
   }
-  const weekGamesForRecap=(setup?.gameArchive||[]).filter(g=>g.year===Number(year)&&g.week===Number(week));
+  const weekGamesForRecap=(setup?.gameArchive||[]).filter(g=>inSeason(g,year,season)&&g.week===Number(week));
 
   return (
     <div style={{display:"flex",flexDirection:"column",gap:16}}>
@@ -7042,7 +7055,7 @@ export default function App() {
     await sleep(3200);
 
     try {
-      const weekGames = (setup?.gameArchive||[]).filter(g=>g.year===Number(year)&&g.week===Number(completedWeek));
+      const weekGames = (setup?.gameArchive||[]).filter(g=>inSeason(g,year,season)&&g.week===Number(completedWeek));
       let text;
       if (weekGames.length) {
         const awards = pickWeeklyAwards(weekGames);
@@ -7078,7 +7091,7 @@ export default function App() {
     try {
       const activeAfter = entriesAfter.filter(e=>(e.userId&&activeUserIds.has(e.userId))||(!e.userId&&activeUserNames.has(e.userName)));
       const sortedAfter = [...entriesAfter].sort((a,b)=>calcTotal(b)-calcTotal(a));
-      const weekGames = (setup?.gameArchive||[]).filter(g=>g.year===Number(year)&&g.week===Number(completedWeek));
+      const weekGames = (setup?.gameArchive||[]).filter(g=>inSeason(g,year,season)&&g.week===Number(completedWeek));
       const gameLines = weekGames.length
         ? weekGames.map(g=>`${g.team1.name} ${g.team1.score}-${g.team2.score} ${g.team2.name}`).join("; ")
         : activeAfter.map(e=>{const log=(e.weekLog||[]).find(l=>l.week===completedWeek);return log&&log.result==="win"?`${e.teamName} beat ${log.opponent}`:null;}).filter(Boolean).join("; ");
@@ -7204,12 +7217,12 @@ export default function App() {
         if(!Object.keys(sched).length)return; // no schedule for the week — nothing to check against
         const opp=sched[entry.teamName];
         if(opp&&opp!=="BYE")return;
-        if((setup?.gameArchive||[]).some(g=>g.year===Number(year)&&g.week===l.week&&(g.team1?.name===entry.teamName||g.team2?.name===entry.teamName)))return;
+        if((setup?.gameArchive||[]).some(g=>inSeason(g,year,season)&&g.week===l.week&&(g.team1?.name===entry.teamName||g.team2?.name===entry.teamName)))return;
         out.push({kind:"phantom",teamName:entry.teamName,week:l.week,logged:l.result});
       });
     });
     (setup?.gameArchive||[]).forEach(g=>{
-      if(g.year!==Number(year)||g.week>=14)return;
+      if(!inSeason(g,year,season)||g.week>=14)return;
       if(!g.team1||!g.team2||g.team1.score===g.team2.score)return; // a tie decides nothing
       [[g.team1,g.team2],[g.team2,g.team1]].forEach(([mine,opp])=>{
         const entry=entries.find(e=>e.teamName===mine.name);
@@ -7513,15 +7526,20 @@ export default function App() {
       const override = nextRoster?.find(r=>r.userId===e.userId);
       return INITIAL_ENTRY(override?.userName||e.userName, override?.teamName||e.teamName, e.userId);
     });
-    // Snapshot this year's schedule so it stays browsable on the Schedule page after the season resets
-    const updatedSetup={...setup,scheduleArchive:{...(setup?.scheduleArchive||{}),[year]:schedule}};
+    // Snapshot this season's schedule so it stays browsable on the Schedule page after the reset,
+    // then clear the live one. Without the clear the new season inherited the old season's fixtures
+    // — the Schedule tab still showed season 1 and nothing about the new season was a clean slate.
+    // Archived per season, not just per year, so two seasons in the same year don't overwrite each
+    // other's snapshot.
+    const updatedSetup={...setup,scheduleArchive:{...(setup?.scheduleArchive||{}),[year]:schedule,[`${year}|S${season}`]:schedule}};
     setSetup(updatedSetup);
+    setSchedule({});
     setHistory(prev=>{
       const next=[...prev,histEntry];
-      setTimeout(()=>dbSave({history:next,season:newSeason,year,week:1,entries:fresh,post_season_inputs:FRESH_PSI(fresh),setup:updatedSetup}),100);
+      setTimeout(()=>dbSave({history:next,season:newSeason,year,week:0,entries:fresh,post_season_inputs:FRESH_PSI(fresh),setup:updatedSetup,schedule:{}}),100);
       return next;
     });
-    setEntries(fresh);setWeek(1);setSeason(newSeason);
+    setEntries(fresh);setWeek(0);setSeason(newSeason);
     setWeekResults(fresh.map(e=>({teamName:e.teamName,userName:e.userName,result:"none",ranked25:false,ranked10:false})));
     const newPSI=FRESH_PSI(fresh);
     setPSI(newPSI);
