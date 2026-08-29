@@ -233,6 +233,10 @@ function matchDynastyTeam(rawName, teamNames) {
   return bestScore >= 1.0 ? best : null;
 }
 
+// The buckets calcTotal adds up. Dynasty points run for the whole year across every season inside
+// it, so these carry across a finalize — only the season's own record and game log start over.
+const POINT_FIELDS = ["gamePts","rankedBonusPts","confStandPts","confChampPts","bowlPts","recruitingPts","prestigePts","heismanPts"];
+
 function calcTotal(t) {
   if (t.historicalTotal !== undefined) return t.historicalTotal;
   return (t.gamePts||0)+(t.rankedBonusPts||0)+(t.confStandPts||0)+(t.confChampPts||0)+(t.bowlPts||0)+(t.recruitingPts||0)+(t.prestigePts||0)+(t.heismanPts||0);
@@ -5028,7 +5032,7 @@ function HistoricalImportPanel({setupRows, history, onImport}) {
 }
 
 // ── EnterResultsPanel ─────────────────────────────────────────────────────
-function EnterResultsPanel({entries,weekResults,setWeekResults,week,setWeek,applyBulkResults,applyWeekResults,reverseWeekResults,findResultMismatches,repairResultMismatches,postSeasonInputs,setPSI,applyPostSeason,finalizeSeason,season,setSeason,year,setYear,teamNames,schedule,history,onImportHistory,setupRows,saveToDb,setup,setSetup,postWeekRecapToGroupMe,postGameOfWeekPreview}) {
+function EnterResultsPanel({entries,weekResults,setWeekResults,week,setWeek,applyBulkResults,applyWeekResults,reverseWeekResults,pointsToRestore,restoreSeasonPoints,findResultMismatches,repairResultMismatches,postSeasonInputs,setPSI,applyPostSeason,finalizeSeason,season,setSeason,year,setYear,teamNames,schedule,history,onImportHistory,setupRows,saveToDb,setup,setSetup,postWeekRecapToGroupMe,postGameOfWeekPreview}) {
   const pc = {...DEFAULT_PTS_CONFIG,...(setup?.pointsConfig||{})}; // live points config, for accurate in-progress point hints below
   const [entryWeek,setEntryWeek] = useState(week);
   const [resultsTab,setResultsTab] = useState("weekly");
@@ -5272,6 +5276,22 @@ function EnterResultsPanel({entries,weekResults,setWeekResults,week,setWeek,appl
 
       {resultsTab==="historical"&&<HistoricalImportPanel setupRows={setupRows} history={history||[]} onImport={onImportHistory}/>}
       {resultsTab==="weekly"&&<>
+
+      {pointsToRestore&&<Card style={{overflow:"hidden",borderLeft:`4px solid ${RED}`}}>
+        <div style={{padding:"12px 16px",display:"flex",gap:12,alignItems:"center",flexWrap:"wrap"}}>
+          <div style={{flex:1,minWidth:240}}>
+            <div style={{fontSize:12,fontWeight:900,color:RED,textTransform:"uppercase",letterSpacing:0.5}}>⚠ The points standings is empty</div>
+            <div style={{fontSize:11,color:"#666",marginTop:4,lineHeight:1.5}}>
+              Every team is on 0 points, but Season {pointsToRestore.seasonNum} finished with points for {pointsToRestore.teams} team{pointsToRestore.teams===1?"":"s"} — led by {pointsToRestore.top?.userName||pointsToRestore.top?.teamName} on {calcTotal(pointsToRestore.top||{})}. Finalizing used to clear the standings; it now carries it forward, since the points run for the whole year.
+              <div style={{marginTop:4}}>Restoring puts those totals back on the current standings. Wins, losses and game logs stay reset, which is right for a new season.</div>
+            </div>
+          </div>
+          <button onClick={()=>{
+            if(!window.confirm(`Restore the points standings from Season ${pointsToRestore.seasonNum}?\n\n${pointsToRestore.teams} teams get their points totals back. Records and game logs are left as they are.`))return;
+            restoreSeasonPoints();
+          }} style={{background:RED,color:"#fff",border:"none",borderRadius:2,padding:"9px 16px",cursor:"pointer",fontFamily:ff,fontSize:12,fontWeight:800,textTransform:"uppercase",letterSpacing:0.5,flexShrink:0}}>Restore points</button>
+        </div>
+      </Card>}
 
       {seasonMismatch!=null&&<Card style={{overflow:"hidden",borderLeft:`4px solid #b8860b`}}>
         <div style={{padding:"12px 16px",display:"flex",gap:12,alignItems:"center",flexWrap:"wrap"}}>
@@ -7587,7 +7607,13 @@ export default function App() {
     const nextRoster = setup?.seasonRosters?.[newSeason];
     const fresh=entries.map(e=>{
       const override = nextRoster?.find(r=>r.userId===e.userId);
-      return INITIAL_ENTRY(override?.userName||e.userName, override?.teamName||e.teamName, e.userId);
+      const blank=INITIAL_ENTRY(override?.userName||e.userName, override?.teamName||e.teamName, e.userId);
+      // Wins, losses, week log and head-to-head belong to the season that just ended and start
+      // over. The points standings does not: it runs for the whole year across every season in it,
+      // so the totals carry forward. Finalize keeps the year, so they always carry here — a new
+      // year is where a points standings would start from zero.
+      const carried={}; POINT_FIELDS.forEach(f=>{carried[f]=e[f]||0;});
+      return {...blank,...carried};
     });
     // Snapshot this season's schedule so it stays browsable on the Schedule page after the reset,
     // then clear the live one. Without the clear the new season inherited the old season's fixtures
@@ -7618,6 +7644,30 @@ export default function App() {
       setPSI(newPSI);
       window.alert(`Season ${season} recorded. Season ${newSeason} starts at Week 0 with an empty schedule.`);
     })();
+  }
+
+  // A season finalized before points carried forward came back to zero. Finalize records the full
+  // pre-reset standings in history, so the totals are recoverable — offered rather than applied
+  // automatically, since only the commissioner knows whether a zeroed standings was intended.
+  const lastFinalizedThisYear=[...(history||[])].filter(h=>Number(h.year)===Number(year)).sort((a,b)=>(a.seasonNum||0)-(b.seasonNum||0)).pop()||null;
+  const pointsToRestore=(()=>{
+    const h=lastFinalizedThisYear;
+    if(!h||!Array.isArray(h.finalStandings))return null;
+    if(!entries.length||entries.some(e=>calcTotal(e)>0))return null;      // points are already on the board
+    if(!h.finalStandings.some(t=>calcTotal(t)>0))return null;             // nothing worth restoring
+    return {seasonNum:h.seasonNum,teams:h.finalStandings.filter(t=>calcTotal(t)>0).length,top:[...h.finalStandings].sort((a,b)=>calcTotal(b)-calcTotal(a))[0]};
+  })();
+  function restoreSeasonPoints(){
+    const h=lastFinalizedThisYear;
+    if(!h||!Array.isArray(h.finalStandings))return;
+    const nextEntries=entries.map(e=>{
+      const prev=h.finalStandings.find(t=>(e.userId&&t.userId&&t.userId===e.userId)||t.userName===e.userName||t.teamName===e.teamName);
+      if(!prev)return e;
+      const carried={}; POINT_FIELDS.forEach(f=>{carried[f]=prev[f]||0;});
+      return {...e,...carried};
+    });
+    setEntries(nextEntries);
+    setTimeout(()=>saveToDb({entries:nextEntries}),100);
   }
 
   function importHistoricalSeason(entry) {
@@ -8254,7 +8304,7 @@ export default function App() {
         </div>
         <div style={{maxWidth:800,margin:"0 auto",padding:"20px 14px"}}>
           {commTab==="Season History"&&<HistoryTab history={history} setHistory={setHistory} saveToDb={saveToDb} commUnlocked={true} entries={entries} setEntries={setEntries} season={season} week={week} setWeek={setWeek} yearRosters={setup?.yearRosters} permanentUsers={setup?.permanentUsers} currentEntries={entries} year={year} setupRows={setup?.rows||[]} gameArchive={setup?.gameArchive} classicGames={setup?.classicGames} playerStats={setup?.playerStats}/>}
-          {commTab==="Enter Results"&&<EnterResultsPanel entries={activeEntries} weekResults={weekResults} setWeekResults={setWeekResults} week={week} setWeek={setWeek} applyBulkResults={applyBulkResults} applyWeekResults={applyWeekResults} reverseWeekResults={reverseWeekResults} findResultMismatches={findResultMismatches} repairResultMismatches={repairResultMismatches} postSeasonInputs={postSeasonInputs} setPSI={setPSI} applyPostSeason={applyPostSeason} finalizeSeason={finalizeSeason} season={season} setSeason={setSeason} year={year} setYear={setYear} teamNames={teamNames} schedule={effectiveSchedule} history={history} onImportHistory={importHistoricalSeason} setupRows={setup?.rows||[]} saveToDb={saveToDb} setup={setup} setSetup={setSetup} postWeekRecapToGroupMe={postWeekRecapToGroupMe} postGameOfWeekPreview={postGameOfWeekPreview}/>}
+          {commTab==="Enter Results"&&<EnterResultsPanel entries={activeEntries} weekResults={weekResults} setWeekResults={setWeekResults} week={week} setWeek={setWeek} applyBulkResults={applyBulkResults} applyWeekResults={applyWeekResults} reverseWeekResults={reverseWeekResults} pointsToRestore={pointsToRestore} restoreSeasonPoints={restoreSeasonPoints} findResultMismatches={findResultMismatches} repairResultMismatches={repairResultMismatches} postSeasonInputs={postSeasonInputs} setPSI={setPSI} applyPostSeason={applyPostSeason} finalizeSeason={finalizeSeason} season={season} setSeason={setSeason} year={year} setYear={setYear} teamNames={teamNames} schedule={effectiveSchedule} history={history} onImportHistory={importHistoricalSeason} setupRows={setup?.rows||[]} saveToDb={saveToDb} setup={setup} setSetup={setSetup} postWeekRecapToGroupMe={postWeekRecapToGroupMe} postGameOfWeekPreview={postGameOfWeekPreview}/>}
           {commTab==="Schedule"&&<SchedulePanel entries={activeEntries} schedule={schedule} setSchedule={setSchedule}/>}
 {commTab==="Content"&&<ContentHub sorted={sorted} entries={activeEntries} week={week} season={season} year={year} leagueName={leagueName} history={history} leader={leader} articles={articles} setArticles={setArticles} setActiveArticle={setActiveArticle} schedule={effectiveSchedule} setup={setup} setSetup={setSetup} saveToDb={saveToDb}/>}
           {commTab==="Player Stats"&&<PlayerStatsAdmin setup={setup} setSetup={setSetup} saveToDb={saveToDb} permanentUsers={setup?.permanentUsers||[]} year={year} ff={ff} RED={RED}/>}
