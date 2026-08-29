@@ -34,11 +34,15 @@ async function dbLoad() {
 }
 
 async function dbSave(data) {
-  await fetch(`${SUPA_URL}/rest/v1/dynasty_state?id=eq.main`, {
+  const res = await fetch(`${SUPA_URL}/rest/v1/dynasty_state?id=eq.main`, {
     method: "PATCH",
     headers: {...SUPA_HEADERS, "Prefer": "return=minimal"},
     body: JSON.stringify({...data, updated_at: new Date().toISOString()}),
   });
+  // fetch only rejects on network failure — a 4xx/5xx comes back as a resolved response. Without
+  // this a rejected write looked identical to a successful one, so the app carried on showing
+  // state the database never accepted, and it reverted on the next reload with nothing to explain it.
+  if (!res.ok) throw new Error(`Database refused the save (${res.status} ${res.statusText})`);
 }
 
 // Add schedule column to Supabase if needed (run once)
@@ -5211,6 +5215,13 @@ function EnterResultsPanel({entries,weekResults,setWeekResults,week,setWeek,appl
 
   // Cheap enough to recompute each render (games × teams, both small) and always current, which
   // matters more here — the banner has to disappear the moment the mismatches are fixed.
+  // The season counter can be moved on its own (the dropdown above only relabels), which leaves a
+  // finished season's results on the standings wearing the next season's number — the state behind
+  // "the record book says season 2" and "it's stuck on season 1". Detect it from the archive, which
+  // records the season each game was played in, and offer the one-click correction.
+  const archivedSeasonNums=[...new Set((setup?.gameArchive||[]).filter(g=>Number(g.year)===Number(year)).map(g=>Number(g.season)||1))];
+  const seasonMismatch=archivedSeasonNums.length===1&&archivedSeasonNums[0]!==Number(season)&&entries.some(en=>(en.wins||0)+(en.losses||0)>0)?archivedSeasonNums[0]:null;
+
   const resultMismatches = findResultMismatches?findResultMismatches():[];
   const describeProblem=(m)=>m.kind==="phantom"
     ? `${gameWeekLabel(m.week)} — ${m.teamName}: logged ${m.logged.toUpperCase()} on a bye week, no game was scheduled`
@@ -5254,6 +5265,23 @@ function EnterResultsPanel({entries,weekResults,setWeekResults,week,setWeek,appl
 
       {resultsTab==="historical"&&<HistoricalImportPanel setupRows={setupRows} history={history||[]} onImport={onImportHistory}/>}
       {resultsTab==="weekly"&&<>
+
+      {seasonMismatch!=null&&<Card style={{overflow:"hidden",borderLeft:`4px solid #b8860b`}}>
+        <div style={{padding:"12px 16px",display:"flex",gap:12,alignItems:"center",flexWrap:"wrap"}}>
+          <div style={{flex:1,minWidth:240}}>
+            <div style={{fontSize:12,fontWeight:900,color:"#b8860b",textTransform:"uppercase",letterSpacing:0.5}}>⚠ Season number doesn't match the games on the books</div>
+            <div style={{fontSize:11,color:"#666",marginTop:4,lineHeight:1.5}}>
+              Every {year} game is archived as <strong>Season {seasonMismatch}</strong>, but the season is set to <strong>S{season}</strong>, so those results are being labelled Season {season} on the standings, record book and profiles.
+              <div style={{marginTop:4}}>Set it back, then use <strong>Finalize &amp; Start Season {seasonMismatch+1}</strong> on the Offseason Awards week to close Season {seasonMismatch} properly and start the next one with a clean slate.</div>
+            </div>
+          </div>
+          <button onClick={()=>{
+            if(!window.confirm(`Set the season back to S${seasonMismatch}?\n\nThis relabels the current results as Season ${seasonMismatch}, which is the season they were played in. Nothing else changes.`))return;
+            setSeason(seasonMismatch);
+            if(saveToDb)saveToDb({season:seasonMismatch});
+          }} style={{background:"#b8860b",color:"#fff",border:"none",borderRadius:2,padding:"9px 16px",cursor:"pointer",fontFamily:ff,fontSize:12,fontWeight:800,textTransform:"uppercase",letterSpacing:0.5,flexShrink:0}}>Set back to S{seasonMismatch}</button>
+        </div>
+      </Card>}
 
       {/* A result that contradicts its own box score is invisible from the entry screens — it only
           shows up on a profile game log, one team at a time. Surfaced here on every week (the check
@@ -7560,17 +7588,26 @@ export default function App() {
     // Archived per season, not just per year, so two seasons in the same year don't overwrite each
     // other's snapshot.
     const updatedSetup={...setup,scheduleArchive:{...(setup?.scheduleArchive||{}),[year]:schedule,[`${year}|S${season}`]:schedule}};
-    setSetup(updatedSetup);
-    setSchedule({});
-    setHistory(prev=>{
-      const next=[...prev,histEntry];
-      setTimeout(()=>dbSave({history:next,season:newSeason,year,week:0,entries:fresh,post_season_inputs:FRESH_PSI(fresh),setup:updatedSetup,schedule:{}}),100);
-      return next;
-    });
-    setEntries(fresh);setWeek(0);setSeason(newSeason);
-    setWeekResults(fresh.map(e=>({teamName:e.teamName,userName:e.userName,result:"none",ranked25:false,ranked10:false})));
+    // Write first, then move the app. Finalize used to fire the save into a setTimeout and update
+    // local state regardless, so a rejected write left the screen looking finalized while the
+    // database still held the old season — which came back on the next reload as "it didn't work".
+    const nextHistory=[...history,histEntry];
     const newPSI=FRESH_PSI(fresh);
-    setPSI(newPSI);
+    (async()=>{
+      try{
+        await dbSave({history:nextHistory,season:newSeason,year,week:0,entries:fresh,post_season_inputs:newPSI,setup:updatedSetup,schedule:{}});
+      }catch(err){
+        window.alert(`Finalize could not be saved:\n\n${err.message}\n\nNothing has been changed — Season ${season} is still intact. Try again.`);
+        return;
+      }
+      setHistory(nextHistory);
+      setSetup(updatedSetup);
+      setSchedule({});
+      setEntries(fresh);setWeek(0);setSeason(newSeason);
+      setWeekResults(fresh.map(e=>({teamName:e.teamName,userName:e.userName,result:"none",ranked25:false,ranked10:false})));
+      setPSI(newPSI);
+      window.alert(`Season ${season} recorded. Season ${newSeason} starts at Week 0 with an empty schedule.`);
+    })();
   }
 
   function importHistoricalSeason(entry) {
