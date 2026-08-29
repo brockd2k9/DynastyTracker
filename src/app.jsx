@@ -2755,9 +2755,14 @@ function YearStatsTab({history,currentEntries,season,year,setupRows,permanentUse
   const [selYear,setSelYear]=useState(year);
   const [selSeasonKey,setSelSeasonKey]=useState(null);
   const [expanded,setExpanded]=useState({});
-  const finalizedSeasons=history.filter(s=>s.year===selYear).sort((a,b)=>(a.seasonNum||0)-(b.seasonNum||0));
-  const hasCurrent=selYear===year;
-  const seasonTabs=[...finalizedSeasons.map(s=>({key:`s${s.seasonNum}`,label:`Season ${s.seasonNum}`})),...(hasCurrent?[{key:"current",label:`Season ${season} (Current)`}]:[])];
+  const finalizedSeasons=history.filter(s=>Number(s.year)===Number(selYear)).sort((a,b)=>(a.seasonNum||0)-(b.seasonNum||0));
+  const hasCurrent=Number(selYear)===Number(year);
+  // Offer every season that actually has games in this year, not just the ones recorded in
+  // history — a season whose games are archived is selectable even if its history entry is
+  // missing. Games archived before seasons were tracked count as season 1.
+  const archiveSeasonNums=[...new Set((gameArchive||[]).filter(g=>Number(g.year)===Number(selYear)).map(g=>Number(g.season)||1))];
+  const seasonNums=[...new Set([...finalizedSeasons.map(s=>Number(s.seasonNum)).filter(Boolean),...archiveSeasonNums,...(hasCurrent?[Number(season)]:[])])].sort((a,b)=>a-b);
+  const seasonTabs=seasonNums.map(n=>(hasCurrent&&n===Number(season))?{key:"current",label:`Season ${n} (Current)`}:{key:`s${n}`,label:`Season ${n}`});
   useEffect(()=>{
     const defaultKey=hasCurrent?"current":(finalizedSeasons.length?`s${finalizedSeasons[finalizedSeasons.length-1].seasonNum}`:null);
     setSelSeasonKey(defaultKey);
@@ -2765,14 +2770,20 @@ function YearStatsTab({history,currentEntries,season,year,setupRows,permanentUse
   },[selYear]);
   if(!allUsers.length)return null;
   const activeKey=selSeasonKey??(hasCurrent?"current":(finalizedSeasons.length?`s${finalizedSeasons[finalizedSeasons.length-1].seasonNum}`:null));
-  // Stat leaders come from playerStats, which is only bucketed by year (not by seasonNum) since
-  // box scores are matched by year+week — so leaders below reflect the whole year, not just the
-  // season selected above.
+  // playerStats is stored per calendar year, so once a year holds more than one season it can't
+  // answer "this season only" — which is how a brand new season showed the previous one's leaders.
+  // Derive from the archive instead, which does carry the season: filter to the selected season and
+  // run the same computation the stored map is built with. Years with no archived games at all
+  // (bulk-imported history, where stats were typed in by hand) still read from the stored map.
+  const selSeasonNum=activeKey==="current"?Number(season):Number(String(activeKey||"").replace(/^s/,""))||null;
+  const yearHasArchive=(gameArchive||[]).some(g=>Number(g.year)===Number(selYear));
+  const seasonArchive=(gameArchive||[]).filter(g=>inSeason(g,selYear,selSeasonNum));
+  const derivedStats=yearHasArchive?recomputePlayerStatsFromArchive(seasonArchive,{},selYear):null;
   const leaders=allUsers.map(u=>{
     const curEntry=(currentEntries||[]).find(e=>u.userId?e.userId===u.userId:e.userName===u.userName);
     const displayName=curEntry?.userName||u.userName;
-    const stats=playerStats?.[u.userId]?.[selYear]||EMPTY_STATS();
-    const qs=computeQuarterStats(gameArchive,u.userId,selYear);
+    const stats=(derivedStats?derivedStats[u.userId]?.[selYear]:playerStats?.[u.userId]?.[selYear])||EMPTY_STATS();
+    const qs=computeQuarterStats(seasonArchive,u.userId,selYear);
     return{userId:u.userId,name:displayName,passing:stats.passing,rushing:stats.rushing,team:stats.team,qs};
   });
   const hasTeamGames=l=>(l.team?.games||0)>0;
@@ -2835,7 +2846,7 @@ function YearStatsTab({history,currentEntries,season,year,setupRows,permanentUse
           )}
         </div>
       </Card>
-      <div style={{fontSize:10,color:"#aaa",fontStyle:"italic",padding:"0 4px"}}>Stats below are tracked per year (not split further by season if a year has more than one).</div>
+      <div style={{fontSize:10,color:"#aaa",fontStyle:"italic",padding:"0 4px"}}>Stats below cover the selected season only, from its uploaded box scores.</div>
 
       <SectionLabel icon="🏈">Passing</SectionLabel>
       <div style={leaderGrid}>
