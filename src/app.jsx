@@ -33,7 +33,14 @@ async function dbLoad() {
   return d[0] || null;
 }
 
+// The only columns dynasty_state actually has. Anything else in a payload makes PostgREST reject
+// the whole write with a 400 — which is how finalize failed silently for so long by sending `year`,
+// a value that lives inside setup as currentYear.
+const DB_COLUMNS = ["setup","season","week","entries","history","post_season_inputs","articles","schedule","updated_at"];
+
 async function dbSave(data) {
+  const stray = Object.keys(data||{}).filter(k=>!DB_COLUMNS.includes(k));
+  if (stray.length) throw new Error(`Not a column on dynasty_state: ${stray.join(", ")}`);
   const res = await fetch(`${SUPA_URL}/rest/v1/dynasty_state?id=eq.main`, {
     method: "PATCH",
     headers: {...SUPA_HEADERS, "Prefer": "return=minimal"},
@@ -7587,7 +7594,10 @@ export default function App() {
     // — the Schedule tab still showed season 1 and nothing about the new season was a clean slate.
     // Archived per season, not just per year, so two seasons in the same year don't overwrite each
     // other's snapshot.
-    const updatedSetup={...setup,scheduleArchive:{...(setup?.scheduleArchive||{}),[year]:schedule,[`${year}|S${season}`]:schedule}};
+    // currentYear rides inside setup, exactly as saveToDb does it. dynasty_state has no `year`
+    // column, so sending one made PostgREST reject the entire payload with a 400 — which is why
+    // finalizing never persisted, however many times it was tried.
+    const updatedSetup={...setup,currentYear:year,scheduleArchive:{...(setup?.scheduleArchive||{}),[year]:schedule,[`${year}|S${season}`]:schedule}};
     // Write first, then move the app. Finalize used to fire the save into a setTimeout and update
     // local state regardless, so a rejected write left the screen looking finalized while the
     // database still held the old season — which came back on the next reload as "it didn't work".
@@ -7595,7 +7605,7 @@ export default function App() {
     const newPSI=FRESH_PSI(fresh);
     (async()=>{
       try{
-        await dbSave({history:nextHistory,season:newSeason,year,week:0,entries:fresh,post_season_inputs:newPSI,setup:updatedSetup,schedule:{}});
+        await dbSave({history:nextHistory,season:newSeason,week:0,entries:fresh,post_season_inputs:newPSI,setup:updatedSetup,schedule:{}});
       }catch(err){
         window.alert(`Finalize could not be saved:\n\n${err.message}\n\nNothing has been changed — Season ${season} is still intact. Try again.`);
         return;
