@@ -5278,7 +5278,15 @@ function EnterResultsPanel({entries,weekResults,setWeekResults,week,setWeek,appl
           <div style={{display:"flex",gap:10,alignItems:"center",flexWrap:"wrap"}}>
             <div>
               <div style={{fontSize:9,fontWeight:700,color:"#888",textTransform:"uppercase",letterSpacing:1,marginBottom:4}}>Season</div>
-              <select value={season} onChange={e=>{const s=Number(e.target.value);setSeason(s);if(saveToDb)saveToDb({season:s});}} style={{fontSize:14,fontWeight:700,color:"#111",padding:"6px 10px",background:"#fff",border:`2px solid ${RED}`,borderRadius:2,cursor:"pointer",fontFamily:ff,minWidth:55}}>
+              <select value={season} onChange={e=>{
+                const s=Number(e.target.value);
+                // Changing this number only relabels what is already recorded — it doesn't reset
+                // anything. Advancing it past a season that still has results on the books is how
+                // a finished season ends up labelled as the next one everywhere it's displayed.
+                const played=entries.some(en=>(en.wins||0)+(en.losses||0)>0);
+                if(s>season&&played&&!window.confirm(`Change the season number to S${s}?\n\nThis only relabels the season — it does NOT start a new one. Season ${season}'s results stay on the standings and will be recorded as Season ${s}.\n\nTo actually close Season ${season} and start fresh, use "Finalize & Start Season ${season+1}" on the Offseason Awards week instead.`))return;
+                setSeason(s);if(saveToDb)saveToDb({season:s});
+              }} style={{fontSize:14,fontWeight:700,color:"#111",padding:"6px 10px",background:"#fff",border:`2px solid ${RED}`,borderRadius:2,cursor:"pointer",fontFamily:ff,minWidth:55}}>
                 {Array.from({length:20},(_,i)=>i+1).map(s=><option key={s} value={s}>S{s}</option>)}
               </select>
             </div>
@@ -7529,6 +7537,15 @@ export default function App() {
   function finalizeSeason() {
     const fin=entries.map(e=>({...e}));
     const srt=[...fin].sort((a,b)=>calcTotal(b)-calcTotal(a));
+    // Finalize is one-way: it writes this season into history under the current season number and
+    // resets everything. If that number was advanced by hand the results get filed under the wrong
+    // season permanently, so say plainly what is about to be recorded — and check it against the
+    // season the year's games were actually archived under.
+    const archivedSeasons=[...new Set((setup?.gameArchive||[]).filter(g=>Number(g.year)===Number(year)).map(g=>Number(g.season)||1))];
+    const mismatch=archivedSeasons.length===1&&archivedSeasons[0]!==Number(season)
+      ? `\n\n⚠ These games are archived as Season ${archivedSeasons[0]}, not Season ${season}. If the season number was changed by hand, set it back to ${archivedSeasons[0]} before finalizing or the results will be recorded under the wrong season.`
+      : "";
+    if(!window.confirm(`Finalize Season ${season} (${year}) and start Season ${season+1}?\n\nRecorded to history: ${fin.length} teams, led by ${srt[0]?.userName||"—"} (${calcTotal(srt[0]||{})} pts).\n\nStandings, records and the schedule reset for the new season. Archived box scores are kept.${mismatch}`))return;
     const histEntry={year,seasonNum:season,finalStandings:fin,champion:srt[0]?.userName||"",confChampion:postSeasonInputs?.confChamp?.winner||postSeasonInputs?.confChampGame?.winner||"",heisman:postSeasonInputs?.heisman||""};
     const newSeason = season+1;
     // Use season roster for the new season if set, otherwise keep current names/teams
