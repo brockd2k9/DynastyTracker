@@ -1339,8 +1339,7 @@ function SchedulePanel({entries,schedule,setSchedule}) {
             const matchedTeam = matchDynastyTeam(rawTeam, teamNames);
             if (!matchedTeam) return;
             const matchedOpp = rawOpp === "BYE" ? "BYE" : (matchDynastyTeam(rawOpp, teamNames) || ("CPU:" + rawOpp));
-            ns[w][matchedTeam] = matchedOpp; filled++;
-            if (!isCPUOpp(matchedOpp) && matchedOpp !== "BYE") ns[w][matchedOpp] = matchedTeam;
+            applyMatchup(ns[w], matchedTeam, matchedOpp); filled++;
           });
         });
         return ns;
@@ -1353,11 +1352,24 @@ function SchedulePanel({entries,schedule,setSchedule}) {
     }
   }
 
+  // Writes team's opponent for a week, clearing any stale reciprocal link left
+  // over from a previous pairing (either team's) so no dangling entry remains.
+  function applyMatchup(wkObj,team,opp) {
+    const clearReciprocal=(t)=>{
+      const o=wkObj[t];
+      if(o&&o!=="BYE"&&!isCPUOpp(o)&&teamNames.includes(o)&&wkObj[o]===t)delete wkObj[o];
+    };
+    clearReciprocal(team);
+    if(opp&&opp!=="BYE"&&!isCPUOpp(opp)&&teamNames.includes(opp))clearReciprocal(opp);
+    wkObj[team]=opp;
+    if(opp&&opp!=="BYE"&&!isCPUOpp(opp)&&teamNames.includes(opp))wkObj[opp]=team;
+  }
+
   function setMatchup(wk,team,opp) {
     setSchedule(prev=>{
-      const ns={...prev,[wk]:{...(prev[wk]||{}),[team]:opp}};
-      if(opp!=="BYE"&&!isCPUopp(opp)&&teamNames.includes(opp))ns[wk][opp]=team;
-      return ns;
+      const wkObj={...(prev[wk]||{})};
+      applyMatchup(wkObj,team,opp);
+      return {...prev,[wk]:wkObj};
     });
     setSaved(false);
   }
@@ -1479,8 +1491,7 @@ function SchedulePanel({entries,schedule,setSchedule}) {
                         const mt=matchDynastyTeam(rawTeam,teamNames);
                         if(!mt)return; // not one of our dynasty teams — skip rather than corrupt the schedule
                         const mo=rawOpp==="BYE"?"BYE":(matchDynastyTeam(rawOpp,teamNames)||("CPU:"+rawOpp));
-                        ns[w][mt]=mo; filled++;
-                        if(!isCPUOpp(mo)&&mo!=="BYE")ns[w][mo]=mt;
+                        applyMatchup(ns[w],mt,mo); filled++;
                       });
                     });
                     return ns;
@@ -1508,7 +1519,7 @@ function SchedulePanel({entries,schedule,setSchedule}) {
                   <select value={selectVal} onChange={e=>{
                     const v=e.target.value;
                     setMatchup(editWeek,team,v==="CPU"?"CPU":v);
-                  }} disabled={autoSet} style={{flex:1,minWidth:120,background:autoSet?"#f0f8f0":"#fff",border:"1px solid #ddd",borderRadius:2,padding:"5px 8px",fontFamily:ff,fontSize:12,color:selectVal?"#111":"#aaa"}}>
+                  }} style={{flex:1,minWidth:120,background:autoSet?"#f0f8f0":"#fff",border:"1px solid #ddd",borderRadius:2,padding:"5px 8px",fontFamily:ff,fontSize:12,color:selectVal?"#111":"#aaa",cursor:"pointer"}}>
                     <option value="">-- Not set --</option>
                     {OPPONENTS.filter(o=>o!==team).map(o=><option key={o} value={o}>{o==="BYE"?"🏖️ BYE WEEK":o==="CPU"?"💻 CPU (non-conf)":o}</option>)}
                   </select>
