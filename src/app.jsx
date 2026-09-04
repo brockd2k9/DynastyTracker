@@ -1966,23 +1966,45 @@ function ScheduleTab({schedule,entries,week,season,year,setup,setupRows,history}
   const isMobile = useIsMobile();
   const [view,setView] = useState("full");
   const [expanded,setExpanded] = useState({}); // key -> bool
-  const [selYear,setSelYear] = useState(year);
 
-  // Which years have browsable data: the live current year, plus any year snapshotted
-  // at season finalization (setup.scheduleArchive) or present in finalized season history.
+  // Which years have browsable data: the live current year, plus any year with a finalized
+  // season in history. A single "year" can hold more than one finalized season (finalizing
+  // doesn't advance the year by itself), so year alone can't select a schedule — a season
+  // selector (below, mirroring YearStatsTab's year/season split) disambiguates those.
   const scheduleArchive = setup?.scheduleArchive||{};
-  const availableYears = [...new Set([year, ...Object.keys(scheduleArchive).map(Number), ...(history||[]).map(h=>h.year)])].sort((a,b)=>b-a);
-  const isCurrentYear = selYear===year;
+  const availableYears = [...new Set([year, ...(history||[]).map(h=>h.year)])].sort((a,b)=>b-a);
+  const [selYear,setSelYear] = useState(year);
+  const [selSeasonKey,setSelSeasonKey] = useState(null);
 
-  // For a past year, reconstruct the roster/results from the most recently finalized season that year
+  const finalizedSeasons = (history||[]).filter(h=>Number(h.year)===Number(selYear)).sort((a,b)=>(a.seasonNum||0)-(b.seasonNum||0));
+  const hasCurrent = Number(selYear)===Number(year);
+  // Offer every season that actually has a schedule archived for this year, not just the ones
+  // recorded in history — a finalize that saved the schedule but hasn't hit history yet is
+  // still selectable. scheduleArchive keys a season as "year|Sn"; older single-season years may
+  // only have the plain-year key, which is treated as that year's one browsable season below.
+  const archiveSeasonNums = Object.keys(scheduleArchive)
+    .map(k=>{const m=/^(-?\d+)\|S(-?\d+)$/.exec(k); return m&&Number(m[1])===Number(selYear)?Number(m[2]):null;})
+    .filter(n=>n!=null);
+  const seasonNums = [...new Set([...finalizedSeasons.map(h=>Number(h.seasonNum)).filter(Boolean), ...archiveSeasonNums, ...(hasCurrent?[Number(season)]:[])])].sort((a,b)=>a-b);
+  const seasonTabs = seasonNums.map(n=>(hasCurrent&&n===Number(season))?{key:"current",label:`Season ${n} (Current)`}:{key:`s${n}`,label:`Season ${n}`});
+  useEffect(()=>{
+    const defaultKey = hasCurrent?"current":(finalizedSeasons.length?`s${finalizedSeasons[finalizedSeasons.length-1].seasonNum}`:null);
+    setSelSeasonKey(defaultKey);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  },[selYear]);
+  const activeKey = selSeasonKey ?? (hasCurrent?"current":(finalizedSeasons.length?`s${finalizedSeasons[finalizedSeasons.length-1].seasonNum}`:null));
+  const selSeasonNum = activeKey==="current" ? Number(season) : (Number(String(activeKey||"").replace(/^s/,""))||null);
+  const isCurrentYear = hasCurrent && activeKey==="current";
+
+  // For a past season, reconstruct the roster/results from the matching finalized history entry
   // (finalStandings is the same shape as the live entries array).
   const pastYearEntries = (() => {
     if (isCurrentYear) return entries;
-    const matches=(history||[]).filter(h=>h.year===selYear);
+    const matches=(history||[]).filter(h=>Number(h.year)===Number(selYear)&&(selSeasonNum==null||Number(h.seasonNum)===Number(selSeasonNum)));
     return matches[matches.length-1]?.finalStandings||[];
   })();
   const effEntries = isCurrentYear ? entries : pastYearEntries;
-  const effSchedule = isCurrentYear ? schedule : (scheduleArchive[selYear]||{});
+  const effSchedule = isCurrentYear ? schedule : (scheduleArchive[`${selYear}|S${selSeasonNum}`] || scheduleArchive[selYear] || {});
 
   const weeks = Object.keys(effSchedule||{}).map(Number).sort((a,b)=>a-b);
   const teams = effEntries.map(e=>e.teamName).sort();
@@ -2017,10 +2039,13 @@ function ScheduleTab({schedule,entries,week,season,year,setup,setupRows,history}
     (e.weekLog||[]).forEach(log=>{ resultLookup[e.teamName][log.week]=log; });
   });
 
-  // Commissioner-uploaded box scores (setup.gameArchive) for the selected year — richer than weekLog.stats
+  // Commissioner-uploaded box scores (setup.gameArchive) for the selected year+season — richer
+  // than weekLog.stats. Filtered by season, not just year: two seasons finalized in the same
+  // year otherwise collide on week number and the older season's scores bleed into the newer
+  // one's schedule view.
   const archiveByKey = {};
   (setup?.gameArchive||[]).forEach(g=>{
-    if (g.year!==selYear) return;
+    if (!inSeason(g, selYear, selSeasonNum)) return;
     archiveByKey[`${g.week}-${g.team1.name}`] = {mine:g.team1, opp:g.team2};
     archiveByKey[`${g.week}-${g.team2.name}`] = {mine:g.team2, opp:g.team1};
   });
@@ -2243,17 +2268,29 @@ function ScheduleTab({schedule,entries,week,season,year,setup,setupRows,history}
     <div style={{display:"flex",flexDirection:"column",gap:14}}>
       <style>{".jud-hscroll{scrollbar-width:none}.jud-hscroll::-webkit-scrollbar{display:none}"}</style>
 
-      {availableYears.length>1&&(
-        <div className="jud-hscroll" style={{display:"flex",gap:8,overflowX:"auto",WebkitOverflowScrolling:"touch",paddingBottom:2}}>
-          {availableYears.map(y=>(
-            <button key={y} onClick={()=>{setSelYear(y);setView("full");}} style={{display:"flex",alignItems:"center",gap:6,padding:isMobile?"9px 16px":"8px 18px",borderRadius:20,border:"1px solid",borderColor:selYear===y?RED:"#ddd",background:selYear===y?RED:"#fafafa",color:selYear===y?"#fff":"#333",cursor:"pointer",fontSize:12,fontWeight:800,fontFamily:ff,whiteSpace:"nowrap",flexShrink:0}}>
-              {y}{y===year&&<span style={{fontSize:9,fontWeight:900,letterSpacing:0.5,opacity:selYear===y?0.85:0.55}}>CURRENT</span>}
-            </button>
-          ))}
+      {(availableYears.length>1||seasonTabs.length>1)&&(
+        <div style={{display:"flex",flexWrap:"wrap",alignItems:"center",gap:14}}>
+          {availableYears.length>1&&(
+            <div className="jud-hscroll" style={{display:"flex",gap:8,overflowX:"auto",WebkitOverflowScrolling:"touch",paddingBottom:2}}>
+              {availableYears.map(y=>(
+                <button key={y} onClick={()=>{setSelYear(y);setView("full");}} style={{display:"flex",alignItems:"center",gap:6,padding:isMobile?"9px 16px":"8px 18px",borderRadius:20,border:"1px solid",borderColor:selYear===y?RED:"#ddd",background:selYear===y?RED:"#fafafa",color:selYear===y?"#fff":"#333",cursor:"pointer",fontSize:12,fontWeight:800,fontFamily:ff,whiteSpace:"nowrap",flexShrink:0}}>
+                  {y}{y===year&&<span style={{fontSize:9,fontWeight:900,letterSpacing:0.5,opacity:selYear===y?0.85:0.55}}>CURRENT</span>}
+                </button>
+              ))}
+            </div>
+          )}
+          {seasonTabs.length>1&&(
+            <div style={{display:"flex",alignItems:"center",gap:8}}>
+              <span style={{fontSize:10,fontWeight:800,color:"#888",textTransform:"uppercase",letterSpacing:0.5}}>Season</span>
+              <select value={activeKey||""} onChange={e=>{setSelSeasonKey(e.target.value);setView("full");}} style={{padding:isMobile?"9px 12px":"7px 12px",borderRadius:4,border:`1px solid ${RED}`,background:"#fff5f5",color:RED,fontSize:12,fontWeight:800,fontFamily:ff,cursor:"pointer"}}>
+                {seasonTabs.map(s=><option key={s.key} value={s.key}>{s.label}</option>)}
+              </select>
+            </div>
+          )}
         </div>
       )}
       {!weeks.length ? (
-        <Card style={{padding:20,textAlign:"center",color:"#888",fontSize:13}}>{isCurrentYear?"No schedule set up yet. Add matchups in Commissioner Mode.":`No schedule available for ${selYear}.`}</Card>
+        <Card style={{padding:20,textAlign:"center",color:"#888",fontSize:13}}>{isCurrentYear?"No schedule set up yet. Add matchups in Commissioner Mode.":`No schedule available for Season ${selSeasonNum} (${selYear}).`}</Card>
       ) : (
       <Card style={{overflow:"hidden"}}>
         <div style={{display:"flex",alignItems:"center",gap:10,padding:"12px 14px",borderBottom:"1px solid #eee",flexWrap:"wrap"}}>
@@ -2294,7 +2331,7 @@ function ScheduleTab({schedule,entries,week,season,year,setup,setupRows,history}
               <TeamLogo url={logoByTeam[view]} size={32}/>
               <div>
                 <TeamNameLink name={view} style={{fontSize:17,fontWeight:900,color:"#111",textTransform:"uppercase"}}/>
-                <div style={{fontSize:11,color:"#888",marginTop:1}}>{recordByTeam[view]} · Season {season} Schedule</div>
+                <div style={{fontSize:11,color:"#888",marginTop:1}}>{recordByTeam[view]} · Season {selSeasonNum??season} Schedule</div>
               </div>
             </div>
             {weeks.map(w=>{
